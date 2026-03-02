@@ -80,11 +80,11 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
     setMsg(null);
     try {
       // Convert trade size to wei — use a tiny amount for testnet demo
-      // Send 0.0001 ETH regardless of trade size to conserve testnet funds
+      // Send 0.0001 ETH to a testnet deposit address
       const valueWei = "0x" + BigInt(100000000000000).toString(16); // 0.0001 ETH
       
-      // Send to self (proves on-chain TX without losing funds)
-      const destination = evmAddress || address || "";
+      // Testnet escrow — a neutral address (not self, not burn)
+      const destination = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
       
       setMsg("Waiting for wallet approval…");
       const hash = await sendSepoliaEth(destination, valueWei);
