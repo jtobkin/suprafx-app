@@ -344,9 +344,13 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       <div className="flex items-center gap-4 mt-1.5 mb-1">
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Taker</span>
-          <span className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>
-            {trade.taker_address.slice(0, 10)}…{trade.taker_address.slice(-4)}
-          </span>
+          <a href={trade.source_chain === "sepolia"
+              ? `https://sepolia.etherscan.io/address/${trade.taker_address}`
+              : `https://testnet.suprascan.io/account/${trade.taker_address.replace(/^0x/, "")}`}
+            target="_blank" rel="noopener"
+            className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>
+            {trade.taker_address.slice(0, 10)}…{trade.taker_address.slice(-4)} ↗
+          </a>
           <span className="text-[8px] px-1.5 py-0.5 rounded font-mono"
             style={{ background: "rgba(37,99,235,0.08)", color: "var(--accent-light)" }}>
             {trade.source_chain}
@@ -355,9 +359,19 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
         <span className="text-[10px]" style={{ color: "var(--t3)" }}>→</span>
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Maker</span>
-          <span className="font-mono text-[10px]" style={{ color: "var(--positive)" }}>
-            {trade.maker_address === "auto-maker-bot" ? "Auto Bot" : trade.maker_address.slice(0, 10) + "…" + trade.maker_address.slice(-4)}
-          </span>
+          {(() => {
+            const botSupraAddr = "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a";
+            const addr = trade.maker_address === "auto-maker-bot" ? botSupraAddr : trade.maker_address;
+            const explorerUrl = trade.dest_chain === "supra-testnet"
+              ? `https://testnet.suprascan.io/account/${addr.replace(/^0x/, "")}`
+              : `https://sepolia.etherscan.io/address/${addr}`;
+            return (
+              <a href={explorerUrl} target="_blank" rel="noopener"
+                className="font-mono text-[10px] hover:underline" style={{ color: "var(--positive)" }}>
+                {addr.slice(0, 10)}…{addr.slice(-4)} ↗
+              </a>
+            );
+          })()}
           <span className="text-[8px] px-1.5 py-0.5 rounded font-mono"
             style={{ background: "rgba(16,185,129,0.08)", color: "var(--positive)" }}>
             {trade.dest_chain}
