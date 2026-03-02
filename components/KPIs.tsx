@@ -24,13 +24,13 @@ export default function KPIs({ trades, agents, rfqs }: { trades: Trade[]; agents
     <div className="grid grid-cols-6 mb-4 animate-in" style={{ gap: "1px", background: "var(--border)", borderRadius: "4px", overflow: "hidden", border: "1px solid var(--border)" }}>
       {items.map(i => (
         <div key={i.label} className="px-3.5 py-3" style={{ background: "var(--surface)" }}>
-          <div className="text-[9px] font-medium uppercase tracking-[0.8px] mb-1" style={{ color: "var(--t3)" }}>
+          <div className="text-[13px] font-medium uppercase tracking-[0.8px] mb-1" style={{ color: "var(--t3)" }}>
             {i.label}
           </div>
           <div className="font-mono text-[17px] font-semibold tracking-tight leading-none" style={{ color: i.color || "var(--t0)" }}>
             {i.value}
           </div>
-          <div className="text-[9px] mt-0.5" style={{ color: "var(--t3)" }}>{i.sub}</div>
+          <div className="text-[13px] mt-0.5" style={{ color: "var(--t3)" }}>{i.sub}</div>
         </div>
       ))}
     </div>

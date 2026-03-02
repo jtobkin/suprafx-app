@@ -42,8 +42,8 @@ function Spinner({ color = "currentColor" }: { color?: string }) {
 function LogLine({ time, text, color }: { time: string; text: string; color?: string }) {
   return (
     <div className="flex items-start gap-2 py-0.5">
-      <span className="font-mono text-[9px] shrink-0" style={{ color: "var(--t3)" }}>{time}</span>
-      <span className="text-[11px]" style={{ color: color || "var(--t2)" }}>{text}</span>
+      <span className="font-mono text-[13px] shrink-0" style={{ color: "var(--t3)" }}>{time}</span>
+      <span className="text-[13px]" style={{ color: color || "var(--t2)" }}>{text}</span>
     </div>
   );
 }
@@ -321,16 +321,16 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       {/* Trade info */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[10px]" style={{ color: "var(--t3)" }}>{trade.display_id}</span>
-          <span className="text-[12px] font-semibold">{trade.pair}</span>
-          <span className="font-mono text-[12px]">{trade.size}</span>
-          <span className="font-mono text-[11px]" style={{ color: "var(--t2)" }}>
+          <span className="font-mono text-[14px]" style={{ color: "var(--t3)" }}>{trade.display_id}</span>
+          <span className="text-[14px] font-semibold">{trade.pair}</span>
+          <span className="font-mono text-[14px]">{trade.size}</span>
+          <span className="font-mono text-[13px]" style={{ color: "var(--t2)" }}>
             @ ${Number(trade.rate)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex items-center gap-2">
           {trade.status === "settled" && trade.settle_ms && (
-            <span className="font-mono text-[10px]" style={{ color: "var(--positive)" }}>
+            <span className="font-mono text-[14px]" style={{ color: "var(--positive)" }}>
               {(trade.settle_ms / 1000).toFixed(1)}s
             </span>
           )}
@@ -343,12 +343,12 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       {/* Addresses & chains */}
       <div className="flex items-center gap-4 mt-1.5 mb-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Taker</span>
+          <span className="text-[13px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Taker</span>
           <a href={trade.source_chain === "sepolia"
               ? `https://sepolia.etherscan.io/address/${trade.taker_address}`
               : `https://testnet.suprascan.io/account/${trade.taker_address.replace(/^0x/, "")}`}
             target="_blank" rel="noopener"
-            className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>
+            className="font-mono text-[14px] hover:underline" style={{ color: "var(--accent-light)" }}>
             {trade.taker_address.slice(0, 10)}…{trade.taker_address.slice(-4)} ↗
           </a>
           <span className="text-[8px] px-1.5 py-0.5 rounded font-mono"
@@ -356,9 +356,9 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
             {trade.source_chain}
           </span>
         </div>
-        <span className="text-[10px]" style={{ color: "var(--t3)" }}>→</span>
+        <span className="text-[14px]" style={{ color: "var(--t3)" }}>→</span>
         <div className="flex items-center gap-1.5">
-          <span className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Maker</span>
+          <span className="text-[13px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Maker</span>
           {(() => {
             const botSupraAddr = "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a";
             const addr = trade.maker_address === "auto-maker-bot" ? botSupraAddr : trade.maker_address;
@@ -367,7 +367,7 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
               : `https://sepolia.etherscan.io/address/${addr}`;
             return (
               <a href={explorerUrl} target="_blank" rel="noopener"
-                className="font-mono text-[10px] hover:underline" style={{ color: "var(--positive)" }}>
+                className="font-mono text-[14px] hover:underline" style={{ color: "var(--positive)" }}>
                 {addr.slice(0, 10)}…{addr.slice(-4)} ↗
               </a>
             );
@@ -386,19 +386,19 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
         <div>
           <div className="flex items-center gap-2 mb-2">
             <button onClick={runAutoMode}
-              className="px-4 py-[7px] rounded text-[11px] font-semibold transition-all"
+              className="px-4 py-[7px] rounded text-[13px] font-semibold transition-all"
               style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
               Auto Settlement
             </button>
             {hasWallet && (
               <button onClick={manualSendSepolia} disabled={loading}
-                className="px-4 py-[7px] rounded text-[11px] font-semibold disabled:opacity-30 transition-all"
+                className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
                 style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
                 {loading ? "Sending…" : "Manual: Send on Sepolia"}
               </button>
             )}
             <button onClick={manualDemoTx} disabled={loading}
-              className="px-3 py-[7px] rounded text-[10px] font-mono disabled:opacity-30"
+              className="px-3 py-[7px] rounded text-[14px] font-mono disabled:opacity-30"
               style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
               Demo TX
             </button>
@@ -407,10 +407,10 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
           <div className="flex items-center gap-2">
             <input type="text" placeholder="or paste TX hash: 0x…" value={txHash}
               onChange={e => setTxHash(e.target.value)}
-              className="flex-1 px-2.5 py-[5px] rounded border text-[10px] font-mono outline-none"
+              className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
               style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
             <button onClick={manualSubmitHash} disabled={loading || !txHash.trim()}
-              className="px-2.5 py-[5px] rounded text-[9px] font-medium disabled:opacity-30"
+              className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
               style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
               Submit
             </button>
@@ -423,9 +423,9 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
         <div className="mb-1">
           <div className="flex items-center gap-2 mb-2">
             <Spinner color="var(--positive)" />
-            <span className="text-[11px] font-medium" style={{ color: "var(--positive)" }}>Auto settlement in progress</span>
+            <span className="text-[13px] font-medium" style={{ color: "var(--positive)" }}>Auto settlement in progress</span>
             <button onClick={cancelAuto}
-              className="px-2 py-0.5 rounded text-[9px] font-mono ml-auto"
+              className="px-2 py-0.5 rounded text-[13px] font-mono ml-auto"
               style={{ background: "var(--surface-3)", color: "var(--t3)", border: "none" }}>
               Cancel
             </button>
@@ -435,11 +435,11 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
 
       {/* === TAKER SENT (manual mode) === */}
       {trade.status === "taker_sent" && !autoRunning && (
-        <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
+        <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
           <Spinner color="var(--accent)" /> Committee verifying taker TX…
           {trade.taker_tx_hash?.startsWith("0x") && (
             <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px] ml-1" style={{ color: "var(--accent-light)" }}>Etherscan ↗</a>
+              className="font-mono text-[14px] ml-1" style={{ color: "var(--accent-light)" }}>Etherscan ↗</a>
           )}
         </div>
       )}
@@ -447,9 +447,9 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       {/* === TAKER VERIFIED (manual mode) === */}
       {trade.status === "taker_verified" && !autoRunning && (
         <div className="flex items-center gap-2">
-          <span className="text-[11px]" style={{ color: "var(--positive)" }}>Taker verified (5/5).</span>
+          <span className="text-[13px]" style={{ color: "var(--positive)" }}>Taker verified (5/5).</span>
           <button onClick={manualMakerSend} disabled={loading}
-            className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
+            className="px-3 py-[6px] rounded text-[14px] font-semibold disabled:opacity-30"
             style={{ background: hasSupraWallet ? "var(--positive)" : "var(--surface-3)", color: hasSupraWallet ? "#fff" : "var(--t0)", border: hasSupraWallet ? "none" : "1px solid var(--border-active)" }}>
             {loading ? "Sending…" : hasSupraWallet ? "Send on Supra Testnet" : "Simulate Maker Send"}
           </button>
@@ -459,14 +459,14 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       {/* === MAKER SENT (manual mode) === */}
       {/* === MAKER SENT (manual mode) === */}
       {trade.status === "maker_sent" && !autoRunning && (
-        <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
+        <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
           <Spinner color="var(--positive)" /> Verifying maker TX on {trade.dest_chain}…
         </div>
       )}
 
       {/* === FAILED === */}
       {trade.status === "failed" && (
-        <div className="px-2.5 py-2 rounded text-[11px]" style={{ background: "rgba(239,68,68,0.06)", color: "var(--negative)" }}>
+        <div className="px-2.5 py-2 rounded text-[13px]" style={{ background: "rgba(239,68,68,0.06)", color: "var(--negative)" }}>
           Trade failed — check Vercel logs for details. The maker bot may not be funded or the Supra RPC may be down.
         </div>
       )}
@@ -479,14 +479,14 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
               ? `https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`
               : `https://testnet.suprascan.io/tx/${trade.taker_tx_hash.replace(/^0x/, "")}`}
               target="_blank"
-              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>Taker TX ({trade.source_chain === "sepolia" ? "Sepolia" : "Supra"}) ↗</a>
+              className="font-mono text-[14px]" style={{ color: "var(--accent-light)" }}>Taker TX ({trade.source_chain === "sepolia" ? "Sepolia" : "Supra"}) ↗</a>
           )}
           {trade.maker_tx_hash && (
             <a href={trade.dest_chain === "supra-testnet"
               ? `https://testnet.suprascan.io/tx/${trade.maker_tx_hash.replace(/^0x/, "")}`
               : `https://sepolia.etherscan.io/tx/${trade.maker_tx_hash}`}
               target="_blank"
-              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>Maker TX ({trade.dest_chain === "supra-testnet" ? "Supra" : "Sepolia"}) ↗</a>
+              className="font-mono text-[14px]" style={{ color: "var(--accent-light)" }}>Maker TX ({trade.dest_chain === "supra-testnet" ? "Supra" : "Sepolia"}) ↗</a>
           )}
         </div>
       )}
@@ -502,8 +502,31 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
 }
 
 export default function TradeFlow({ trades, onUpdate }: { trades: Trade[]; onUpdate: () => void }) {
-  const active = trades.filter(t => !["settled"].includes(t.status));
-  const recent = trades.filter(t => t.status === "settled").slice(0, 3);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [fading, setFading] = useState<Set<string>>(new Set());
+
+  // Auto-dismiss settled trades after 10 seconds
+  useEffect(() => {
+    const timers: NodeJS.Timeout[] = [];
+    const settled = trades.filter(t => t.status === "settled" && !dismissed.has(t.id));
+    settled.forEach(t => {
+      const settledAt = t.settled_at ? new Date(t.settled_at).getTime() : Date.now();
+      const elapsed = Date.now() - settledAt;
+      const remaining = Math.max(0, 10000 - elapsed);
+
+      timers.push(setTimeout(() => {
+        setFading(prev => new Set(prev).add(t.id));
+      }, Math.max(0, remaining - 2000)));
+
+      timers.push(setTimeout(() => {
+        setDismissed(prev => new Set(prev).add(t.id));
+      }, remaining));
+    });
+    return () => timers.forEach(t => clearTimeout(t));
+  }, [trades, dismissed]);
+
+  const active = trades.filter(t => !["settled"].includes(t.status) && !dismissed.has(t.id));
+  const recent = trades.filter(t => t.status === "settled" && !dismissed.has(t.id));
   const display = [...active, ...recent];
   if (display.length === 0) return null;
 
@@ -514,13 +537,19 @@ export default function TradeFlow({ trades, onUpdate }: { trades: Trade[]; onUpd
         style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
         <div className="flex items-center gap-2">
           {active.length > 0 && <div className="w-1 h-1 rounded-full animate-pulse-dot" style={{ background: "var(--warn)" }} />}
-          <span className="text-[11px] font-medium" style={{ color: "var(--t1)" }}>Active Trades</span>
+          <span className="text-[14px] font-medium" style={{ color: "var(--t1)" }}>Active Trades</span>
         </div>
-        <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>
+        <span className="font-mono text-[14px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>
           {active.length} in flight
         </span>
       </div>
-      {display.map(t => <ActiveTrade key={t.id} trade={t} onUpdate={onUpdate} />)}
+      {display.map(t => (
+        <div key={t.id}
+          className={fading.has(t.id) ? "animate-fade-out" : t.status === "settled" ? "animate-settled" : ""}
+          style={{ transition: "opacity 0.6s ease" }}>
+          <ActiveTrade trade={t} onUpdate={onUpdate} />
+        </div>
+      ))}
     </div>
   );
 }

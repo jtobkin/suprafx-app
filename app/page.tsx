@@ -25,7 +25,7 @@ function Login() {
   const { connect, demo } = useWallet();
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-48px)] text-center px-5">
-      <div className="font-mono text-[11px] uppercase tracking-[2px] mb-4 animate-in"
+      <div className="font-mono text-[13px] uppercase tracking-[2px] mb-4 animate-in"
         style={{ color: "var(--t3)" }}>SupraFX Protocol</div>
       <h1 className="font-sans font-light text-5xl tracking-tight leading-tight mb-3 animate-in"
         style={{ animationDelay: "0.05s" }}>
@@ -43,9 +43,9 @@ function Login() {
         ].map((c, i) => (
           <div key={c.n} className="w-[180px] p-5 border rounded-md text-left transition-colors animate-in"
             style={{ borderColor: "var(--border)", background: "var(--surface)", animationDelay: `${0.05 + i * 0.05}s` }}>
-            <div className="font-mono text-[10px] font-semibold mb-2.5" style={{ color: "var(--t3)" }}>{c.n}</div>
+            <div className="font-mono text-[14px] font-semibold mb-2.5" style={{ color: "var(--t3)" }}>{c.n}</div>
             <div className="text-[13px] font-medium mb-1">{c.t}</div>
-            <div className="text-[11px] leading-snug" style={{ color: "var(--t3)" }}>{c.d}</div>
+            <div className="text-[13px] leading-snug" style={{ color: "var(--t3)" }}>{c.d}</div>
           </div>
         ))}
       </div>
@@ -78,38 +78,38 @@ function VerificationGate() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-48px)] text-center px-5">
       <div className="w-[420px] rounded-lg border p-8" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <div className="text-[9px] font-mono uppercase tracking-wider mb-4" style={{ color: "var(--t3)" }}>
+        <div className="text-[13px] font-mono uppercase tracking-wider mb-4" style={{ color: "var(--t3)" }}>
           Complete Profile Setup
         </div>
 
         {/* Step 1: Supra — done */}
         <div className="flex items-center gap-3 p-3 rounded mb-3" style={{ background: "rgba(16,185,129,0.06)" }}>
-          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[14px] font-bold"
             style={{ background: "var(--positive)", color: "#fff" }}>✓</div>
           <div className="text-left flex-1">
-            <div className="text-[11px] font-medium" style={{ color: "var(--positive)" }}>Supra Address Verified</div>
-            <div className="font-mono text-[10px]" style={{ color: "var(--t3)" }}>{supraShort}</div>
+            <div className="text-[13px] font-medium" style={{ color: "var(--positive)" }}>Supra Address Verified</div>
+            <div className="font-mono text-[14px]" style={{ color: "var(--t3)" }}>{supraShort}</div>
           </div>
         </div>
 
         {/* Step 2: EVM — pending */}
         <div className="flex items-center gap-3 p-3 rounded mb-5 border" style={{ borderColor: "var(--warn)", background: "rgba(245,158,11,0.04)" }}>
-          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[14px] font-bold"
             style={{ background: "var(--warn)", color: "#fff" }}>2</div>
           <div className="text-left flex-1">
-            <div className="text-[11px] font-medium" style={{ color: "var(--warn)" }}>Link EVM Address</div>
-            <div className="text-[10px]" style={{ color: "var(--t3)" }}>Sign with MetaMask to verify ownership</div>
+            <div className="text-[13px] font-medium" style={{ color: "var(--warn)" }}>Link EVM Address</div>
+            <div className="text-[14px]" style={{ color: "var(--t3)" }}>Sign with MetaMask to verify ownership</div>
           </div>
         </div>
 
         <button onClick={handleLink} disabled={linking}
-          className="w-full py-3 rounded text-[12px] font-semibold transition-all disabled:opacity-50"
+          className="w-full py-3 rounded text-[14px] font-semibold transition-all disabled:opacity-50"
           style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
           {linking ? "Waiting for MetaMask…" : "Link EVM Address via MetaMask"}
         </button>
 
         <button onClick={disconnect}
-          className="w-full mt-3 py-2 rounded text-[11px] font-mono"
+          className="w-full mt-3 py-2 rounded text-[13px] font-mono"
           style={{ color: "var(--t3)", background: "none", border: "1px solid var(--border)" }}>
           Disconnect
         </button>
@@ -189,7 +189,7 @@ function Dashboard() {
         )}
         {tab === "committee" && <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />}
       </div>
-      <div className="text-center py-5 font-mono text-[10px] uppercase tracking-wider border-t mt-8"
+      <div className="text-center py-5 font-mono text-[14px] uppercase tracking-wider border-t mt-8"
         style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
         SupraFX Protocol · Sepolia (EVM) ↔ Supra Testnet (MoveVM) · Committee-Verified Settlement
       </div>

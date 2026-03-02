@@ -56,17 +56,17 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
       style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
       <div className="px-4 py-2.5 border-b flex items-center justify-between"
         style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-        <span className="text-[11px] font-medium" style={{ color: "var(--t1)" }}>New Order</span>
-        <span className="font-mono text-[9px]" style={{ color: "var(--t3)" }}>
+        <span className="text-[13px] font-medium" style={{ color: "var(--t1)" }}>New Order</span>
+        <span className="font-mono text-[13px]" style={{ color: "var(--t3)" }}>
           Sepolia → Supra Testnet
         </span>
       </div>
       <div className="px-4 py-3">
         <div className="flex items-end gap-2.5">
           <div className="w-32">
-            <label className="block font-mono text-[9px] uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Pair</label>
+            <label className="block font-mono text-[13px] uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Pair</label>
             <select value={pair} onChange={e => setPair(e.target.value)}
-              className="w-full px-2.5 py-[7px] rounded border text-[12px] font-mono outline-none"
+              className="w-full px-2.5 py-[7px] rounded border text-[14px] font-mono outline-none"
               style={inputStyle}>
               <option value="ETH/USDC">ETH/USDC</option>
               <option value="BTC/USDC">BTC/USDC</option>
@@ -74,28 +74,28 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
             </select>
           </div>
           <div className="w-36">
-            <label className="block font-mono text-[9px] uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Size</label>
+            <label className="block font-mono text-[13px] uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Size</label>
             <input type="number" step="0.01" min="0" placeholder="0.00" value={size}
               onChange={e => setSize(e.target.value)}
-              className="w-full px-2.5 py-[7px] rounded border text-[12px] font-mono outline-none"
+              className="w-full px-2.5 py-[7px] rounded border text-[14px] font-mono outline-none"
               style={inputStyle} />
           </div>
           <div className="w-24">
-            <label className="block font-mono text-[9px] uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Slip %</label>
+            <label className="block font-mono text-[13px] uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Slip %</label>
             <input type="number" step="0.1" min="0" value={slip}
               onChange={e => setSlip(e.target.value)}
-              className="w-full px-2.5 py-[7px] rounded border text-[12px] font-mono outline-none"
+              className="w-full px-2.5 py-[7px] rounded border text-[14px] font-mono outline-none"
               style={inputStyle} />
           </div>
           <button onClick={submit} disabled={loading || !size}
-            className="px-5 py-[7px] rounded text-[11px] font-semibold transition-all disabled:opacity-30"
+            className="px-5 py-[7px] rounded text-[13px] font-semibold transition-all disabled:opacity-30"
             style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
             {loading ? "…" : "Submit"}
           </button>
           {result && (
             <div className="flex items-center gap-1.5 ml-2">
               <div className="w-1 h-1 rounded-full" style={{ background: result.ok ? "var(--positive)" : "var(--negative)" }} />
-              <span className="font-mono text-[10px]" style={{ color: result.ok ? "var(--positive)" : "var(--negative)" }}>
+              <span className="font-mono text-[14px]" style={{ color: result.ok ? "var(--positive)" : "var(--negative)" }}>
                 {result.msg}
               </span>
             </div>

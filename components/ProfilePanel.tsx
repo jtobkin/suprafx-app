@@ -26,7 +26,7 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
           <span className="text-[13px] font-medium">Profile</span>
-          <button onClick={onClose} className="text-[11px] px-2 py-1 rounded"
+          <button onClick={onClose} className="text-[13px] px-2 py-1 rounded"
             style={{ color: "var(--t3)", background: "var(--surface-2)" }}>✕</button>
         </div>
 
@@ -34,10 +34,10 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
 
           {/* Identity */}
           <div>
-            <div className="text-[9px] font-mono uppercase tracking-wider mb-3" style={{ color: "var(--t3)" }}>
+            <div className="text-[13px] font-mono uppercase tracking-wider mb-3" style={{ color: "var(--t3)" }}>
               Identity
             </div>
-            <div className="text-[11px] mb-1" style={{ color: "var(--t2)" }}>
+            <div className="text-[13px] mb-1" style={{ color: "var(--t2)" }}>
               {isDemo ? "Demo Mode" : "Authenticated via StarKey"}
             </div>
           </div>
@@ -45,18 +45,18 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
           {/* Supra Address */}
           <div className="rounded p-3 border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[9px] font-mono uppercase tracking-wider" style={{ color: "var(--t3)" }}>
+              <span className="text-[13px] font-mono uppercase tracking-wider" style={{ color: "var(--t3)" }}>
                 Supra (MoveVM)
               </span>
               <div className="flex items-center gap-1">
                 <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
-                <span className="text-[9px] font-mono" style={{ color: "var(--positive)" }}>verified</span>
+                <span className="text-[13px] font-mono" style={{ color: "var(--positive)" }}>verified</span>
               </div>
             </div>
-            <div className="font-mono text-[11px] break-all" style={{ color: "var(--t0)" }}>
+            <div className="font-mono text-[13px] break-all" style={{ color: "var(--t0)" }}>
               {supraAddress}
             </div>
-            <div className="text-[9px] mt-1.5" style={{ color: "var(--t3)" }}>
+            <div className="text-[13px] mt-1.5" style={{ color: "var(--t3)" }}>
               Signed via StarKey wallet connection
             </div>
           </div>
@@ -67,38 +67,38 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
             background: "var(--surface)",
           }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[9px] font-mono uppercase tracking-wider" style={{ color: "var(--t3)" }}>
+              <span className="text-[13px] font-mono uppercase tracking-wider" style={{ color: "var(--t3)" }}>
                 Ethereum (EVM)
               </span>
               {profile?.evmVerified ? (
                 <div className="flex items-center gap-1">
                   <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
-                  <span className="text-[9px] font-mono" style={{ color: "var(--positive)" }}>verified</span>
+                  <span className="text-[13px] font-mono" style={{ color: "var(--positive)" }}>verified</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1">
                   <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--warn)" }} />
-                  <span className="text-[9px] font-mono" style={{ color: "var(--warn)" }}>not linked</span>
+                  <span className="text-[13px] font-mono" style={{ color: "var(--warn)" }}>not linked</span>
                 </div>
               )}
             </div>
 
             {profile?.evmVerified ? (
               <>
-                <div className="font-mono text-[11px] break-all" style={{ color: "var(--t0)" }}>
+                <div className="font-mono text-[13px] break-all" style={{ color: "var(--t0)" }}>
                   {profile.evmAddress}
                 </div>
-                <div className="text-[9px] mt-1.5" style={{ color: "var(--t3)" }}>
+                <div className="text-[13px] mt-1.5" style={{ color: "var(--t3)" }}>
                   Verified via personal_sign on Sepolia
                 </div>
               </>
             ) : (
               <>
-                <div className="text-[11px] mb-3" style={{ color: "var(--t2)" }}>
+                <div className="text-[13px] mb-3" style={{ color: "var(--t2)" }}>
                   Link your Ethereum address to enable cross-chain settlement. MetaMask will ask you to sign a verification message.
                 </div>
                 <button onClick={handleLink} disabled={linking}
-                  className="w-full py-2.5 rounded text-[11px] font-semibold transition-all disabled:opacity-50"
+                  className="w-full py-2.5 rounded text-[13px] font-semibold transition-all disabled:opacity-50"
                   style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
                   {linking ? "Waiting for MetaMask…" : "Link EVM Address via MetaMask"}
                 </button>
@@ -111,10 +111,10 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
             <div className="flex items-center gap-2">
               <span className="text-[16px]">{isVerified ? "✓" : "⏳"}</span>
               <div>
-                <div className="text-[11px] font-medium" style={{ color: isVerified ? "var(--positive)" : "var(--warn)" }}>
+                <div className="text-[13px] font-medium" style={{ color: isVerified ? "var(--positive)" : "var(--warn)" }}>
                   {isVerified ? "Ready to Trade" : "Complete Setup to Trade"}
                 </div>
-                <div className="text-[10px]" style={{ color: "var(--t3)" }}>
+                <div className="text-[14px]" style={{ color: "var(--t3)" }}>
                   {isVerified
                     ? "Both addresses verified. Cross-chain settlement enabled."
                     : "Link your EVM address to enable settlement on Sepolia."}
@@ -125,35 +125,35 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
 
           {/* Reputation */}
           <div>
-            <div className="text-[9px] font-mono uppercase tracking-wider mb-3" style={{ color: "var(--t3)" }}>
+            <div className="text-[13px] font-mono uppercase tracking-wider mb-3" style={{ color: "var(--t3)" }}>
               Reputation
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded p-2.5" style={{ background: "var(--surface-2)" }}>
                 <div className="font-mono text-[16px] font-semibold" style={{ color: "var(--t0)" }}>5.00</div>
-                <div className="text-[9px]" style={{ color: "var(--t3)" }}>rep score</div>
+                <div className="text-[13px]" style={{ color: "var(--t3)" }}>rep score</div>
               </div>
               <div className="rounded p-2.5" style={{ background: "var(--surface-2)" }}>
                 <div className="font-mono text-[16px] font-semibold" style={{ color: "var(--t0)" }}>0</div>
-                <div className="text-[9px]" style={{ color: "var(--t3)" }}>trades settled</div>
+                <div className="text-[13px]" style={{ color: "var(--t3)" }}>trades settled</div>
               </div>
             </div>
           </div>
 
           {/* Settlement Routing */}
           <div>
-            <div className="text-[9px] font-mono uppercase tracking-wider mb-3" style={{ color: "var(--t3)" }}>
+            <div className="text-[13px] font-mono uppercase tracking-wider mb-3" style={{ color: "var(--t3)" }}>
               Settlement Routing
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between py-1.5 px-2.5 rounded text-[10px]"
+              <div className="flex items-center justify-between py-1.5 px-2.5 rounded text-[14px]"
                 style={{ background: "var(--surface-2)" }}>
                 <span style={{ color: "var(--t3)" }}>Sepolia ETH legs</span>
                 <span className="font-mono" style={{ color: profile?.evmVerified ? "var(--t1)" : "var(--t3)" }}>
                   {profile?.evmVerified ? evmShort : "—"}
                 </span>
               </div>
-              <div className="flex items-center justify-between py-1.5 px-2.5 rounded text-[10px]"
+              <div className="flex items-center justify-between py-1.5 px-2.5 rounded text-[14px]"
                 style={{ background: "var(--surface-2)" }}>
                 <span style={{ color: "var(--t3)" }}>Supra token legs</span>
                 <span className="font-mono" style={{ color: "var(--t1)" }}>{supraShort}</span>
@@ -165,7 +165,7 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
         {/* Footer */}
         <div className="px-5 py-4 border-t" style={{ borderColor: "var(--border)" }}>
           <button onClick={disconnect}
-            className="w-full py-2 rounded text-[11px] font-mono transition-all"
+            className="w-full py-2 rounded text-[13px] font-mono transition-all"
             style={{ color: "var(--negative)", background: "var(--surface-2)", border: "1px solid var(--border)" }}>
             Disconnect
           </button>
