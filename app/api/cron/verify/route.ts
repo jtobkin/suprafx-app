@@ -1,31 +1,30 @@
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
 import { NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
+import { verifySepoliaTx } from '@/lib/chains';
 import { updateReputation } from '@/lib/reputation';
 
 const COMMITTEE_NODES = ['N-1', 'N-2', 'N-3', 'N-4', 'N-5'];
 const THRESHOLD = 3;
 
 async function verifyTx(chain: string, txHash: string): Promise<boolean> {
-  // In demo mode, accept all TX hashes
-  // In production, this calls verifySepoliaTx / verifySupraTx
-  if (txHash.startsWith('demo_') || !process.env.ALCHEMY_API_KEY || process.env.ALCHEMY_API_KEY === 'your_alchemy_key_here') {
-    return true; // Demo mode: auto-approve
-  }
+  const hasAlchemy = process.env.ALCHEMY_API_KEY && process.env.ALCHEMY_API_KEY !== 'your_alchemy_key_here';
 
-  // Real verification
-  try {
-    if (chain === 'sepolia' && txHash.startsWith('0x')) {
-      const { verifySepoliaTx } = await import('@/lib/chains');
+  // Real Sepolia verification via Alchemy
+  if (chain === 'sepolia' && txHash.startsWith('0x') && hasAlchemy) {
+    try {
       const result = await verifySepoliaTx(txHash);
       return result.verified;
+    } catch (e) {
+      console.error('Sepolia verify error:', e);
+      // Fall through to demo mode on error
     }
-    // For Supra or unknown chains, approve in testnet
-    return true;
-  } catch {
-    return true; // Approve on error in testnet
   }
+
+  // Demo mode: auto-approve non-real TXs or when no Alchemy key
+  return true;
 }
 
 async function runCommitteeVote(
@@ -35,7 +34,6 @@ async function runCommitteeVote(
   chain: string,
   txHash: string
 ) {
-  // Create request if not exists
   const { data: existing } = await db
     .from('committee_requests')
     .select('*')
@@ -43,7 +41,7 @@ async function runCommitteeVote(
     .eq('verification_type', verificationType)
     .single();
 
-  if (existing?.status === 'approved') return { approved: true };
+  if (existing?.status === 'approved') return { approved: true, approvals: existing.approvals };
 
   if (!existing) {
     await db.from('committee_requests').insert({
@@ -120,7 +118,6 @@ export async function GET() {
         settle_ms: settleMs,
       }).eq('id', trade.id);
 
-      // Reputation approval
       await runCommitteeVote(db, trade.id, 'approve_reputation', '', '');
       await updateReputation(trade.taker_address, settleMs);
       await updateReputation(trade.maker_address, settleMs);

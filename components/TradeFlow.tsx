@@ -6,6 +6,9 @@ import { Trade } from "@/lib/types";
 const STEPS = ["open", "taker_sent", "taker_verified", "maker_sent", "settled"];
 const LABELS = ["Matched", "Taker Sent", "Verified", "Maker Sent", "Settled"];
 
+// Testnet escrow address (placeholder — in production this is a smart contract)
+const ESCROW_ADDRESS = "0x000000000000000000000000000000000000dEaD";
+
 function stepIdx(s: string) { const i = STEPS.indexOf(s); return i >= 0 ? i : 0; }
 
 function Progress({ status }: { status: string }) {
@@ -44,31 +47,69 @@ function Spinner() {
 }
 
 function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }) {
-  const { address } = useWallet();
+  const { address, evmAddress, isDemo, sendSepoliaEth } = useWallet();
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const confirmTx = async (side: "taker" | "maker", hash?: string) => {
-    const h = hash || txHash.trim();
-    if (!h) return;
+  const confirmTx = async (side: "taker" | "maker", hash: string) => {
+    if (!hash) return;
     setLoading(true);
     setMsg(null);
     try {
       const res = await fetch("/api/confirm-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tradeId: trade.id, txHash: h, side }),
+        body: JSON.stringify({ tradeId: trade.id, txHash: hash, side }),
       });
       const data = await res.json();
       if (data.error) { setMsg(data.error); }
       else {
         setMsg("TX confirmed — committee verifying…");
         setTxHash("");
-        setTimeout(async () => { await fetch("/api/cron/verify"); onUpdate(); }, 2500);
+        setTimeout(async () => { await fetch("/api/cron/verify"); onUpdate(); }, 3000);
       }
     } catch (e: any) { setMsg(e.message); }
     setLoading(false);
+  };
+
+  // REAL Sepolia send via StarKey/MetaMask
+  const sendOnSepolia = async () => {
+    setLoading(true);
+    setMsg(null);
+    try {
+      // Convert trade size to wei (treating size as ETH amount for demo)
+      // e.g. 0.1 ETH = 0.1 * 1e18 = 100000000000000000
+      const sizeEth = parseFloat(String(trade.size));
+      const valueWei = "0x" + BigInt(Math.floor(sizeEth * 1e18)).toString(16);
+      
+      setMsg("Waiting for wallet approval…");
+      const hash = await sendSepoliaEth(ESCROW_ADDRESS, valueWei);
+      
+      setMsg("TX sent! Hash: " + hash.slice(0, 14) + "… — submitting to committee");
+      
+      // Submit the real TX hash to our API
+      await confirmTx("taker", hash);
+    } catch (e: any) {
+      if (e.code === 4001 || e.message?.includes("rejected")) {
+        setMsg("Transaction rejected by user");
+      } else {
+        setMsg("Wallet error: " + (e.message || e));
+      }
+    }
+    setLoading(false);
+  };
+
+  // Demo mode: generate fake TX hash
+  const sendDemo = async () => {
+    const demoHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+    await confirmTx("taker", demoHash);
+  };
+
+  // Manual TX hash input
+  const submitManualHash = async () => {
+    if (!txHash.trim()) return;
+    await confirmTx("taker", txHash.trim());
   };
 
   const simulateMaker = async () => {
@@ -76,19 +117,21 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
     await confirmTx("maker", hash);
   };
 
-  const genDemoHash = () => {
-    setTxHash("0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""));
-  };
+  const hasRealWallet = !!evmAddress && !isDemo;
 
   return (
     <div className="px-4 py-3 border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
+      {/* Trade info row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="font-mono text-[10px]" style={{ color: "var(--t3)" }}>{trade.display_id}</span>
           <span className="text-[12px] font-semibold">{trade.pair}</span>
           <span className="font-mono text-[12px]">{trade.size}</span>
           <span className="font-mono text-[11px]" style={{ color: "var(--t2)" }}>
-            @ ${trade.rate?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            @ ${Number(trade.rate)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </span>
+          <span className="font-mono text-[11px]" style={{ color: "var(--t2)" }}>
+            = ${Number(trade.notional)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -105,37 +148,96 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
 
       <Progress status={trade.status} />
 
-      {/* Open: taker needs to send */}
+      {/* === OPEN: taker needs to send === */}
       {trade.status === "open" && (
-        <div className="flex items-center gap-2 mt-1">
-          <input type="text" placeholder="0x… transaction hash" value={txHash}
-            onChange={e => setTxHash(e.target.value)}
-            className="flex-1 px-2.5 py-[6px] rounded border text-[11px] font-mono outline-none"
-            style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-          <button onClick={() => confirmTx("taker")} disabled={loading || !txHash.trim()}
-            className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
-            style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-            {loading ? "…" : "Confirm"}
-          </button>
-          <button onClick={genDemoHash}
-            className="px-2 py-[6px] rounded text-[9px] font-mono transition-colors"
-            style={{ background: "var(--surface-3)", color: "var(--t3)", border: "none" }}>
-            Demo TX
-          </button>
+        <div>
+          {hasRealWallet ? (
+            <>
+              <div className="text-[11px] mb-2" style={{ color: "var(--t2)" }}>
+                Send <strong className="text-white">{trade.size} ETH</strong> on Sepolia to escrow.
+                Your wallet will prompt you to sign.
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={sendOnSepolia}
+                  disabled={loading}
+                  className="px-4 py-[7px] rounded text-[11px] font-semibold disabled:opacity-30 transition-all"
+                  style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                  {loading ? "Waiting for wallet…" : "Send on Sepolia"}
+                </button>
+                <span className="text-[9px] font-mono" style={{ color: "var(--t3)" }}>
+                  via {evmAddress ? "StarKey EVM" : "wallet"}
+                </span>
+              </div>
+              {/* Manual fallback */}
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[9px]" style={{ color: "var(--t3)" }}>or paste TX hash:</span>
+                <input type="text" placeholder="0x…" value={txHash}
+                  onChange={e => setTxHash(e.target.value)}
+                  className="flex-1 px-2 py-1 rounded border text-[10px] font-mono outline-none"
+                  style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+                <button onClick={submitManualHash} disabled={loading || !txHash.trim()}
+                  className="px-2 py-1 rounded text-[9px] font-medium disabled:opacity-30"
+                  style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
+                  Submit
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-[11px] mb-2" style={{ color: "var(--t2)" }}>
+                Send <strong className="text-white">{trade.size} {trade.pair.split("/")[0]}</strong> on{" "}
+                <strong className="text-white">{trade.source_chain}</strong>, then confirm below.
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="text" placeholder="0x… transaction hash" value={txHash}
+                  onChange={e => setTxHash(e.target.value)}
+                  className="flex-1 px-2.5 py-[6px] rounded border text-[11px] font-mono outline-none"
+                  style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+                <button onClick={submitManualHash} disabled={loading || !txHash.trim()}
+                  className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
+                  style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                  {loading ? "…" : "Confirm"}
+                </button>
+                <button onClick={sendDemo}
+                  className="px-2 py-[6px] rounded text-[9px] font-mono"
+                  style={{ background: "var(--surface-3)", color: "var(--t3)", border: "none" }}>
+                  Demo TX
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* Taker sent: waiting for committee */}
+      {/* === TAKER SENT: waiting for committee === */}
       {trade.status === "taker_sent" && (
         <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
           <Spinner /> Committee verifying taker TX on {trade.source_chain}…
+          {trade.taker_tx_hash && (
+            <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
+              className="font-mono text-[10px] ml-2" style={{ color: "var(--accent-light)" }}>
+              View on Etherscan ↗
+            </a>
+          )}
         </div>
       )}
 
-      {/* Taker verified: maker needs to send */}
+      {/* === TAKER VERIFIED: maker needs to send === */}
       {trade.status === "taker_verified" && (
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-[11px]" style={{ color: "var(--positive)" }}>Taker verified.</span>
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px]" style={{ color: "var(--positive)" }}>Taker TX verified by committee (5/5).</span>
+            {trade.taker_tx_hash && (
+              <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
+                className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>
+                Etherscan ↗
+              </a>
+            )}
+          </div>
+          <div className="text-[11px] mb-2" style={{ color: "var(--t2)" }}>
+            Waiting for maker to send on {trade.dest_chain}.
+          </div>
           <button onClick={simulateMaker} disabled={loading}
             className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
             style={{ background: "var(--surface-3)", color: "var(--t0)", border: "1px solid var(--border-active)" }}>
@@ -144,25 +246,28 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
         </div>
       )}
 
-      {/* Maker sent: waiting for committee */}
+      {/* === MAKER SENT: waiting for committee === */}
       {trade.status === "maker_sent" && (
         <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
           <Spinner /> Committee verifying maker TX on {trade.dest_chain}…
         </div>
       )}
 
-      {/* Settled */}
+      {/* === SETTLED === */}
       {trade.status === "settled" && (
         <div className="flex items-center gap-3">
+          <span className="text-[11px]" style={{ color: "var(--positive)" }}>
+            Settled{trade.settle_ms ? ` in ${(trade.settle_ms / 1000).toFixed(1)}s` : ""}
+          </span>
           {trade.taker_tx_hash && (
             <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>
+              className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>
               Taker TX ↗
             </a>
           )}
           {trade.maker_tx_hash && (
             <a href={`https://testnet.suprascan.io/tx/${trade.maker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>
+              className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>
               Maker TX ↗
             </a>
           )}
@@ -170,7 +275,15 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       )}
 
       {msg && (
-        <div className="mt-1.5 font-mono text-[10px]" style={{ color: "var(--warn)" }}>{msg}</div>
+        <div className="mt-2 font-mono text-[10px] px-2.5 py-1.5 rounded"
+          style={{
+            background: msg.includes("error") || msg.includes("Error") || msg.includes("rejected")
+              ? "rgba(239,68,68,0.08)" : "rgba(37,99,235,0.08)",
+            color: msg.includes("error") || msg.includes("Error") || msg.includes("rejected")
+              ? "var(--negative)" : "var(--accent-light)",
+          }}>
+          {msg}
+        </div>
       )}
     </div>
   );

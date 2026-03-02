@@ -5,7 +5,7 @@ const tabs = ["overview", "orderbook", "blotter", "committee"] as const;
 type Tab = typeof tabs[number];
 
 export default function Header({ active, onTab }: { active: Tab; onTab: (t: Tab) => void }) {
-  const { disconnect, short, address } = useWallet();
+  const { disconnect, short, evmShort, isDemo, evmAddress } = useWallet();
 
   return (
     <header className="h-11 flex items-center justify-between px-5 border-b sticky top-0 z-50"
@@ -19,7 +19,7 @@ export default function Header({ active, onTab }: { active: Tab; onTab: (t: Tab)
         </div>
         <div className="h-3.5 w-px" style={{ background: "var(--border)" }} />
         <span className="font-mono text-[9px] uppercase tracking-[1.5px]" style={{ color: "var(--t3)" }}>
-          {address?.startsWith("demo") ? "Demo" : "Testnet"}
+          {isDemo ? "Demo" : "Sepolia Testnet"}
         </span>
       </div>
 
@@ -42,10 +42,19 @@ export default function Header({ active, onTab }: { active: Tab; onTab: (t: Tab)
       </div>
 
       <div className="flex items-center gap-2.5">
+        {evmAddress && !isDemo && (
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded"
+            style={{ background: "rgba(37,99,235,0.08)" }}>
+            <div className="w-1 h-1 rounded-full" style={{ background: "var(--accent)" }} />
+            <span className="font-mono text-[9px]" style={{ color: "var(--accent-light)" }}>
+              EVM {evmShort}
+            </span>
+          </div>
+        )}
         <div className="flex items-center gap-1.5">
           <div className="w-1 h-1 rounded-full animate-pulse-dot" style={{ background: "var(--positive)" }} />
           <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>
-            Connected
+            {isDemo ? "Demo" : "Live"}
           </span>
         </div>
         <button onClick={disconnect}
