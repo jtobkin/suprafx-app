@@ -2,26 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #09090b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --surface-3: #1e1e22;
+  --border: rgba(255,255,255,0.06);
+  --border-active: rgba(255,255,255,0.12);
+  --t0: rgba(255,255,255,0.95);
+  --t1: rgba(255,255,255,0.72);
+  --t2: rgba(255,255,255,0.44);
+  --t3: rgba(255,255,255,0.22);
+  --accent: #3b82f6;
+  --positive: #22c55e;
+  --negative: #ef4444;
+  --warn: #eab308;
+  --neutral: #6366f1;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { -webkit-font-smoothing: antialiased; }
+body { background: var(--bg); color: var(--t0); }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+.tag {
+  display: inline-block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid;
 }
+.tag-settled { background: rgba(34,197,94,0.1); color: var(--positive); border-color: rgba(34,197,94,0.15); }
+.tag-open { background: rgba(99,102,241,0.1); color: var(--neutral); border-color: rgba(99,102,241,0.15); }
+.tag-pending, .tag-taker_sent, .tag-taker_verified, .tag-maker_sent { background: rgba(234,179,8,0.1); color: var(--warn); border-color: rgba(234,179,8,0.15); }
+.tag-failed { background: rgba(239,68,68,0.1); color: var(--negative); border-color: rgba(239,68,68,0.15); }
+.tag-approved { background: rgba(34,197,94,0.08); color: var(--positive); border-color: rgba(34,197,94,0.12); }
+.tag-maker { background: rgba(59,130,246,0.08); color: var(--accent); border-color: rgba(59,130,246,0.1); }
+.tag-taker { background: rgba(255,255,255,0.04); color: var(--t2); border-color: var(--border); }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(6px); }
+  to { opacity:1; transform:translateY(0); }
 }
+.animate-in { animation: fadeUp 0.35s ease both; }

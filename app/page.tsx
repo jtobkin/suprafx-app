@@ -1,101 +1,150 @@
-import Image from "next/image";
+"use client";
+import { useState, useEffect, useCallback } from "react";
+import { WalletProvider, useWallet } from "@/components/WalletProvider";
+import Header from "@/components/Header";
+import KPIs from "@/components/KPIs";
+import OrderbookTable from "@/components/OrderbookTable";
+import TradeBlotter from "@/components/TradeBlotter";
+import CommitteePanel from "@/components/CommitteePanel";
+import AgentsPanel from "@/components/AgentsPanel";
+import { supabase } from "@/lib/supabase";
+import type { Trade, RFQ, Agent, CommitteeRequest } from "@/lib/types";
 
-export default function Home() {
+const COMMITTEE_NODES = [
+  { id: "N-1", status: "online" },
+  { id: "N-2", status: "online" },
+  { id: "N-3", status: "online" },
+  { id: "N-4", status: "online" },
+  { id: "N-5", status: "online" },
+];
+
+function Login() {
+  const { connect, demo } = useWallet();
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-48px)] text-center px-5">
+      <div className="font-mono text-[11px] uppercase tracking-[2px] mb-4 animate-in"
+        style={{ color: "var(--t3)" }}>SupraFX Protocol</div>
+      <h1 className="font-sans font-light text-5xl tracking-tight leading-tight mb-3 animate-in"
+        style={{ animationDelay: "0.05s" }}>
+        Cross-Chain<br/>FX Settlement
+      </h1>
+      <p className="text-[15px] max-w-[400px] leading-relaxed mb-12 animate-in"
+        style={{ color: "var(--t2)", animationDelay: "0.1s" }}>
+        Institutional-grade settlement across EVM and MoveVM. No bridges. No DEXs. Committee-verified.
+      </p>
+      <div className="grid grid-cols-3 gap-3 mb-12">
+        {[
+          { n: "01", t: "Cross-Chain", d: "Sepolia to Supra Testnet. Two atomic transfers." },
+          { n: "02", t: "AI Agents", d: "Autonomous maker/taker with reputation scoring." },
+          { n: "03", t: "3-of-5 Committee", d: "Independent nodes verify every on-chain transfer." },
+        ].map((c, i) => (
+          <div key={c.n} className="w-[180px] p-5 border rounded-md text-left transition-colors animate-in"
+            style={{ borderColor: "var(--border)", background: "var(--surface)", animationDelay: `${0.05 + i * 0.05}s` }}>
+            <div className="font-mono text-[10px] font-semibold mb-2.5" style={{ color: "var(--t3)" }}>{c.n}</div>
+            <div className="text-[13px] font-medium mb-1">{c.t}</div>
+            <div className="text-[11px] leading-snug" style={{ color: "var(--t3)" }}>{c.d}</div>
+          </div>
+        ))}
+      </div>
+      <button onClick={connect}
+        className="px-8 py-3 rounded border text-[13px] font-medium transition-all animate-in hover:brightness-110"
+        style={{ background: "var(--accent)", borderColor: "var(--accent)", color: "#fff", animationDelay: "0.2s" }}>
+        Connect StarKey Wallet
+      </button>
+      <div className="mt-3.5 text-xs animate-in" style={{ color: "var(--t3)", animationDelay: "0.25s" }}>
+        No wallet?{" "}
+        <span className="cursor-pointer hover:underline" style={{ color: "var(--accent)" }} onClick={demo}>
+          Enter demo mode
+        </span>
+      </div>
+    </div>
+  );
+}
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+function Dashboard() {
+  const { address } = useWallet();
+  const [tab, setTab] = useState<"overview" | "orderbook" | "blotter" | "committee">("overview");
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [rfqs, setRfqs] = useState<RFQ[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [requests, setRequests] = useState<CommitteeRequest[]>([]);
+
+  const fetchData = useCallback(async () => {
+    const [t, r, a, cr] = await Promise.all([
+      supabase.from("trades").select("*").order("created_at", { ascending: false }),
+      supabase.from("rfqs").select("*").order("created_at", { ascending: false }),
+      supabase.from("agents").select("*").order("created_at", { ascending: false }),
+      supabase.from("committee_requests").select("*").order("created_at", { ascending: false }),
+    ]);
+    if (t.data) setTrades(t.data);
+    if (r.data) setRfqs(r.data);
+    if (a.data) setAgents(a.data);
+    if (cr.data) setRequests(cr.data);
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+
+    // Real-time subscriptions
+    const channel = supabase.channel("realtime-all")
+      .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "rfqs" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "committee_requests" }, () => fetchData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
+  return (
+    <div>
+      <Header active={tab} onTab={setTab as any} />
+      <div className="max-w-[1240px] mx-auto px-5 py-5">
+        {tab === "overview" && (
+          <>
+            <KPIs trades={trades} agents={agents} rfqs={rfqs} />
+            <OrderbookTable rfqs={rfqs} />
+            <div className="grid grid-cols-2 gap-4">
+              <AgentsPanel agents={agents} />
+              <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />
+            </div>
+            <TradeBlotter trades={trades} />
+          </>
+        )}
+        {tab === "orderbook" && <OrderbookTable rfqs={rfqs} />}
+        {tab === "blotter" && <TradeBlotter trades={trades} />}
+        {tab === "committee" && <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />}
+      </div>
+      <div className="text-center py-5 font-mono text-[10px] uppercase tracking-wider border-t mt-8"
+        style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
+        SupraFX Protocol · Sepolia (EVM) ↔ Supra Testnet (MoveVM) · Committee-Verified Settlement
+      </div>
+    </div>
+  );
+}
+
+export default function Page() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  return (
+    <WalletProvider>
+      <Inner />
+    </WalletProvider>
+  );
+}
+
+function Inner() {
+  const { address } = useWallet();
+  return address ? <Dashboard /> : (
+    <div>
+      <header className="h-12 flex items-center px-5 border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <div className="flex items-center gap-2">
+          <div className="w-[6px] h-[6px] rounded-[1px]" style={{ background: "var(--accent)" }} />
+          <span className="font-mono font-semibold text-sm tracking-tight">SupraFX</span>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </header>
+      <Login />
     </div>
   );
 }
