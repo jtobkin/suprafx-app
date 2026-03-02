@@ -6,8 +6,9 @@ import { Trade } from "@/lib/types";
 const STEPS = ["open", "taker_sent", "taker_verified", "maker_sent", "settled"];
 const LABELS = ["Matched", "Taker Sent", "Verified", "Maker Sent", "Settled"];
 
-// Testnet escrow address (placeholder — in production this is a smart contract)
-const ESCROW_ADDRESS = "0x000000000000000000000000000000000000dEaD";
+// In testnet demo, we send to self (proves on-chain TX without losing funds)
+// In production this would be a smart contract escrow
+const ESCROW_ADDRESS = "SELF"; // special flag — resolved at send time to sender's address
 
 function stepIdx(s: string) { const i = STEPS.indexOf(s); return i >= 0 ? i : 0; }
 
@@ -78,13 +79,15 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
     setLoading(true);
     setMsg(null);
     try {
-      // Convert trade size to wei (treating size as ETH amount for demo)
-      // e.g. 0.1 ETH = 0.1 * 1e18 = 100000000000000000
-      const sizeEth = parseFloat(String(trade.size));
-      const valueWei = "0x" + BigInt(Math.floor(sizeEth * 1e18)).toString(16);
+      // Convert trade size to wei — use a tiny amount for testnet demo
+      // Send 0.0001 ETH regardless of trade size to conserve testnet funds
+      const valueWei = "0x" + BigInt(100000000000000).toString(16); // 0.0001 ETH
+      
+      // Send to self (proves on-chain TX without losing funds)
+      const destination = evmAddress || address || "";
       
       setMsg("Waiting for wallet approval…");
-      const hash = await sendSepoliaEth(ESCROW_ADDRESS, valueWei);
+      const hash = await sendSepoliaEth(destination, valueWei);
       
       setMsg("TX sent! Hash: " + hash.slice(0, 14) + "… — submitting to committee");
       
