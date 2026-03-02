@@ -69,6 +69,7 @@ export interface CommitteeRequest {
   approvals: number;
   rejections: number;
   threshold: number;
+  attestation_tx: string | null;
   created_at: string;
 }
 

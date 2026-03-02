@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { verifySepoliaTx } from '@/lib/chains';
 import { updateReputation } from '@/lib/reputation';
-import { botSendSupraTokens, getBotAddresses } from '@/lib/bot-wallets';
+import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation } from '@/lib/bot-wallets';
+import { generateMultisig } from '@/lib/committee-sig';
 
 const COMMITTEE_NODES = ['N-1', 'N-2', 'N-3', 'N-4', 'N-5'];
 
@@ -19,8 +20,16 @@ async function verifyOnChain(chain: string, txHash: string): Promise<boolean> {
   return true;
 }
 
-async function runCommittee(db: any, tradeId: string, verificationType: string, chain: string, txHash: string) {
+async function runCommittee(db: any, tradeId: string, verificationType: string, chain: string, txHash: string, tradeData?: any) {
   const verified = await verifyOnChain(chain, txHash);
+
+  // Generate multisig signatures
+  const multisig = generateMultisig(
+    tradeId,
+    verificationType,
+    verified ? "approved" : "rejected",
+    tradeData || {},
+  );
 
   await db.from('committee_requests').upsert({
     trade_id: tradeId,
@@ -31,18 +40,19 @@ async function runCommittee(db: any, tradeId: string, verificationType: string, 
     resolved_at: verified ? new Date().toISOString() : null,
   }, { onConflict: 'trade_id,verification_type' });
 
-  for (const nodeId of COMMITTEE_NODES) {
+  for (const sig of multisig.signatures) {
     await db.from('committee_votes').upsert({
       trade_id: tradeId,
-      node_id: nodeId,
+      node_id: sig.nodeId,
       verification_type: verificationType,
       decision: verified ? 'approve' : 'reject',
       chain,
       tx_hash: txHash,
+      signature: sig.signature,
     }, { onConflict: 'trade_id,node_id,verification_type' });
   }
 
-  return verified;
+  return { verified, multisig };
 }
 
 export async function POST(req: NextRequest) {
@@ -65,7 +75,8 @@ export async function POST(req: NextRequest) {
       await db.from('trades').update({ taker_tx_hash: txHash, status: 'taker_sent' }).eq('id', tradeId);
 
       // Committee verify taker TX
-      const verified = await runCommittee(db, tradeId, 'verify_taker_tx', trade.source_chain, txHash);
+      const tradeInfo = { pair: trade.pair, size: trade.size, rate: trade.rate, takerTxHash: txHash };
+      const { verified } = await runCommittee(db, tradeId, 'verify_taker_tx', trade.source_chain, txHash, tradeInfo);
 
       if (verified) {
         await db.from('trades').update({
@@ -92,7 +103,8 @@ export async function POST(req: NextRequest) {
             }).eq('id', tradeId);
 
             // Committee verify maker TX
-            const makerVerified = await runCommittee(db, tradeId, 'verify_maker_tx', trade.dest_chain, makerTxHash);
+            const makerTradeInfo = { ...tradeInfo, makerTxHash };
+            const { verified: makerVerified } = await runCommittee(db, tradeId, 'verify_maker_tx', trade.dest_chain, makerTxHash, makerTradeInfo);
 
             if (makerVerified) {
               const settleMs = Date.now() - new Date(trade.created_at).getTime();
@@ -103,9 +115,36 @@ export async function POST(req: NextRequest) {
                 settle_ms: settleMs,
               }).eq('id', tradeId);
 
-              await runCommittee(db, tradeId, 'approve_reputation', '', '');
+              // Reputation update
+              const repResult = await runCommittee(db, tradeId, 'approve_reputation', '', '', {
+                ...makerTradeInfo, settleMs,
+              });
               await updateReputation(trade.taker_address, settleMs);
               await updateReputation(trade.maker_address, settleMs);
+
+              // Get updated reputation scores
+              const { data: takerAgent } = await db.from('agents').select('rep_total, trade_count')
+                .eq('wallet_address', trade.taker_address).single();
+
+              // Submit committee attestation on-chain (async, don't block response)
+              let attestationTxHash = '';
+              try {
+                if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+                  attestationTxHash = await submitCommitteeAttestation(
+                    tradeId,
+                    repResult.multisig.aggregateHash,
+                    settleMs,
+                    takerAgent ? { address: trade.taker_address, newScore: takerAgent.rep_total } : undefined,
+                  );
+
+                  // Store attestation TX in committee_requests
+                  await db.from('committee_requests').update({
+                    attestation_tx: attestationTxHash,
+                  }).eq('trade_id', tradeId).eq('verification_type', 'approve_reputation');
+                }
+              } catch (e: any) {
+                console.error('Attestation TX failed:', e);
+              }
 
               return NextResponse.json({
                 success: true,
@@ -114,6 +153,7 @@ export async function POST(req: NextRequest) {
                 settleMs,
                 makerTxHash,
                 autoSettled: true,
+                attestationTxHash: attestationTxHash || null,
               });
             }
 
@@ -141,7 +181,8 @@ export async function POST(req: NextRequest) {
 
       await db.from('trades').update({ maker_tx_hash: txHash, status: 'maker_sent' }).eq('id', tradeId);
 
-      const verified = await runCommittee(db, tradeId, 'verify_maker_tx', trade.dest_chain, txHash);
+      const makerTradeInfo = { pair: trade.pair, size: trade.size, rate: trade.rate, takerTxHash: trade.taker_tx_hash, makerTxHash: txHash };
+      const { verified } = await runCommittee(db, tradeId, 'verify_maker_tx', trade.dest_chain, txHash, makerTradeInfo);
 
       if (verified) {
         const settleMs = Date.now() - new Date(trade.created_at).getTime();
@@ -152,11 +193,33 @@ export async function POST(req: NextRequest) {
           settle_ms: settleMs,
         }).eq('id', tradeId);
 
-        await runCommittee(db, tradeId, 'approve_reputation', '', '');
+        const repResult = await runCommittee(db, tradeId, 'approve_reputation', '', '', {
+          ...makerTradeInfo, settleMs,
+        });
         await updateReputation(trade.taker_address, settleMs);
         await updateReputation(trade.maker_address, settleMs);
 
-        return NextResponse.json({ success: true, status: 'settled', verified: true, settleMs });
+        const { data: takerAgent } = await db.from('agents').select('rep_total, trade_count')
+          .eq('wallet_address', trade.taker_address).single();
+
+        let attestationTxHash = '';
+        try {
+          if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+            attestationTxHash = await submitCommitteeAttestation(
+              tradeId,
+              repResult.multisig.aggregateHash,
+              settleMs,
+              takerAgent ? { address: trade.taker_address, newScore: takerAgent.rep_total } : undefined,
+            );
+            await db.from('committee_requests').update({
+              attestation_tx: attestationTxHash,
+            }).eq('trade_id', tradeId).eq('verification_type', 'approve_reputation');
+          }
+        } catch (e: any) {
+          console.error('Attestation TX failed:', e);
+        }
+
+        return NextResponse.json({ success: true, status: 'settled', verified: true, settleMs, attestationTxHash: attestationTxHash || null });
       }
 
       return NextResponse.json({ success: true, status: 'maker_sent', verified: false });

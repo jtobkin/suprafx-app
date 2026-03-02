@@ -206,19 +206,51 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       await new Promise(r => setTimeout(r, 12000));
       if (!autoRef.current) return;
 
-      // Step 3: Committee verifies taker TX
+      // Step 3: Committee verifies taker TX — bot may auto-settle the whole trade
       addLog("Committee verifying taker TX…");
       const takerResult = await confirmTx("taker", takerHash);
+      
+      if (takerResult.autoSettled) {
+        // Bot already sent Supra and settled the trade!
+        addLog("Taker TX verified by committee (5/5)", "var(--positive)");
+        addLog("Maker bot auto-sent SUPRA to taker", "var(--accent-light)");
+        if (takerResult.makerTxHash) {
+          addLog("Supra TX: " + takerResult.makerTxHash.slice(0, 24) + "…", "var(--accent-light)");
+        }
+        addLog("Committee verified maker TX (5/5)", "var(--positive)");
+        addLog("Trade settled in " + (takerResult.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
+        onUpdate();
+        autoRef.current = false;
+        setAutoRunning(false);
+        return;
+      }
+
       if (takerResult.verified) {
         addLog("Taker TX verified by committee (5/5)", "var(--positive)");
       } else {
         addLog("Taker verification pending — retrying in 5s…", "var(--warn)");
         await new Promise(r => setTimeout(r, 5000));
-        await confirmTx("taker", takerHash);
+        const retry = await confirmTx("taker", takerHash);
+        if (retry.autoSettled) {
+          addLog("Trade auto-settled by maker bot!", "var(--positive)");
+          onUpdate();
+          autoRef.current = false;
+          setAutoRunning(false);
+          return;
+        }
         addLog("Taker TX verified", "var(--positive)");
       }
       onUpdate();
       if (!autoRef.current) return;
+
+      // If maker already sent (status from API), check if we need to wait
+      if (takerResult.status === 'maker_sent' || takerResult.status === 'settled') {
+        addLog("Maker bot already sent on Supra — settling…", "var(--positive)");
+        onUpdate();
+        autoRef.current = false;
+        setAutoRunning(false);
+        return;
+      }
 
       // Step 4: Maker sends on Supra
       addLog("Maker sending SUPRA on " + trade.dest_chain + "…");

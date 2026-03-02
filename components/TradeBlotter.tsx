@@ -1,8 +1,18 @@
 "use client";
 import { Trade } from "@/lib/types";
 
-function txUrl(h: string) { return h?.startsWith("0x") ? `https://sepolia.etherscan.io/tx/${h}` : `https://testnet.suprascan.io/tx/${h}`; }
-function txLabel(h: string) { return h?.startsWith("0x") ? "Sepolia" : "Supra"; }
+function txUrl(h: string) {
+  if (!h) return "#";
+  if (h.startsWith("0x") && h.length === 66) return `https://sepolia.etherscan.io/tx/${h}`;
+  // Supra testnet — hash might be with or without 0x prefix
+  const cleanHash = h.startsWith("0x") ? h.slice(2) : h.startsWith("supra_") ? h.slice(6) : h;
+  return `https://testnet.suprascan.io/tx/${cleanHash}`;
+}
+function txLabel(h: string) {
+  if (!h) return "";
+  if (h.startsWith("0x") && h.length === 66) return "Sepolia";
+  return "Supra";
+}
 
 export default function TradeBlotter({ trades }: { trades: Trade[] }) {
   const sorted = [...trades].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
