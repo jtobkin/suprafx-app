@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { WalletProvider, useWallet } from "@/components/WalletProvider";
 import Header from "@/components/Header";
 import KPIs from "@/components/KPIs";
@@ -51,7 +51,7 @@ function Login() {
       <button onClick={connect}
         className="px-8 py-3 rounded border text-[13px] font-medium transition-all animate-in hover:brightness-110"
         style={{ background: "var(--accent)", borderColor: "var(--accent)", color: "#fff", animationDelay: "0.2s" }}>
-        Connect StarKey Wallet
+        Connect Wallet
       </button>
       <div className="mt-3.5 text-xs animate-in" style={{ color: "var(--t3)", animationDelay: "0.25s" }}>
         No wallet?{" "}
@@ -70,7 +70,7 @@ function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [requests, setRequests] = useState<CommitteeRequest[]>([]);
 
-  const fetchData = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     const [t, r, a, cr] = await Promise.all([
       supabase.from("trades").select("*").order("created_at", { ascending: false }),
       supabase.from("rfqs").select("*").order("created_at", { ascending: false }),
@@ -83,23 +83,26 @@ function Dashboard() {
     if (cr.data) setRequests(cr.data);
   }, []);
 
+  // Initial fetch
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Real-time subscriptions — refetch on ANY change
   useEffect(() => {
-    fetchData();
-    const channel = supabase.channel("realtime-all")
-      .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "rfqs" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "committee_requests" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => fetchData())
+    const channel = supabase.channel("rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "rfqs" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "committee_requests" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "committee_votes" }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchData]);
+  }, [fetchAll]);
 
-  const triggerMaker = useCallback(async () => {
-    setTimeout(async () => {
-      await fetch("/api/cron/maker");
-      fetchData();
-    }, 2000);
-  }, [fetchData]);
+  // Also poll every 2 seconds as backup for real-time
+  useEffect(() => {
+    const interval = setInterval(fetchAll, 2000);
+    return () => clearInterval(interval);
+  }, [fetchAll]);
 
   return (
     <div>
@@ -108,8 +111,8 @@ function Dashboard() {
         {tab === "overview" && (
           <>
             <KPIs trades={trades} agents={agents} rfqs={rfqs} />
-            <SubmitRFQ onSubmitted={triggerMaker} />
-            <TradeFlow trades={trades} onUpdate={fetchData} />
+            <SubmitRFQ onSubmitted={fetchAll} />
+            <TradeFlow trades={trades} onUpdate={fetchAll} />
             <OrderbookTable rfqs={rfqs} />
             <div className="grid grid-cols-2 gap-4">
               <AgentsPanel agents={agents} />
@@ -120,13 +123,13 @@ function Dashboard() {
         )}
         {tab === "orderbook" && (
           <>
-            <SubmitRFQ onSubmitted={triggerMaker} />
+            <SubmitRFQ onSubmitted={fetchAll} />
             <OrderbookTable rfqs={rfqs} />
           </>
         )}
         {tab === "blotter" && (
           <>
-            <TradeFlow trades={trades} onUpdate={fetchData} />
+            <TradeFlow trades={trades} onUpdate={fetchAll} />
             <TradeBlotter trades={trades} />
           </>
         )}

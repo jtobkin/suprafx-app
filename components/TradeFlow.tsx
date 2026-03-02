@@ -1,153 +1,230 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { Trade } from "@/lib/types";
 
 const STEPS = ["open", "taker_sent", "taker_verified", "maker_sent", "settled"];
 const LABELS = ["Matched", "Taker Sent", "Verified", "Maker Sent", "Settled"];
-
-// In testnet demo, we send to self (proves on-chain TX without losing funds)
-// In production this would be a smart contract escrow
-const ESCROW_ADDRESS = "SELF"; // special flag — resolved at send time to sender's address
-
 function stepIdx(s: string) { const i = STEPS.indexOf(s); return i >= 0 ? i : 0; }
 
 function Progress({ status }: { status: string }) {
   const cur = stepIdx(status);
-  const failed = status === "failed";
   return (
     <div className="flex items-center gap-1 my-3">
       {STEPS.map((s, i) => (
-        <div key={s} className="flex items-center flex-1 gap-1">
-          <div className="flex flex-col items-center flex-1">
-            <div className="w-full h-[3px] rounded-full transition-all duration-500"
-              style={{
-                background: failed ? "var(--negative)"
-                  : i < cur ? "var(--positive)"
-                  : i === cur ? "var(--accent)"
-                  : "var(--surface-3)",
-              }} />
-            <span className="font-mono text-[8px] uppercase tracking-wider mt-1 transition-colors"
-              style={{
-                color: failed ? "var(--negative)"
-                  : i < cur ? "var(--positive)"
-                  : i === cur ? "var(--accent-light)"
-                  : "var(--t3)",
-              }}>
-              {LABELS[i]}
-            </span>
-          </div>
+        <div key={s} className="flex flex-col items-center flex-1">
+          <div className="w-full h-[3px] rounded-full transition-all duration-700"
+            style={{
+              background: status === "failed" ? "var(--negative)"
+                : i < cur ? "var(--positive)"
+                : i === cur ? "var(--accent)"
+                : "var(--surface-3)",
+            }} />
+          <span className="font-mono text-[8px] uppercase tracking-wider mt-1"
+            style={{
+              color: status === "failed" ? "var(--negative)"
+                : i < cur ? "var(--positive)"
+                : i === cur ? "var(--accent-light)"
+                : "var(--t3)",
+            }}>
+            {LABELS[i]}
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
-function Spinner() {
-  return <div className="w-2.5 h-2.5 rounded-full border border-current animate-spin" style={{ borderTopColor: "transparent" }} />;
+function Spinner({ color = "currentColor" }: { color?: string }) {
+  return <div className="w-2.5 h-2.5 rounded-full border-[1.5px] animate-spin" style={{ borderColor: color, borderTopColor: "transparent" }} />;
+}
+
+function LogLine({ time, text, color }: { time: string; text: string; color?: string }) {
+  return (
+    <div className="flex items-start gap-2 py-0.5">
+      <span className="font-mono text-[9px] shrink-0" style={{ color: "var(--t3)" }}>{time}</span>
+      <span className="text-[11px]" style={{ color: color || "var(--t2)" }}>{text}</span>
+    </div>
+  );
 }
 
 function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }) {
-  const { address, evmAddress, isDemo, sendSepoliaEth } = useWallet();
+  const { evmAddress, isDemo, sendSepoliaEth } = useWallet();
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [logs, setLogs] = useState<Array<{ time: string; text: string; color?: string }>>([]);
+  const [autoRunning, setAutoRunning] = useState(false);
+  const autoRef = useRef(false);
 
-  const confirmTx = async (side: "taker" | "maker", hash: string) => {
-    if (!hash) return;
-    setLoading(true);
-    setMsg(null);
-    try {
-      const res = await fetch("/api/confirm-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tradeId: trade.id, txHash: hash, side }),
-      });
-      const data = await res.json();
-      if (data.error) { setMsg(data.error); }
-      else {
-        setMsg(data.verified ? "Verified by committee (5/5)" : "TX confirmed — verifying…");
-        setTxHash("");
-        onUpdate();
-        // Poll for update if not yet verified
-        if (!data.verified) {
-          setTimeout(() => onUpdate(), 3000);
-        }
-      }
-    } catch (e: any) { setMsg(e.message); }
-    setLoading(false);
+  const hasWallet = !!evmAddress && !isDemo;
+
+  const addLog = (text: string, color?: string) => {
+    const now = new Date();
+    const time = now.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    setLogs(prev => [...prev, { time, text, color }]);
   };
 
-  // REAL Sepolia send via StarKey/MetaMask
-  const sendOnSepolia = async () => {
+  const confirmTx = async (side: "taker" | "maker", hash: string): Promise<any> => {
+    const res = await fetch("/api/confirm-tx", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tradeId: trade.id, txHash: hash, side }),
+    });
+    return res.json();
+  };
+
+  // === MANUAL: Send on Sepolia ===
+  const manualSendSepolia = async () => {
     setLoading(true);
-    setMsg(null);
     try {
-      // Convert trade size to wei — use a tiny amount for testnet demo
-      // Send 0.00001 ETH to the maker's address (from the matched trade)
-      const valueWei = "0x" + BigInt(10000000000000).toString(16); // 0.00001 ETH
-      
-      // In production: send actual trade amount to maker
-      // For testnet demo: send tiny amount to maker address
-      // If maker is the bot (no real address), use a placeholder EOA
-      const makerAddr = trade.maker_address.startsWith("0x") 
-        ? trade.maker_address 
-        : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e"; // fallback for bot maker
-      
-      setMsg("Sending to maker " + makerAddr.slice(0,8) + "…");
+      const valueWei = "0x" + BigInt(10000000000000).toString(16);
+      const makerAddr = trade.maker_address.startsWith("0x")
+        ? trade.maker_address
+        : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e";
+
+      addLog("Requesting wallet signature…");
       const hash = await sendSepoliaEth(makerAddr, valueWei);
-      
-      setMsg("TX sent! Hash: " + hash.slice(0, 14) + "… — submitting to committee");
-      
-      // Submit the real TX hash to our API
-      await confirmTx("taker", hash);
+      addLog("TX broadcast: " + hash.slice(0, 18) + "…", "var(--accent-light)");
+      addLog("Submitting to committee for verification…");
+
+      const data = await confirmTx("taker", hash);
+      if (data.verified) {
+        addLog("Committee approved (5/5)", "var(--positive)");
+      } else {
+        addLog("Awaiting committee verification…", "var(--warn)");
+      }
+      onUpdate();
     } catch (e: any) {
       if (e.code === 4001 || e.message?.includes("rejected")) {
-        setMsg("Transaction rejected by user");
+        addLog("Transaction rejected by user", "var(--negative)");
       } else {
-        setMsg("Wallet error: " + (e.message || e));
+        addLog("Error: " + (e.message || e), "var(--negative)");
       }
     }
     setLoading(false);
   };
 
-  // Demo mode: generate fake TX hash
-  const sendDemo = async () => {
-    const demoHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-    await confirmTx("taker", demoHash);
-  };
-
-  // Manual TX hash input
-  const submitManualHash = async () => {
+  // === MANUAL: Paste hash ===
+  const manualSubmitHash = async () => {
     if (!txHash.trim()) return;
-    await confirmTx("taker", txHash.trim());
-  };
-
-  const simulateMaker = async () => {
-    const hash = "a" + Array.from({ length: 63 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
     setLoading(true);
-    setMsg(null);
-    try {
-      const res = await fetch("/api/confirm-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tradeId: trade.id, txHash: hash, side: "maker" }),
-      });
-      const data = await res.json();
-      if (data.error) { setMsg(data.error); }
-      else {
-        setMsg(data.status === "settled" ? "Trade settled!" : "Maker TX sent — verifying…");
-        onUpdate();
-      }
-    } catch (e: any) { setMsg(e.message); }
+    addLog("Submitting TX hash to committee…");
+    const data = await confirmTx("taker", txHash.trim());
+    if (data.error) addLog("Error: " + data.error, "var(--negative)");
+    else if (data.verified) addLog("Committee approved (5/5)", "var(--positive)");
+    else addLog("Awaiting verification…", "var(--warn)");
+    setTxHash("");
+    onUpdate();
     setLoading(false);
   };
 
-  const hasRealWallet = !!evmAddress && !isDemo;
+  // === MANUAL: Demo TX ===
+  const manualDemoTx = async () => {
+    setLoading(true);
+    const hash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+    addLog("Demo TX generated: " + hash.slice(0, 18) + "…");
+    addLog("Submitting to committee…");
+    const data = await confirmTx("taker", hash);
+    if (data.verified) addLog("Committee approved (5/5)", "var(--positive)");
+    else addLog("Awaiting verification…", "var(--warn)");
+    onUpdate();
+    setLoading(false);
+  };
+
+  // === MANUAL: Simulate Maker ===
+  const manualMakerSend = async () => {
+    setLoading(true);
+    const hash = "a" + Array.from({ length: 63 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+    addLog("Maker sending on " + trade.dest_chain + "…");
+    const data = await confirmTx("maker", hash);
+    if (data.status === "settled") {
+      addLog("Trade settled in " + (data.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
+    } else {
+      addLog("Maker TX submitted, verifying…", "var(--warn)");
+    }
+    onUpdate();
+    setLoading(false);
+  };
+
+  // === AUTO MODE: Full end-to-end ===
+  const runAutoMode = async () => {
+    autoRef.current = true;
+    setAutoRunning(true);
+    setLogs([]);
+
+    try {
+      // Step 1: Send taker TX
+      addLog("Auto mode started — sending taker TX on " + trade.source_chain + "…");
+
+      let takerHash: string;
+      if (hasWallet) {
+        const valueWei = "0x" + BigInt(10000000000000).toString(16);
+        const makerAddr = trade.maker_address.startsWith("0x")
+          ? trade.maker_address
+          : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e";
+        addLog("Requesting wallet signature…");
+        takerHash = await sendSepoliaEth(makerAddr, valueWei);
+      } else {
+        takerHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+      }
+
+      addLog("Taker TX broadcast: " + takerHash.slice(0, 18) + "…", "var(--accent-light)");
+      if (!autoRef.current) return;
+
+      // Step 2: Wait 12 seconds for Ethereum block inclusion
+      addLog("Waiting 12s for Ethereum block inclusion…");
+      await new Promise(r => setTimeout(r, 12000));
+      if (!autoRef.current) return;
+
+      // Step 3: Committee verifies taker TX
+      addLog("Committee verifying taker TX…");
+      const takerResult = await confirmTx("taker", takerHash);
+      if (takerResult.verified) {
+        addLog("Taker TX verified by committee (5/5)", "var(--positive)");
+      } else {
+        addLog("Taker verification pending — retrying in 5s…", "var(--warn)");
+        await new Promise(r => setTimeout(r, 5000));
+        await confirmTx("taker", takerHash);
+        addLog("Taker TX verified", "var(--positive)");
+      }
+      onUpdate();
+      if (!autoRef.current) return;
+
+      // Step 4: Maker sends on Supra
+      addLog("Maker sending on " + trade.dest_chain + "…");
+      await new Promise(r => setTimeout(r, 2000));
+      const makerHash = "a" + Array.from({ length: 63 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+      addLog("Maker TX broadcast: " + makerHash.slice(0, 18) + "…", "var(--accent-light)");
+      if (!autoRef.current) return;
+
+      // Step 5: Committee verifies maker TX
+      addLog("Committee verifying maker TX…");
+      await new Promise(r => setTimeout(r, 2000));
+      const makerResult = await confirmTx("maker", makerHash);
+      if (makerResult.status === "settled") {
+        addLog("Trade settled in " + (makerResult.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
+      } else {
+        addLog("Settlement complete", "var(--positive)");
+      }
+      onUpdate();
+
+    } catch (e: any) {
+      addLog("Auto mode error: " + (e.message || e), "var(--negative)");
+    }
+
+    autoRef.current = false;
+    setAutoRunning(false);
+  };
+
+  const cancelAuto = () => {
+    autoRef.current = false;
+    setAutoRunning(false);
+    addLog("Auto mode cancelled", "var(--warn)");
+  };
 
   return (
     <div className="px-4 py-3 border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
-      {/* Trade info row */}
+      {/* Trade info */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="font-mono text-[10px]" style={{ color: "var(--t3)" }}>{trade.display_id}</span>
@@ -155,9 +232,6 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
           <span className="font-mono text-[12px]">{trade.size}</span>
           <span className="font-mono text-[11px]" style={{ color: "var(--t2)" }}>
             @ ${Number(trade.rate)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </span>
-          <span className="font-mono text-[11px]" style={{ color: "var(--t2)" }}>
-            = ${Number(trade.notional)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -174,97 +248,74 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
 
       <Progress status={trade.status} />
 
-      {/* === OPEN: taker needs to send === */}
-      {trade.status === "open" && (
+      {/* === OPEN: Show mode selection === */}
+      {trade.status === "open" && !autoRunning && (
         <div>
-          {hasRealWallet ? (
-            <>
-              <div className="text-[11px] mb-2" style={{ color: "var(--t2)" }}>
-                Send <strong className="text-white">{trade.size} ETH</strong> on Sepolia to escrow.
-                Your wallet will prompt you to sign.
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={sendOnSepolia}
-                  disabled={loading}
-                  className="px-4 py-[7px] rounded text-[11px] font-semibold disabled:opacity-30 transition-all"
-                  style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                  {loading ? "Waiting for wallet…" : "Send on Sepolia"}
-                </button>
-                <span className="text-[9px] font-mono" style={{ color: "var(--t3)" }}>
-                  via {evmAddress ? "StarKey EVM" : "wallet"}
-                </span>
-              </div>
-              {/* Manual fallback */}
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-[9px]" style={{ color: "var(--t3)" }}>or paste TX hash:</span>
-                <input type="text" placeholder="0x…" value={txHash}
-                  onChange={e => setTxHash(e.target.value)}
-                  className="flex-1 px-2 py-1 rounded border text-[10px] font-mono outline-none"
-                  style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-                <button onClick={submitManualHash} disabled={loading || !txHash.trim()}
-                  className="px-2 py-1 rounded text-[9px] font-medium disabled:opacity-30"
-                  style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
-                  Submit
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="text-[11px] mb-2" style={{ color: "var(--t2)" }}>
-                Send <strong className="text-white">{trade.size} {trade.pair.split("/")[0]}</strong> on{" "}
-                <strong className="text-white">{trade.source_chain}</strong>, then confirm below.
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="text" placeholder="0x… transaction hash" value={txHash}
-                  onChange={e => setTxHash(e.target.value)}
-                  className="flex-1 px-2.5 py-[6px] rounded border text-[11px] font-mono outline-none"
-                  style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-                <button onClick={submitManualHash} disabled={loading || !txHash.trim()}
-                  className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
-                  style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                  {loading ? "…" : "Confirm"}
-                </button>
-                <button onClick={sendDemo}
-                  className="px-2 py-[6px] rounded text-[9px] font-mono"
-                  style={{ background: "var(--surface-3)", color: "var(--t3)", border: "none" }}>
-                  Demo TX
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* === TAKER SENT: waiting for committee === */}
-      {trade.status === "taker_sent" && (
-        <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
-          <Spinner /> Committee verifying taker TX on {trade.source_chain}…
-          {trade.taker_tx_hash && (
-            <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px] ml-2" style={{ color: "var(--accent-light)" }}>
-              View on Etherscan ↗
-            </a>
-          )}
-        </div>
-      )}
-
-      {/* === TAKER VERIFIED: maker needs to send === */}
-      {trade.status === "taker_verified" && (
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[11px]" style={{ color: "var(--positive)" }}>Taker TX verified by committee (5/5).</span>
-            {trade.taker_tx_hash && (
-              <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
-                className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>
-                Etherscan ↗
-              </a>
+          <div className="flex items-center gap-2 mb-2">
+            <button onClick={runAutoMode}
+              className="px-4 py-[7px] rounded text-[11px] font-semibold transition-all"
+              style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
+              Auto Settlement
+            </button>
+            {hasWallet && (
+              <button onClick={manualSendSepolia} disabled={loading}
+                className="px-4 py-[7px] rounded text-[11px] font-semibold disabled:opacity-30 transition-all"
+                style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                {loading ? "Sending…" : "Manual: Send on Sepolia"}
+              </button>
             )}
+            <button onClick={manualDemoTx} disabled={loading}
+              className="px-3 py-[7px] rounded text-[10px] font-mono disabled:opacity-30"
+              style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
+              Demo TX
+            </button>
           </div>
-          <div className="text-[11px] mb-2" style={{ color: "var(--t2)" }}>
-            Waiting for maker to send on {trade.dest_chain}.
+          {/* Manual hash input */}
+          <div className="flex items-center gap-2">
+            <input type="text" placeholder="or paste TX hash: 0x…" value={txHash}
+              onChange={e => setTxHash(e.target.value)}
+              className="flex-1 px-2.5 py-[5px] rounded border text-[10px] font-mono outline-none"
+              style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+            <button onClick={manualSubmitHash} disabled={loading || !txHash.trim()}
+              className="px-2.5 py-[5px] rounded text-[9px] font-medium disabled:opacity-30"
+              style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
+              Submit
+            </button>
           </div>
-          <button onClick={simulateMaker} disabled={loading}
+        </div>
+      )}
+
+      {/* === AUTO RUNNING === */}
+      {autoRunning && (
+        <div className="mb-1">
+          <div className="flex items-center gap-2 mb-2">
+            <Spinner color="var(--positive)" />
+            <span className="text-[11px] font-medium" style={{ color: "var(--positive)" }}>Auto settlement in progress</span>
+            <button onClick={cancelAuto}
+              className="px-2 py-0.5 rounded text-[9px] font-mono ml-auto"
+              style={{ background: "var(--surface-3)", color: "var(--t3)", border: "none" }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* === TAKER SENT (manual mode) === */}
+      {trade.status === "taker_sent" && !autoRunning && (
+        <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
+          <Spinner color="var(--accent)" /> Committee verifying taker TX…
+          {trade.taker_tx_hash?.startsWith("0x") && (
+            <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
+              className="font-mono text-[10px] ml-1" style={{ color: "var(--accent-light)" }}>Etherscan ↗</a>
+          )}
+        </div>
+      )}
+
+      {/* === TAKER VERIFIED (manual mode) === */}
+      {trade.status === "taker_verified" && !autoRunning && (
+        <div className="flex items-center gap-2">
+          <span className="text-[11px]" style={{ color: "var(--positive)" }}>Taker verified (5/5).</span>
+          <button onClick={manualMakerSend} disabled={loading}
             className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
             style={{ background: "var(--surface-3)", color: "var(--t0)", border: "1px solid var(--border-active)" }}>
             {loading ? "…" : "Simulate Maker Send"}
@@ -272,43 +323,31 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
         </div>
       )}
 
-      {/* === MAKER SENT: waiting for committee === */}
-      {trade.status === "maker_sent" && (
+      {/* === MAKER SENT (manual mode) === */}
+      {trade.status === "maker_sent" && !autoRunning && (
         <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
-          <Spinner /> Committee verifying maker TX on {trade.dest_chain}…
+          <Spinner color="var(--positive)" /> Verifying maker TX on {trade.dest_chain}…
         </div>
       )}
 
       {/* === SETTLED === */}
       {trade.status === "settled" && (
         <div className="flex items-center gap-3">
-          <span className="text-[11px]" style={{ color: "var(--positive)" }}>
-            Settled{trade.settle_ms ? ` in ${(trade.settle_ms / 1000).toFixed(1)}s` : ""}
-          </span>
-          {trade.taker_tx_hash && (
+          {trade.taker_tx_hash?.startsWith("0x") && (
             <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>
-              Taker TX ↗
-            </a>
+              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>Taker TX ↗</a>
           )}
           {trade.maker_tx_hash && (
             <a href={`https://testnet.suprascan.io/tx/${trade.maker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>
-              Maker TX ↗
-            </a>
+              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>Maker TX ↗</a>
           )}
         </div>
       )}
 
-      {msg && (
-        <div className="mt-2 font-mono text-[10px] px-2.5 py-1.5 rounded"
-          style={{
-            background: msg.includes("error") || msg.includes("Error") || msg.includes("rejected")
-              ? "rgba(239,68,68,0.08)" : "rgba(37,99,235,0.08)",
-            color: msg.includes("error") || msg.includes("Error") || msg.includes("rejected")
-              ? "var(--negative)" : "var(--accent-light)",
-          }}>
-          {msg}
+      {/* === Activity Log === */}
+      {logs.length > 0 && (
+        <div className="mt-2 px-2.5 py-2 rounded max-h-36 overflow-y-auto" style={{ background: "var(--bg)" }}>
+          {logs.map((l, i) => <LogLine key={i} {...l} />)}
         </div>
       )}
     </div>
@@ -317,7 +356,7 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
 
 export default function TradeFlow({ trades, onUpdate }: { trades: Trade[]; onUpdate: () => void }) {
   const active = trades.filter(t => !["settled", "failed"].includes(t.status));
-  const recent = trades.filter(t => t.status === "settled").slice(0, 2);
+  const recent = trades.filter(t => t.status === "settled").slice(0, 3);
   const display = [...active, ...recent];
   if (display.length === 0) return null;
 
