@@ -210,10 +210,18 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       addLog("Committee verifying taker TX…");
       const takerResult = await confirmTx("taker", takerHash);
       
+      // Check for failure
+      if (takerResult.status === 'failed' || takerResult.success === false) {
+        addLog("Settlement failed: " + (takerResult.error || "unknown error"), "var(--negative)");
+        onUpdate();
+        autoRef.current = false;
+        setAutoRunning(false);
+        return;
+      }
+
       if (takerResult.autoSettled) {
-        // Bot already sent Supra and settled the trade!
         addLog("Taker TX verified by committee (5/5)", "var(--positive)");
-        addLog("Maker bot auto-sent SUPRA to taker", "var(--accent-light)");
+        addLog("Maker bot sent SUPRA to taker on-chain", "var(--accent-light)");
         if (takerResult.makerTxHash) {
           addLog("Supra TX: " + takerResult.makerTxHash.slice(0, 24) + "…", "var(--accent-light)");
         }
@@ -225,14 +233,26 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
         return;
       }
 
+      // Show error message if present but not failed
+      if (takerResult.error) {
+        addLog("Warning: " + takerResult.error, "var(--warn)");
+      }
+
       if (takerResult.verified) {
         addLog("Taker TX verified by committee (5/5)", "var(--positive)");
       } else {
         addLog("Taker verification pending — retrying in 5s…", "var(--warn)");
         await new Promise(r => setTimeout(r, 5000));
         const retry = await confirmTx("taker", takerHash);
+        if (retry.status === 'failed') {
+          addLog("Settlement failed: " + (retry.error || "unknown error"), "var(--negative)");
+          onUpdate();
+          autoRef.current = false;
+          setAutoRunning(false);
+          return;
+        }
         if (retry.autoSettled) {
-          addLog("Trade auto-settled by maker bot!", "var(--positive)");
+          addLog("Trade settled by maker bot!", "var(--positive)");
           onUpdate();
           autoRef.current = false;
           setAutoRunning(false);
@@ -243,9 +263,8 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       onUpdate();
       if (!autoRef.current) return;
 
-      // If maker already sent (status from API), check if we need to wait
       if (takerResult.status === 'maker_sent' || takerResult.status === 'settled') {
-        addLog("Maker bot already sent on Supra — settling…", "var(--positive)");
+        addLog("Maker bot already sent on Supra", "var(--positive)");
         onUpdate();
         autoRef.current = false;
         setAutoRunning(false);
@@ -424,9 +443,17 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       )}
 
       {/* === MAKER SENT (manual mode) === */}
+      {/* === MAKER SENT (manual mode) === */}
       {trade.status === "maker_sent" && !autoRunning && (
         <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
           <Spinner color="var(--positive)" /> Verifying maker TX on {trade.dest_chain}…
+        </div>
+      )}
+
+      {/* === FAILED === */}
+      {trade.status === "failed" && (
+        <div className="px-2.5 py-2 rounded text-[11px]" style={{ background: "rgba(239,68,68,0.06)", color: "var(--negative)" }}>
+          Trade failed — check Vercel logs for details. The maker bot may not be funded or the Supra RPC may be down.
         </div>
       )}
 
@@ -461,7 +488,7 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
 }
 
 export default function TradeFlow({ trades, onUpdate }: { trades: Trade[]; onUpdate: () => void }) {
-  const active = trades.filter(t => !["settled", "failed"].includes(t.status));
+  const active = trades.filter(t => !["settled"].includes(t.status));
   const recent = trades.filter(t => t.status === "settled").slice(0, 3);
   const display = [...active, ...recent];
   if (display.length === 0) return null;

@@ -85,90 +85,103 @@ export async function POST(req: NextRequest) {
         }).eq('id', tradeId);
 
         // === AUTO MAKER BOT: Send SUPRA to taker ===
-        let makerTxHash = '';
-        let makerSent = false;
-        
-        if (trade.maker_address === 'auto-maker-bot' && process.env.BOT_SUPRA_PRIVATE_KEY) {
+        if (trade.maker_address === 'auto-maker-bot') {
+          if (!process.env.BOT_SUPRA_PRIVATE_KEY) {
+            // Stay at taker_verified — maker can't send without key
+            return NextResponse.json({
+              success: true,
+              status: 'taker_verified',
+              verified: true,
+              error: 'Maker bot not configured: BOT_SUPRA_PRIVATE_KEY not set',
+            });
+          }
+
+          let makerTxHash: string;
           try {
-            // Send 1 SUPRA (100000000 octas) to taker's address
             const takerAddr = trade.taker_address;
-            const amountOctas = BigInt(100000000); // 1 SUPRA
-            
+            const amountOctas = BigInt(100000); // 0.001 SUPRA
             makerTxHash = await botSendSupraTokens(takerAddr, amountOctas);
-            
-            // Update trade with maker TX
+          } catch (e: any) {
+            console.error('Bot Supra send failed:', e.message);
+            // Update trade to failed state with reason
             await db.from('trades').update({
-              maker_tx_hash: makerTxHash,
-              status: 'maker_sent',
+              status: 'failed',
             }).eq('id', tradeId);
 
-            // Committee verify maker TX
-            const makerTradeInfo = { ...tradeInfo, makerTxHash };
-            const { verified: makerVerified } = await runCommittee(db, tradeId, 'verify_maker_tx', trade.dest_chain, makerTxHash, makerTradeInfo);
+            return NextResponse.json({
+              success: false,
+              status: 'failed',
+              verified: true,
+              error: 'Maker bot Supra send failed: ' + (e.message || 'unknown error'),
+            });
+          }
 
-            if (makerVerified) {
-              const settleMs = Date.now() - new Date(trade.created_at).getTime();
-              await db.from('trades').update({
-                status: 'settled',
-                maker_tx_confirmed_at: new Date().toISOString(),
-                settled_at: new Date().toISOString(),
-                settle_ms: settleMs,
-              }).eq('id', tradeId);
+          // Maker TX succeeded — proceed with verification
+          await db.from('trades').update({
+            maker_tx_hash: makerTxHash,
+            status: 'maker_sent',
+          }).eq('id', tradeId);
 
-              // Reputation update
-              const repResult = await runCommittee(db, tradeId, 'approve_reputation', '', '', {
-                ...makerTradeInfo, settleMs,
-              });
-              await updateReputation(trade.taker_address, settleMs);
-              await updateReputation(trade.maker_address, settleMs);
+          const makerTradeInfo = { ...tradeInfo, makerTxHash };
+          const { verified: makerVerified } = await runCommittee(db, tradeId, 'verify_maker_tx', trade.dest_chain, makerTxHash, makerTradeInfo);
 
-              // Get updated reputation scores
-              const { data: takerAgent } = await db.from('agents').select('rep_total, trade_count')
-                .eq('wallet_address', trade.taker_address).single();
+          if (makerVerified) {
+            const settleMs = Date.now() - new Date(trade.created_at).getTime();
+            await db.from('trades').update({
+              status: 'settled',
+              maker_tx_confirmed_at: new Date().toISOString(),
+              settled_at: new Date().toISOString(),
+              settle_ms: settleMs,
+            }).eq('id', tradeId);
 
-              // Submit committee attestation on-chain (async, don't block response)
-              let attestationTxHash = '';
-              try {
-                if (process.env.BOT_SUPRA_PRIVATE_KEY) {
-                  attestationTxHash = await submitCommitteeAttestation(
-                    tradeId,
-                    repResult.multisig.aggregateHash,
-                    settleMs,
-                    takerAgent ? { address: trade.taker_address, newScore: takerAgent.rep_total } : undefined,
-                  );
+            const repResult = await runCommittee(db, tradeId, 'approve_reputation', '', '', {
+              ...makerTradeInfo, settleMs,
+            });
+            await updateReputation(trade.taker_address, settleMs);
+            await updateReputation(trade.maker_address, settleMs);
 
-                  // Store attestation TX in committee_requests
-                  await db.from('committee_requests').update({
-                    attestation_tx: attestationTxHash,
-                  }).eq('trade_id', tradeId).eq('verification_type', 'approve_reputation');
-                }
-              } catch (e: any) {
-                console.error('Attestation TX failed:', e);
-              }
+            const { data: takerAgent } = await db.from('agents').select('rep_total, trade_count')
+              .eq('wallet_address', trade.taker_address).single();
 
-              return NextResponse.json({
-                success: true,
-                status: 'settled',
-                verified: true,
+            // Attestation on-chain
+            let attestationTxHash = '';
+            try {
+              attestationTxHash = await submitCommitteeAttestation(
+                tradeId,
+                repResult.multisig.aggregateHash,
                 settleMs,
-                makerTxHash,
-                autoSettled: true,
-                attestationTxHash: attestationTxHash || null,
-              });
+                takerAgent ? { address: trade.taker_address, newScore: takerAgent.rep_total } : undefined,
+              );
+              await db.from('committee_requests').update({
+                attestation_tx: attestationTxHash,
+              }).eq('trade_id', tradeId).eq('verification_type', 'approve_reputation');
+            } catch (e: any) {
+              console.error('Attestation TX failed:', e.message);
             }
 
-            makerSent = true;
-          } catch (e: any) {
-            console.error('Bot Supra send failed:', e);
-            // Fall through — taker is verified, maker send failed
+            return NextResponse.json({
+              success: true,
+              status: 'settled',
+              verified: true,
+              settleMs,
+              makerTxHash,
+              autoSettled: true,
+              attestationTxHash: attestationTxHash || null,
+            });
           }
+
+          return NextResponse.json({
+            success: true,
+            status: 'maker_sent',
+            verified: true,
+            makerTxHash,
+          });
         }
 
         return NextResponse.json({
           success: true,
-          status: makerSent ? 'maker_sent' : 'taker_verified',
+          status: 'taker_verified',
           verified: true,
-          makerTxHash: makerTxHash || null,
         });
       }
 
