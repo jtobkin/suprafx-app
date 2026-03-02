@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { updateReputation } from '@/lib/reputation';
