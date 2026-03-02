@@ -48,15 +48,15 @@ function Login() {
 
           <p className="text-[15px] max-w-[440px] leading-relaxed mb-10 animate-in"
             style={{ color: "var(--t2)", animationDelay: "0.1s" }}>
-            Institutional-grade settlement across EVM and MoveVM.
-            No bridges. No DEXs. Committee-verified in seconds.
+            Institutional-grade settlement across blockchains.
+            No bridge fees. No DEX fees. No Smart Contract fees. Verified in seconds.
           </p>
 
           <div className="flex items-center gap-6 mb-10 animate-in" style={{ animationDelay: "0.15s" }}>
             {[
-              { v: "2-Chain", l: "Atomic Settlement" },
-              { v: "3-of-5", l: "Committee Verified" },
-              { v: "<20s", l: "Avg Settle Time" },
+              { v: "Multi-chain", l: "Atomic Settlement" },
+              { v: "21-30", l: "Settlement Committee" },
+              { v: "<18s", l: "Avg Settle Time" },
             ].map((s, i) => (
               <div key={i} className={i > 0 ? "pl-6 border-l" : ""} style={{ borderColor: "var(--border)" }}>
                 <div className="text-xl font-semibold" style={{ color: "var(--t0)" }}>{s.v}</div>

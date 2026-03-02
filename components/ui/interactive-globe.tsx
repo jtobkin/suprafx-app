@@ -15,9 +15,11 @@ interface GlobeProps {
 }
 
 const DEFAULT_MARKERS = [
-  { lat: 37.78, lng: -122.42, label: "San Francisco" },
+  { lat: 37.77, lng: -122.42, label: "San Francisco" },
+  { lat: 40.71, lng: -74.01, label: "New York" },
   { lat: 51.51, lng: -0.13, label: "London" },
   { lat: 35.68, lng: 139.69, label: "Tokyo" },
+  { lat: 22.32, lng: 114.17, label: "Hong Kong" },
   { lat: -33.87, lng: 151.21, label: "Sydney" },
   { lat: 1.35, lng: 103.82, label: "Singapore" },
   { lat: 55.76, lng: 37.62, label: "Moscow" },
@@ -25,27 +27,38 @@ const DEFAULT_MARKERS = [
   { lat: 19.43, lng: -99.13, label: "Mexico City" },
   { lat: 28.61, lng: 77.21, label: "Delhi" },
   { lat: 36.19, lng: 44.01, label: "Erbil" },
+  { lat: 25.20, lng: 55.27, label: "Dubai" },
+  { lat: 48.86, lng: 2.35, label: "Paris" },
 ];
 
 const DEFAULT_CONNECTIONS: { from: [number, number]; to: [number, number] }[] = [
-  { from: [37.78, -122.42], to: [51.51, -0.13] },
+  { from: [37.77, -122.42], to: [40.71, -74.01] },
+  { from: [40.71, -74.01], to: [51.51, -0.13] },
   { from: [51.51, -0.13], to: [35.68, 139.69] },
-  { from: [35.68, 139.69], to: [-33.87, 151.21] },
-  { from: [37.78, -122.42], to: [1.35, 103.82] },
+  { from: [35.68, 139.69], to: [22.32, 114.17] },
+  { from: [22.32, 114.17], to: [-33.87, 151.21] },
+  { from: [37.77, -122.42], to: [1.35, 103.82] },
   { from: [51.51, -0.13], to: [28.61, 77.21] },
-  { from: [37.78, -122.42], to: [-23.55, -46.63] },
+  { from: [40.71, -74.01], to: [-23.55, -46.63] },
   { from: [1.35, 103.82], to: [-33.87, 151.21] },
   { from: [28.61, 77.21], to: [36.19, 44.01] },
   { from: [51.51, -0.13], to: [36.19, 44.01] },
+  { from: [22.32, 114.17], to: [1.35, 103.82] },
+  { from: [25.20, 55.27], to: [28.61, 77.21] },
+  { from: [51.51, -0.13], to: [48.86, 2.35] },
+  { from: [40.71, -74.01], to: [19.43, -99.13] },
+  { from: [25.20, 55.27], to: [51.51, -0.13] },
+  { from: [35.68, 139.69], to: [37.77, -122.42] },
+  { from: [55.76, 37.62], to: [48.86, 2.35] },
 ];
 
 function latLngToXYZ(lat: number, lng: number, radius: number): [number, number, number] {
-  const phi = ((90 - lat) * Math.PI) / 180;
-  const theta = ((lng + 180) * Math.PI) / 180;
+  const latRad = (lat * Math.PI) / 180;
+  const lngRad = (lng * Math.PI) / 180;
   return [
-    -(radius * Math.sin(phi) * Math.cos(theta)),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta),
+    -radius * Math.cos(latRad) * Math.cos(lngRad),
+    -radius * Math.sin(latRad),
+    radius * Math.cos(latRad) * Math.sin(lngRad),
   ];
 }
 
@@ -72,7 +85,7 @@ export function InteractiveGlobe({
   dotColor = "rgba(96, 165, 250, ALPHA)",
   arcColor = "rgba(96, 165, 250, 0.5)",
   markerColor = "rgba(52, 211, 153, 1)",
-  autoRotateSpeed = 0.002,
+  autoRotateSpeed = 0.004,
   connections = DEFAULT_CONNECTIONS,
   markers = DEFAULT_MARKERS,
 }: GlobeProps) {
@@ -127,7 +140,7 @@ export function InteractiveGlobe({
       rotYRef.current += autoRotateSpeed;
     }
 
-    timeRef.current += 0.015;
+    timeRef.current += 0.025;
     const time = timeRef.current;
 
     ctx.clearRect(0, 0, w, h);
@@ -203,7 +216,7 @@ export function InteractiveGlobe({
       ctx.lineWidth = 1.2;
       ctx.stroke();
 
-      const t = (Math.sin(time * 1.2 + lat1 * 0.1) + 1) / 2;
+      const t = (Math.sin(time * 2.0 + lat1 * 0.1) + 1) / 2;
       const tx = (1 - t) * (1 - t) * sx1 + 2 * (1 - t) * t * scx + t * t * sx2;
       const ty = (1 - t) * (1 - t) * sy1 + 2 * (1 - t) * t * scy + t * t * sy2;
 
