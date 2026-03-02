@@ -26,10 +26,12 @@ const SEPOLIA_CHAIN_ID = "0xaa36a7";
 
 function getEvmProvider(): any {
   if (typeof window === "undefined") return null;
-  // StarKey may inject as window.starkey.ethereum or window.ethereum
-  return (window as any)?.starkey?.ethereum
-    || (window as any)?.ethereum
-    || null;
+  // Prefer MetaMask for Sepolia EVM transactions (more reliable)
+  // MetaMask sets isMetaMask=true on its provider
+  const ethereum = (window as any)?.ethereum;
+  if (ethereum?.isMetaMask) return ethereum;
+  // Fallback to StarKey EVM
+  return (window as any)?.starkey?.ethereum || ethereum || null;
 }
 
 function getSupraProvider(): any {
@@ -142,7 +144,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const txHash = await evm.request({
       method: "eth_sendTransaction",
-      params: [{ from, to, value: valueWei }],
+      params: [{ from, to, value: valueWei, gas: "0x5208" }],
     });
     return txHash;
   }, [evmAddress, evmProv]);
