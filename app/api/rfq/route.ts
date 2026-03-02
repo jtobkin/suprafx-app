@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 
-const MAKER_ADDRESS = 'auto-maker-bot';
+import { getBotAddresses } from '@/lib/bot-wallets';
+
 const SPREAD_BPS = 10;
 
 export async function POST(req: NextRequest) {
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest) {
     }
 
     const db = getServiceClient();
+    const botAddrs = getBotAddresses();
+    const MAKER_ADDRESS = 'auto-maker-bot';
 
     // Get reference price
     const { data: sv } = await db.from('s_values').select('price').eq('pair', pair).single();
