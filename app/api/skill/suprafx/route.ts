@@ -122,7 +122,6 @@ async function handleSubmitRFQ(body: any) {
   // Auto-match with maker bot
   const makerAddress = 'auto-maker-bot';
   const rate = refPrice * (1 + SPREAD_BPS / 10000);
-  const notional = parseFloat(size) * rate;
 
   await db.from('agents').upsert({
     wallet_address: makerAddress,
@@ -152,7 +151,6 @@ async function handleSubmitRFQ(body: any) {
     pair,
     size: parseFloat(size),
     rate,
-    notional,
     source_chain: source,
     dest_chain: dest,
     taker_address: agentAddress,
@@ -180,7 +178,7 @@ async function handleSubmitRFQ(body: any) {
       pair,
       size: parseFloat(size),
       rate,
-      notional,
+      notional: parseFloat(size) * rate,
       sourceChain: source,
       destChain: dest,
       status: 'open',
