@@ -1,17 +1,16 @@
 "use client";
 import { Trade } from "@/lib/types";
 
-function txUrl(h: string) {
+function txUrl(h: string, chain: string) {
   if (!h) return "#";
-  if (h.startsWith("0x") && h.length === 66) return `https://sepolia.etherscan.io/tx/${h}`;
-  // Supra testnet — hash might be with or without 0x prefix
-  const cleanHash = h.startsWith("0x") ? h.slice(2) : h.startsWith("supra_") ? h.slice(6) : h;
-  return `https://testnet.suprascan.io/tx/${cleanHash}`;
+  const cleanHash = h.startsWith("0x") ? h : "0x" + h;
+  if (chain === "sepolia") return `https://sepolia.etherscan.io/tx/${cleanHash}`;
+  // Supra testnet
+  const supraHash = h.startsWith("0x") ? h.slice(2) : h.startsWith("supra_") ? h.slice(6) : h;
+  return `https://testnet.suprascan.io/tx/${supraHash}`;
 }
-function txLabel(h: string) {
-  if (!h) return "";
-  if (h.startsWith("0x") && h.length === 66) return "Sepolia";
-  return "Supra";
+function txLabel(chain: string) {
+  return chain === "sepolia" ? "Sepolia" : "Supra";
 }
 
 export default function TradeBlotter({ trades }: { trades: Trade[] }) {
@@ -53,10 +52,10 @@ export default function TradeBlotter({ trades }: { trades: Trade[] }) {
                   {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : "—"}
                 </td>
                 <td className="px-3 py-2">
-                  {t.taker_tx_hash ? <a href={txUrl(t.taker_tx_hash)} target="_blank" className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>{txLabel(t.taker_tx_hash)} ↗</a> : <span style={{ color: "var(--t3)" }}>—</span>}
+                  {t.taker_tx_hash ? <a href={txUrl(t.taker_tx_hash, t.source_chain)} target="_blank" className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>{txLabel(t.source_chain)} ↗</a> : <span style={{ color: "var(--t3)" }}>—</span>}
                 </td>
                 <td className="px-3 py-2">
-                  {t.maker_tx_hash ? <a href={txUrl(t.maker_tx_hash)} target="_blank" className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>{txLabel(t.maker_tx_hash)} ↗</a> : <span style={{ color: "var(--t3)" }}>—</span>}
+                  {t.maker_tx_hash ? <a href={txUrl(t.maker_tx_hash, t.dest_chain)} target="_blank" className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent-light)" }}>{txLabel(t.dest_chain)} ↗</a> : <span style={{ color: "var(--t3)" }}>—</span>}
                 </td>
                 <td className="px-3 py-2">
                   <span className={`tag tag-${t.status === "settled" ? "settled" : t.status}`}>

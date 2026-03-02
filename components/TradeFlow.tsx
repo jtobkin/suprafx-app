@@ -408,13 +408,19 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       {/* === SETTLED === */}
       {trade.status === "settled" && (
         <div className="flex items-center gap-3">
-          {trade.taker_tx_hash?.startsWith("0x") && (
-            <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>Taker TX ↗</a>
+          {trade.taker_tx_hash && (
+            <a href={trade.source_chain === "sepolia"
+              ? `https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`
+              : `https://testnet.suprascan.io/tx/${trade.taker_tx_hash.replace(/^0x/, "")}`}
+              target="_blank"
+              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>Taker TX ({trade.source_chain === "sepolia" ? "Sepolia" : "Supra"}) ↗</a>
           )}
           {trade.maker_tx_hash && (
-            <a href={`https://testnet.suprascan.io/tx/${trade.maker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>Maker TX ↗</a>
+            <a href={trade.dest_chain === "supra-testnet"
+              ? `https://testnet.suprascan.io/tx/${trade.maker_tx_hash.replace(/^0x/, "")}`
+              : `https://sepolia.etherscan.io/tx/${trade.maker_tx_hash}`}
+              target="_blank"
+              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>Maker TX ({trade.dest_chain === "supra-testnet" ? "Supra" : "Sepolia"}) ↗</a>
           )}
         </div>
       )}
