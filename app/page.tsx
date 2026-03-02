@@ -13,6 +13,8 @@ import TradeFlow from "@/components/TradeFlow";
 import { supabase } from "@/lib/supabase";
 import type { Trade, RFQ, Agent, CommitteeRequest } from "@/lib/types";
 
+import { InteractiveGlobe } from "@/components/ui/interactive-globe";
+
 const COMMITTEE_NODES = [
   { id: "N-1", status: "online" },
   { id: "N-2", status: "online" },
@@ -24,41 +26,80 @@ const COMMITTEE_NODES = [
 function Login() {
   const { connect, demo } = useWallet();
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-48px)] text-center px-5">
-      <div className="font-mono text-[13px] uppercase tracking-[2px] mb-4 animate-in"
-        style={{ color: "var(--t3)" }}>SupraFX Protocol</div>
-      <h1 className="font-sans font-light text-5xl tracking-tight leading-tight mb-3 animate-in"
-        style={{ animationDelay: "0.05s" }}>
-        Cross-Chain<br/>FX Settlement
-      </h1>
-      <p className="text-[15px] max-w-[400px] leading-relaxed mb-12 animate-in"
-        style={{ color: "var(--t2)", animationDelay: "0.1s" }}>
-        Institutional-grade settlement across EVM and MoveVM. No bridges. No DEXs. Committee-verified.
-      </p>
-      <div className="grid grid-cols-3 gap-3 mb-12">
-        {[
-          { n: "01", t: "Cross-Chain", d: "Sepolia to Supra Testnet. Two atomic transfers." },
-          { n: "02", t: "AI Agents", d: "Autonomous maker/taker with reputation scoring." },
-          { n: "03", t: "3-of-5 Committee", d: "Independent nodes verify every on-chain transfer." },
-        ].map((c, i) => (
-          <div key={c.n} className="w-[180px] p-5 border rounded-md text-left transition-colors animate-in"
-            style={{ borderColor: "var(--border)", background: "var(--surface)", animationDelay: `${0.05 + i * 0.05}s` }}>
-            <div className="font-mono text-[14px] font-semibold mb-2.5" style={{ color: "var(--t3)" }}>{c.n}</div>
-            <div className="text-[13px] font-medium mb-1">{c.t}</div>
-            <div className="text-[13px] leading-snug" style={{ color: "var(--t3)" }}>{c.d}</div>
+    <div className="relative min-h-[calc(100vh-48px)] overflow-hidden">
+      {/* Ambient glow */}
+      <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-3xl pointer-events-none"
+        style={{ background: "rgba(37,99,235,0.04)" }} />
+
+      <div className="relative z-10 flex flex-col lg:flex-row items-center justify-center min-h-[calc(100vh-48px)] max-w-[1200px] mx-auto px-6">
+        {/* Left — content */}
+        <div className="flex-1 flex flex-col justify-center py-12 lg:py-0 lg:pr-8">
+          <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 mb-6 w-fit animate-in"
+            style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse-dot" style={{ background: "var(--positive)" }} />
+            <span className="font-mono text-[11px]" style={{ color: "var(--t2)" }}>Testnet Live</span>
           </div>
-        ))}
-      </div>
-      <button onClick={connect}
-        className="px-8 py-3 rounded border text-[13px] font-medium transition-all animate-in hover:brightness-110"
-        style={{ background: "var(--accent)", borderColor: "var(--accent)", color: "#fff", animationDelay: "0.2s" }}>
-        Connect StarKey
-      </button>
-      <div className="mt-3.5 text-xs animate-in" style={{ color: "var(--t3)", animationDelay: "0.25s" }}>
-        No wallet?{" "}
-        <span className="cursor-pointer hover:underline" style={{ color: "var(--accent)" }} onClick={demo}>
-          Enter demo mode
-        </span>
+
+          <h1 className="font-sans font-light text-4xl lg:text-5xl tracking-tight leading-[1.1] mb-4 animate-in"
+            style={{ animationDelay: "0.05s" }}>
+            Cross-Chain<br/>
+            <span style={{ color: "var(--accent-light)" }}>FX Settlement</span>
+          </h1>
+
+          <p className="text-[15px] max-w-[440px] leading-relaxed mb-10 animate-in"
+            style={{ color: "var(--t2)", animationDelay: "0.1s" }}>
+            Institutional-grade settlement across EVM and MoveVM.
+            No bridges. No DEXs. Committee-verified in seconds.
+          </p>
+
+          <div className="flex items-center gap-6 mb-10 animate-in" style={{ animationDelay: "0.15s" }}>
+            {[
+              { v: "2-Chain", l: "Atomic Settlement" },
+              { v: "3-of-5", l: "Committee Verified" },
+              { v: "<20s", l: "Avg Settle Time" },
+            ].map((s, i) => (
+              <div key={i} className={i > 0 ? "pl-6 border-l" : ""} style={{ borderColor: "var(--border)" }}>
+                <div className="text-xl font-semibold" style={{ color: "var(--t0)" }}>{s.v}</div>
+                <div className="text-[12px] font-mono" style={{ color: "var(--t3)" }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 animate-in" style={{ animationDelay: "0.2s" }}>
+            <button onClick={connect}
+              className="px-8 py-3 rounded text-[14px] font-semibold transition-all hover:brightness-110"
+              style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+              Connect StarKey
+            </button>
+            <button onClick={demo}
+              className="px-6 py-3 rounded text-[14px] font-medium transition-all"
+              style={{ color: "var(--t2)", background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+              Demo Mode
+            </button>
+          </div>
+
+          <div className="mt-6 flex items-center gap-4 animate-in" style={{ animationDelay: "0.25s" }}>
+            {[
+              { n: "01", t: "Cross-Chain", d: "Sepolia ↔ Supra Testnet" },
+              { n: "02", t: "AI Agents", d: "Autonomous maker/taker bots" },
+              { n: "03", t: "Committee", d: "5-node multisig verification" },
+            ].map((c, i) => (
+              <div key={c.n} className="flex items-start gap-2.5 p-3 rounded border"
+                style={{ borderColor: "var(--border)", background: "var(--surface)", flex: 1 }}>
+                <div className="font-mono text-[11px] font-bold mt-0.5" style={{ color: "var(--t3)" }}>{c.n}</div>
+                <div>
+                  <div className="text-[13px] font-medium" style={{ color: "var(--t1)" }}>{c.t}</div>
+                  <div className="text-[11px]" style={{ color: "var(--t3)" }}>{c.d}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right — Globe */}
+        <div className="flex-1 flex items-center justify-center animate-fade" style={{ animationDelay: "0.3s" }}>
+          <InteractiveGlobe size={480} />
+        </div>
       </div>
     </div>
   );
