@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useWallet } from "./WalletProvider";
 
 export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void }) {
-  const { address } = useWallet();
+  const { supraAddress } = useWallet();
   const [pair, setPair] = useState("ETH/USDC");
   const [size, setSize] = useState("");
   const [slip, setSlip] = useState("0.5");
@@ -11,7 +11,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const submit = async () => {
-    if (!address || !size || parseFloat(size) <= 0) return;
+    if (!supraAddress || !size || parseFloat(size) <= 0) return;
     setLoading(true);
     setResult(null);
     try {
@@ -19,7 +19,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          takerAddress: address,
+          takerAddress: supraAddress,
           pair,
           size: parseFloat(size),
           sourceChain: "sepolia",

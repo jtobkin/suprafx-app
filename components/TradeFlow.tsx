@@ -49,14 +49,14 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
 }
 
 function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }) {
-  const { evmAddress, supraAddress, isDemo, sendSepoliaEth, sendSupraTokens } = useWallet();
+  const { profile, isDemo, sendSepoliaEth, sendSupraTokens, supraAddress } = useWallet();
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: string; text: string; color?: string }>>([]);
   const [autoRunning, setAutoRunning] = useState(false);
   const autoRef = useRef(false);
 
-  const hasWallet = !!evmAddress && !isDemo;
+  const hasWallet = !!profile?.evmVerified && !isDemo;
   const hasSupraWallet = !!supraAddress && !isDemo;
 
   const addLog = (text: string, color?: string) => {

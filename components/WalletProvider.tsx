@@ -1,26 +1,34 @@
 "use client";
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+
+export interface ProfileData {
+  supraAddress: string;
+  evmAddress: string | null;
+  evmVerified: boolean;
+  evmSignature: string | null;
+}
 
 interface WalletCtx {
-  address: string | null;
-  evmAddress: string | null;
   supraAddress: string | null;
+  profile: ProfileData | null;
+  isVerified: boolean;
+  isDemo: boolean;
   connect: () => Promise<void>;
   demo: () => void;
   disconnect: () => void;
-  short: string;
-  evmShort: string;
-  supraShort: string;
-  isDemo: boolean;
+  linkEvmAddress: () => Promise<boolean>;
   sendSepoliaEth: (to: string, valueWei: string) => Promise<string>;
   sendSupraTokens: (to: string, amount: number) => Promise<string>;
+  supraShort: string;
+  evmShort: string;
 }
 
 const Ctx = createContext<WalletCtx>({
-  address: null, evmAddress: null, supraAddress: null,
+  supraAddress: null, profile: null, isVerified: false, isDemo: false,
   connect: async () => {}, demo: () => {}, disconnect: () => {},
-  short: "", evmShort: "", supraShort: "", isDemo: false,
+  linkEvmAddress: async () => false,
   sendSepoliaEth: async () => "", sendSupraTokens: async () => "",
+  supraShort: "", evmShort: "",
 });
 
 export function useWallet() { return useContext(Ctx); }
@@ -28,96 +36,86 @@ export function useWallet() { return useContext(Ctx); }
 const SEPOLIA_CHAIN_ID = "0xaa36a7";
 const SUPRA_TESTNET_CHAIN_ID = "6";
 
-function getEvmProvider(): any {
-  if (typeof window === "undefined") return null;
-  const ethereum = (window as any)?.ethereum;
-  if (ethereum?.isMetaMask) return ethereum;
-  return (window as any)?.starkey?.ethereum || ethereum || null;
-}
-
 function getSupraProvider(): any {
   if (typeof window === "undefined") return null;
   return (window as any)?.starkey?.supra || null;
 }
 
+function getEvmProvider(): any {
+  if (typeof window === "undefined") return null;
+  const eth = (window as any)?.ethereum;
+  if (eth?.isMetaMask) return eth;
+  return (window as any)?.starkey?.ethereum || eth || null;
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [address, setAddress] = useState<string | null>(null);
-  const [evmAddress, setEvmAddress] = useState<string | null>(null);
   const [supraAddress, setSupraAddress] = useState<string | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isDemo, setIsDemo] = useState(false);
-  const [evmProv, setEvmProv] = useState<any>(null);
 
-  const connect = useCallback(async () => {
-    let primaryAddr: string | null = null;
-    let evmAddr: string | null = null;
-    let supraAddr: string | null = null;
+  const isVerified = !!(profile?.supraAddress && profile?.evmVerified);
 
-    // 1. Connect Supra via StarKey
-    const supra = getSupraProvider();
-    if (supra) {
-      try {
-        const resp = await supra.connect();
-        const acc = Array.isArray(resp) ? resp : await supra.account();
-        if (acc?.[0]) {
-          supraAddr = acc[0];
-          primaryAddr = supraAddr;
-        }
-        // Switch to testnet
-        try { await supra.changeNetwork({ chainId: SUPRA_TESTNET_CHAIN_ID }); } catch {}
-      } catch (e) { console.warn("Supra connect error:", e); }
-    }
-
-    // 2. Connect EVM via MetaMask
-    const evm = getEvmProvider();
-    if (evm) {
-      try {
-        const accounts = await evm.request({ method: "eth_requestAccounts" });
-        if (accounts?.[0]) {
-          evmAddr = accounts[0];
-          if (!primaryAddr) primaryAddr = evmAddr;
-          setEvmProv(evm);
-          try {
-            await evm.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA_CHAIN_ID }] });
-          } catch (switchErr: any) {
-            if (switchErr.code === 4902) {
-              await evm.request({
-                method: "wallet_addEthereumChain",
-                params: [{ chainId: SEPOLIA_CHAIN_ID, chainName: "Sepolia", nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://rpc.sepolia.org"], blockExplorerUrls: ["https://sepolia.etherscan.io"] }],
-              });
-            }
-          }
-        }
-      } catch (e) { console.warn("EVM connect error:", e); }
-    }
-
-    if (primaryAddr) {
-      setAddress(primaryAddr);
-      setEvmAddress(evmAddr);
-      setSupraAddress(supraAddr);
-      setIsDemo(false);
-      await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          walletAddress: primaryAddr,
-          evmAddress: evmAddr,
-          supraAddress: supraAddr,
-          role: "taker",
-          domain: `agent-${primaryAddr.slice(0, 8)}`,
-        }),
-      });
-    } else {
-      alert("No wallet detected. Install StarKey and/or MetaMask, or use demo mode.");
+  // Load profile from API when supra address is set
+  const loadProfile = useCallback(async (addr: string) => {
+    try {
+      const res = await fetch(`/api/link-address?supra=${encodeURIComponent(addr)}`);
+      const { link } = await res.json();
+      if (link) {
+        setProfile({
+          supraAddress: addr,
+          evmAddress: link.evm_address,
+          evmVerified: !!link.evm_verified_at,
+          evmSignature: link.evm_signature,
+        });
+      } else {
+        setProfile({ supraAddress: addr, evmAddress: null, evmVerified: false, evmSignature: null });
+      }
+    } catch {
+      setProfile({ supraAddress: addr, evmAddress: null, evmVerified: false, evmSignature: null });
     }
   }, []);
 
+  // Connect StarKey (Supra only)
+  const connect = useCallback(async () => {
+    const supra = getSupraProvider();
+    if (!supra) {
+      alert("StarKey wallet not detected. Please install StarKey to use SupraFX.");
+      return;
+    }
+
+    try {
+      const resp = await supra.connect();
+      const acc = Array.isArray(resp) ? resp : await supra.account();
+      if (acc?.[0]) {
+        const addr = acc[0];
+        setSupraAddress(addr);
+        setIsDemo(false);
+        try { await supra.changeNetwork({ chainId: SUPRA_TESTNET_CHAIN_ID }); } catch {}
+        await loadProfile(addr);
+
+        // Register agent
+        await fetch("/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress: addr, role: "taker", domain: `agent-${addr.slice(0, 8)}` }),
+        });
+      }
+    } catch (e: any) {
+      console.error("StarKey connect error:", e);
+      alert("Failed to connect StarKey. Please try again.");
+    }
+  }, [loadProfile]);
+
   const demo = useCallback(() => {
     const addr = "demo_" + Math.random().toString(16).slice(2, 14);
-    setAddress(addr);
-    setEvmAddress(null);
-    setSupraAddress(null);
-    setEvmProv(null);
+    setSupraAddress(addr);
     setIsDemo(true);
+    setProfile({
+      supraAddress: addr,
+      evmAddress: "0xdemo" + addr.slice(5),
+      evmVerified: true,
+      evmSignature: null,
+    });
     fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,92 +126,131 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const disconnect = useCallback(() => {
     const supra = getSupraProvider();
     if (supra) supra.disconnect?.();
-    setAddress(null);
-    setEvmAddress(null);
     setSupraAddress(null);
-    setEvmProv(null);
+    setProfile(null);
     setIsDemo(false);
   }, []);
 
+  // Link & verify EVM address via MetaMask signature
+  const linkEvmAddress = useCallback(async (): Promise<boolean> => {
+    if (!supraAddress) return false;
+
+    const evm = getEvmProvider();
+    if (!evm) {
+      alert("MetaMask not detected. Please install MetaMask to link your EVM address.");
+      return false;
+    }
+
+    try {
+      // Request accounts
+      const accounts = await evm.request({ method: "eth_requestAccounts" });
+      const evmAddr = accounts[0];
+      if (!evmAddr) return false;
+
+      // Switch to Sepolia
+      try {
+        await evm.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA_CHAIN_ID }] });
+      } catch (switchErr: any) {
+        if (switchErr.code === 4902) {
+          await evm.request({
+            method: "wallet_addEthereumChain",
+            params: [{ chainId: SEPOLIA_CHAIN_ID, chainName: "Sepolia", nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://rpc.sepolia.org"], blockExplorerUrls: ["https://sepolia.etherscan.io"] }],
+          });
+        }
+      }
+
+      // Sign verification message
+      const message = `SupraFX: Link EVM address ${evmAddr.toLowerCase()} to Supra account ${supraAddress}`;
+      const signature = await evm.request({ method: "personal_sign", params: [message, evmAddr] });
+
+      // Submit to API for server-side verification
+      const res = await fetch("/api/link-address", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supraAddress, evmAddress: evmAddr, signature }),
+      });
+
+      const data = await res.json();
+      if (data.verified) {
+        setProfile({
+          supraAddress,
+          evmAddress: evmAddr.toLowerCase(),
+          evmVerified: true,
+          evmSignature: signature,
+        });
+        return true;
+      } else {
+        alert("Verification failed: " + (data.error || "unknown error"));
+        return false;
+      }
+    } catch (e: any) {
+      if (e.code === 4001) return false; // User rejected
+      console.error("EVM link error:", e);
+      alert("Failed to link EVM address: " + (e.message || e));
+      return false;
+    }
+  }, [supraAddress]);
+
+  // Send ETH on Sepolia
   const sendSepoliaEth = useCallback(async (to: string, valueWei: string): Promise<string> => {
-    const evm = evmProv || getEvmProvider();
-    const from = evmAddress;
-    if (!evm || !from) throw new Error("No EVM wallet connected");
+    const evm = getEvmProvider();
+    const from = profile?.evmAddress;
+    if (!evm || !from) throw new Error("No verified EVM address");
     try { await evm.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA_CHAIN_ID }] }); } catch {}
     return await evm.request({ method: "eth_sendTransaction", params: [{ from, to, value: valueWei, gas: "0x5208" }] });
-  }, [evmAddress, evmProv]);
+  }, [profile]);
 
+  // Send SUPRA tokens via StarKey
   const sendSupraTokens = useCallback(async (to: string, amount: number): Promise<string> => {
     const supra = getSupraProvider();
     if (!supra || !supraAddress) throw new Error("No Supra wallet connected");
 
-    // Switch to testnet
     try { await supra.changeNetwork({ chainId: SUPRA_TESTNET_CHAIN_ID }); } catch {}
 
-    // Convert recipient address — remove 0x prefix if present
     const recipientHex = to.startsWith("0x") ? to.slice(2) : to;
-    
-    // Amount in octas (1 SUPRA = 10^8 octas)
     const amountOctas = Math.floor(amount * 100000000);
-
     const txExpiryTime = Math.ceil(Date.now() / 1000) + 30;
 
-    // Build raw transaction payload for supra_account::transfer
     const rawTxPayload = [
-      supraAddress,                                                           // sender
-      0,                                                                       // sequence number (auto)
-      "0000000000000000000000000000000000000000000000000000000000000001",       // module address
-      "supra_account",                                                         // module name
-      "transfer",                                                              // function name
-      [],                                                                      // type args
-      [
-        hexToBytes(recipientHex),                                              // recipient address bytes
-        uint64ToBytes(amountOctas),                                            // amount in octas
-      ],
-      { txExpiryTime: BigInt(txExpiryTime) },                                 // optional args
+      supraAddress, 0,
+      "0000000000000000000000000000000000000000000000000000000000000001",
+      "supra_account", "transfer", [],
+      [hexToBytes(recipientHex), uint64ToBytes(amountOctas)],
+      { txExpiryTime: BigInt(txExpiryTime) },
     ];
 
     const data = await supra.createRawTransactionData(rawTxPayload);
     if (!data) throw new Error("Failed to create Supra transaction data");
-
     const txHash = await supra.sendTransaction({ data });
     if (!txHash) throw new Error("Supra transaction failed");
-
     return typeof txHash === "string" ? txHash : JSON.stringify(txHash);
   }, [supraAddress]);
 
-  const short = address ? address.slice(0, 6) + "…" + address.slice(-4) : "";
-  const evmShort = evmAddress ? evmAddress.slice(0, 6) + "…" + evmAddress.slice(-4) : "";
   const supraShort = supraAddress ? supraAddress.slice(0, 6) + "…" + supraAddress.slice(-4) : "";
+  const evmShort = profile?.evmAddress ? profile.evmAddress.slice(0, 6) + "…" + profile.evmAddress.slice(-4) : "";
 
   return (
     <Ctx.Provider value={{
-      address, evmAddress, supraAddress, connect, demo, disconnect,
-      short, evmShort, supraShort, isDemo,
+      supraAddress, profile, isVerified, isDemo,
+      connect, demo, disconnect, linkEvmAddress,
       sendSepoliaEth, sendSupraTokens,
+      supraShort, evmShort,
     }}>
       {children}
     </Ctx.Provider>
   );
 }
 
-// Helper: hex string to Uint8Array
 function hexToBytes(hex: string): Uint8Array {
   const padded = hex.padStart(64, "0");
   const bytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(padded.substr(i * 2, 2), 16);
-  }
+  for (let i = 0; i < 32; i++) bytes[i] = parseInt(padded.substr(i * 2, 2), 16);
   return bytes;
 }
 
-// Helper: uint64 to little-endian 8-byte array (BCS format)
 function uint64ToBytes(n: number): Uint8Array {
   const bytes = new Uint8Array(8);
   let val = BigInt(n);
-  for (let i = 0; i < 8; i++) {
-    bytes[i] = Number(val & BigInt(0xff));
-    val >>= BigInt(8);
-  }
+  for (let i = 0; i < 8; i++) { bytes[i] = Number(val & BigInt(0xff)); val >>= BigInt(8); }
   return bytes;
 }

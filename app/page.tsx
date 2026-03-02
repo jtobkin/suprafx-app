@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { WalletProvider, useWallet } from "@/components/WalletProvider";
 import Header from "@/components/Header";
+import ProfilePanel from "@/components/ProfilePanel";
 import KPIs from "@/components/KPIs";
 import OrderbookTable from "@/components/OrderbookTable";
 import TradeBlotter from "@/components/TradeBlotter";
@@ -51,7 +52,7 @@ function Login() {
       <button onClick={connect}
         className="px-8 py-3 rounded border text-[13px] font-medium transition-all animate-in hover:brightness-110"
         style={{ background: "var(--accent)", borderColor: "var(--accent)", color: "#fff", animationDelay: "0.2s" }}>
-        Connect Wallet
+        Connect StarKey
       </button>
       <div className="mt-3.5 text-xs animate-in" style={{ color: "var(--t3)", animationDelay: "0.25s" }}>
         No wallet?{" "}
@@ -63,8 +64,63 @@ function Login() {
   );
 }
 
+/* Verification gate — shown when logged in but EVM not linked */
+function VerificationGate() {
+  const { linkEvmAddress, supraShort, disconnect } = useWallet();
+  const [linking, setLinking] = useState(false);
+
+  const handleLink = async () => {
+    setLinking(true);
+    await linkEvmAddress();
+    setLinking(false);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-48px)] text-center px-5">
+      <div className="w-[420px] rounded-lg border p-8" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <div className="text-[9px] font-mono uppercase tracking-wider mb-4" style={{ color: "var(--t3)" }}>
+          Complete Profile Setup
+        </div>
+
+        {/* Step 1: Supra — done */}
+        <div className="flex items-center gap-3 p-3 rounded mb-3" style={{ background: "rgba(16,185,129,0.06)" }}>
+          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+            style={{ background: "var(--positive)", color: "#fff" }}>✓</div>
+          <div className="text-left flex-1">
+            <div className="text-[11px] font-medium" style={{ color: "var(--positive)" }}>Supra Address Verified</div>
+            <div className="font-mono text-[10px]" style={{ color: "var(--t3)" }}>{supraShort}</div>
+          </div>
+        </div>
+
+        {/* Step 2: EVM — pending */}
+        <div className="flex items-center gap-3 p-3 rounded mb-5 border" style={{ borderColor: "var(--warn)", background: "rgba(245,158,11,0.04)" }}>
+          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+            style={{ background: "var(--warn)", color: "#fff" }}>2</div>
+          <div className="text-left flex-1">
+            <div className="text-[11px] font-medium" style={{ color: "var(--warn)" }}>Link EVM Address</div>
+            <div className="text-[10px]" style={{ color: "var(--t3)" }}>Sign with MetaMask to verify ownership</div>
+          </div>
+        </div>
+
+        <button onClick={handleLink} disabled={linking}
+          className="w-full py-3 rounded text-[12px] font-semibold transition-all disabled:opacity-50"
+          style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+          {linking ? "Waiting for MetaMask…" : "Link EVM Address via MetaMask"}
+        </button>
+
+        <button onClick={disconnect}
+          className="w-full mt-3 py-2 rounded text-[11px] font-mono"
+          style={{ color: "var(--t3)", background: "none", border: "1px solid var(--border)" }}>
+          Disconnect
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const [tab, setTab] = useState<"overview" | "orderbook" | "blotter" | "committee">("overview");
+  const [profileOpen, setProfileOpen] = useState(false);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -83,10 +139,8 @@ function Dashboard() {
     if (cr.data) setRequests(cr.data);
   }, []);
 
-  // Initial fetch
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Real-time subscriptions — refetch on ANY change
   useEffect(() => {
     const channel = supabase.channel("rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => fetchAll())
@@ -98,7 +152,6 @@ function Dashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchAll]);
 
-  // Also poll every 2 seconds as backup for real-time
   useEffect(() => {
     const interval = setInterval(fetchAll, 2000);
     return () => clearInterval(interval);
@@ -106,7 +159,8 @@ function Dashboard() {
 
   return (
     <div>
-      <Header active={tab} onTab={setTab as any} />
+      <Header active={tab} onTab={setTab as any} onProfileClick={() => setProfileOpen(true)} />
+      <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
       <div className="max-w-[1240px] mx-auto px-5 py-5">
         {tab === "overview" && (
           <>
@@ -155,16 +209,36 @@ export default function Page() {
 }
 
 function Inner() {
-  const { address } = useWallet();
-  return address ? <Dashboard /> : (
-    <div>
-      <header className="h-12 flex items-center px-5 border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <div className="flex items-center gap-2">
-          <div className="w-[6px] h-[6px] rounded-[1px]" style={{ background: "var(--accent)" }} />
-          <span className="font-mono font-semibold text-sm tracking-tight">SupraFX</span>
-        </div>
-      </header>
-      <Login />
-    </div>
-  );
+  const { supraAddress, isVerified, isDemo } = useWallet();
+
+  if (!supraAddress) {
+    return (
+      <div>
+        <header className="h-12 flex items-center px-5 border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <div className="flex items-center gap-2">
+            <div className="w-[6px] h-[6px] rounded-[1px]" style={{ background: "var(--accent)" }} />
+            <span className="font-mono font-semibold text-sm tracking-tight">SupraFX</span>
+          </div>
+        </header>
+        <Login />
+      </div>
+    );
+  }
+
+  // Connected but EVM not verified — show gate (skip for demo)
+  if (!isVerified && !isDemo) {
+    return (
+      <div>
+        <header className="h-12 flex items-center px-5 border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <div className="flex items-center gap-2">
+            <div className="w-[6px] h-[6px] rounded-[1px]" style={{ background: "var(--accent)" }} />
+            <span className="font-mono font-semibold text-sm tracking-tight">SupraFX</span>
+          </div>
+        </header>
+        <VerificationGate />
+      </div>
+    );
+  }
+
+  return <Dashboard />;
 }
