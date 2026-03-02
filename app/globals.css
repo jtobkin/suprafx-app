@@ -2,51 +2,94 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg: #09090b;
-  --surface: #111113;
-  --surface-2: #18181b;
-  --surface-3: #1e1e22;
-  --border: rgba(255,255,255,0.06);
-  --border-active: rgba(255,255,255,0.12);
-  --t0: rgba(255,255,255,0.95);
-  --t1: rgba(255,255,255,0.72);
-  --t2: rgba(255,255,255,0.44);
-  --t3: rgba(255,255,255,0.22);
-  --accent: #3b82f6;
-  --positive: #22c55e;
+  --bg: #06060a;
+  --surface: #0c0c10;
+  --surface-2: #141418;
+  --surface-3: #1a1a20;
+  --border: rgba(255,255,255,0.05);
+  --border-active: rgba(255,255,255,0.10);
+  --t0: rgba(255,255,255,0.93);
+  --t1: rgba(255,255,255,0.68);
+  --t2: rgba(255,255,255,0.40);
+  --t3: rgba(255,255,255,0.20);
+  --accent: #2563eb;
+  --accent-light: #3b82f6;
+  --positive: #10b981;
   --negative: #ef4444;
-  --warn: #eab308;
+  --warn: #d97706;
   --neutral: #6366f1;
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
-html { -webkit-font-smoothing: antialiased; }
-body { background: var(--bg); color: var(--t0); }
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body {
+  background: var(--bg);
+  color: var(--t0);
+  font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+}
 
+::selection { background: rgba(37, 99, 235, 0.3); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+/* Tags */
 .tag {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 9px;
   font-weight: 500;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 3px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border: 1px solid;
+  line-height: 1.6;
 }
-.tag-settled { background: rgba(34,197,94,0.1); color: var(--positive); border-color: rgba(34,197,94,0.15); }
-.tag-open { background: rgba(99,102,241,0.1); color: var(--neutral); border-color: rgba(99,102,241,0.15); }
-.tag-pending, .tag-taker_sent, .tag-taker_verified, .tag-maker_sent { background: rgba(234,179,8,0.1); color: var(--warn); border-color: rgba(234,179,8,0.15); }
-.tag-failed { background: rgba(239,68,68,0.1); color: var(--negative); border-color: rgba(239,68,68,0.15); }
-.tag-approved { background: rgba(34,197,94,0.08); color: var(--positive); border-color: rgba(34,197,94,0.12); }
-.tag-maker { background: rgba(59,130,246,0.08); color: var(--accent); border-color: rgba(59,130,246,0.1); }
-.tag-taker { background: rgba(255,255,255,0.04); color: var(--t2); border-color: var(--border); }
+.tag-settled { background: rgba(16,185,129,0.10); color: var(--positive); }
+.tag-open { background: rgba(99,102,241,0.10); color: var(--neutral); }
+.tag-matched { background: rgba(37,99,235,0.10); color: var(--accent-light); }
+.tag-pending, .tag-taker_sent, .tag-taker_verified, .tag-maker_sent, .tag-open_trade {
+  background: rgba(217,119,6,0.10); color: var(--warn);
+}
+.tag-failed { background: rgba(239,68,68,0.10); color: var(--negative); }
+.tag-approved { background: rgba(16,185,129,0.08); color: var(--positive); }
+.tag-maker { background: rgba(37,99,235,0.08); color: var(--accent-light); }
+.tag-taker { background: rgba(255,255,255,0.04); color: var(--t2); }
+.tag-expired { background: rgba(255,255,255,0.03); color: var(--t3); }
 
+/* Animations */
 @keyframes fadeUp {
-  from { opacity:0; transform:translateY(6px); }
-  to { opacity:1; transform:translateY(0); }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.animate-in { animation: fadeUp 0.35s ease both; }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.animate-in { animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade { animation: fadeIn 0.5s ease both; }
+.animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+.animate-spin { animation: spin 1s linear infinite; }
+
+/* Network canvas bg */
+.network-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.4;
+}

@@ -3,56 +3,44 @@ import { useState } from "react";
 import { useWallet } from "./WalletProvider";
 import { Trade } from "@/lib/types";
 
-const STEPS = [
-  { key: "open", label: "Matched" },
-  { key: "taker_sent", label: "Taker Sent" },
-  { key: "taker_verified", label: "Taker Verified" },
-  { key: "maker_sent", label: "Maker Sent" },
-  { key: "settled", label: "Settled" },
-];
+const STEPS = ["open", "taker_sent", "taker_verified", "maker_sent", "settled"];
+const LABELS = ["Matched", "Taker Sent", "Verified", "Maker Sent", "Settled"];
 
-function stepIndex(status: string) {
-  const i = STEPS.findIndex(s => s.key === status);
-  return i >= 0 ? i : 0;
-}
+function stepIdx(s: string) { const i = STEPS.indexOf(s); return i >= 0 ? i : 0; }
 
-function fmtUsd(n: number) {
-  return "$" + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function StatusBar({ status }: { status: string }) {
-  const current = stepIndex(status);
+function Progress({ status }: { status: string }) {
+  const cur = stepIdx(status);
+  const failed = status === "failed";
   return (
-    <div className="flex items-center gap-0.5 mb-4">
-      {STEPS.map((s, i) => {
-        const done = i < current;
-        const active = i === current;
-        const isFailed = status === "failed";
-        return (
-          <div key={s.key} className="flex items-center gap-0.5 flex-1">
-            <div className="flex flex-col items-center flex-1">
-              <div className="h-1 w-full rounded-full mb-1.5"
-                style={{
-                  background: isFailed ? "var(--negative)"
-                    : done ? "var(--positive)"
-                    : active ? "var(--accent)"
-                    : "var(--surface-3)",
-                }} />
-              <span className="font-mono text-[9px] uppercase tracking-wider"
-                style={{
-                  color: isFailed ? "var(--negative)"
-                    : done ? "var(--positive)"
-                    : active ? "var(--accent)"
-                    : "var(--t3)",
-                }}>
-                {s.label}
-              </span>
-            </div>
+    <div className="flex items-center gap-1 my-3">
+      {STEPS.map((s, i) => (
+        <div key={s} className="flex items-center flex-1 gap-1">
+          <div className="flex flex-col items-center flex-1">
+            <div className="w-full h-[3px] rounded-full transition-all duration-500"
+              style={{
+                background: failed ? "var(--negative)"
+                  : i < cur ? "var(--positive)"
+                  : i === cur ? "var(--accent)"
+                  : "var(--surface-3)",
+              }} />
+            <span className="font-mono text-[8px] uppercase tracking-wider mt-1 transition-colors"
+              style={{
+                color: failed ? "var(--negative)"
+                  : i < cur ? "var(--positive)"
+                  : i === cur ? "var(--accent-light)"
+                  : "var(--t3)",
+              }}>
+              {LABELS[i]}
+            </span>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
+}
+
+function Spinner() {
+  return <div className="w-2.5 h-2.5 rounded-full border border-current animate-spin" style={{ borderTopColor: "transparent" }} />;
 }
 
 function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }) {
@@ -61,170 +49,120 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const isTaker = trade.taker_address === address;
-  const isMaker = trade.maker_address === address;
-
-  const submitTx = async (side: "taker" | "maker") => {
-    if (!txHash.trim()) return;
+  const confirmTx = async (side: "taker" | "maker", hash?: string) => {
+    const h = hash || txHash.trim();
+    if (!h) return;
     setLoading(true);
     setMsg(null);
     try {
       const res = await fetch("/api/confirm-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tradeId: trade.id, txHash: txHash.trim(), side }),
+        body: JSON.stringify({ tradeId: trade.id, txHash: h, side }),
       });
       const data = await res.json();
-      if (data.error) {
-        setMsg("Error: " + data.error);
-      } else {
-        setMsg("TX submitted — awaiting committee verification");
+      if (data.error) { setMsg(data.error); }
+      else {
+        setMsg("TX confirmed — committee verifying…");
         setTxHash("");
-        // Trigger verification
-        setTimeout(async () => {
-          await fetch("/api/cron/verify");
-          onUpdate();
-        }, 3000);
+        setTimeout(async () => { await fetch("/api/cron/verify"); onUpdate(); }, 2500);
       }
-    } catch (e: any) {
-      setMsg("Error: " + e.message);
-    }
+    } catch (e: any) { setMsg(e.message); }
     setLoading(false);
   };
 
-  // Auto-trigger maker after taker verified
-  const triggerMakerSend = async () => {
-    setLoading(true);
-    setMsg(null);
-    try {
-      // Simulate maker sending on Supra - use a demo TX hash
-      const fakeMakerTx = "a" + Array.from({ length: 63 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-      const res = await fetch("/api/confirm-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tradeId: trade.id, txHash: fakeMakerTx, side: "maker" }),
-      });
-      const data = await res.json();
-      if (data.error) {
-        setMsg("Error: " + data.error);
-      } else {
-        setMsg("Maker TX submitted — verifying…");
-        setTimeout(async () => {
-          await fetch("/api/cron/verify");
-          onUpdate();
-        }, 3000);
-      }
-    } catch (e: any) {
-      setMsg("Error: " + e.message);
-    }
-    setLoading(false);
+  const simulateMaker = async () => {
+    const hash = "a" + Array.from({ length: 63 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+    await confirmTx("maker", hash);
+  };
+
+  const genDemoHash = () => {
+    setTxHash("0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""));
   };
 
   return (
-    <div className="p-4 border-b" style={{ borderColor: "var(--border)" }}>
-      {/* Trade info row */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-4">
-          <span className="font-mono text-[11px]" style={{ color: "var(--t2)" }}>{trade.display_id}</span>
-          <span className="text-xs font-semibold">{trade.pair}</span>
-          <span className="font-mono text-xs">{trade.size}</span>
-          <span className="font-mono text-xs" style={{ color: "var(--t2)" }}>@ {fmtUsd(trade.rate)}</span>
-        </div>
-        <span className={`tag tag-${trade.status}`}>
-          {trade.status === "settled" ? "Settled" : trade.status.replace(/_/g, " ")}
-        </span>
-      </div>
-
-      {/* Progress bar */}
-      <StatusBar status={trade.status} />
-
-      {/* Actions based on current status */}
-      {trade.status === "open" && (
-        <div>
-          <div className="text-[11px] mb-2" style={{ color: "var(--t2)" }}>
-            Send <strong className="text-white">{trade.size} {trade.pair.split("/")[0]}</strong> on{" "}
-            <strong className="text-white">{trade.source_chain}</strong>, then paste the TX hash below.
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="0x… Sepolia transaction hash"
-              value={txHash}
-              onChange={e => setTxHash(e.target.value)}
-              className="flex-1 px-3 py-2 rounded border text-xs font-mono outline-none"
-              style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--t0)" }}
-            />
-            <button
-              onClick={() => submitTx("taker")}
-              disabled={loading || !txHash.trim()}
-              className="px-4 py-2 rounded border text-xs font-medium transition-all disabled:opacity-40"
-              style={{ background: "var(--accent)", borderColor: "var(--accent)", color: "#fff" }}>
-              {loading ? "Submitting…" : "Confirm TX"}
-            </button>
-          </div>
-          <div className="mt-2">
-            <button
-              onClick={() => {
-                const demoHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-                setTxHash(demoHash);
-              }}
-              className="font-mono text-[10px] cursor-pointer hover:underline"
-              style={{ color: "var(--t3)", background: "none", border: "none" }}>
-              Generate demo TX hash
-            </button>
-          </div>
-        </div>
-      )}
-
-      {trade.status === "taker_sent" && (
-        <div className="flex items-center gap-2 py-2">
-          <div className="w-3 h-3 rounded-full border-2 animate-spin"
-            style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
-          <span className="text-[11px]" style={{ color: "var(--t2)" }}>
-            Committee verifying taker transaction on {trade.source_chain}…
+    <div className="px-4 py-3 border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px]" style={{ color: "var(--t3)" }}>{trade.display_id}</span>
+          <span className="text-[12px] font-semibold">{trade.pair}</span>
+          <span className="font-mono text-[12px]">{trade.size}</span>
+          <span className="font-mono text-[11px]" style={{ color: "var(--t2)" }}>
+            @ ${trade.rate?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          {trade.status === "settled" && trade.settle_ms && (
+            <span className="font-mono text-[10px]" style={{ color: "var(--positive)" }}>
+              {(trade.settle_ms / 1000).toFixed(1)}s
+            </span>
+          )}
+          <span className={`tag tag-${trade.status === "open" ? "open_trade" : trade.status}`}>
+            {trade.status === "settled" ? "Settled" : trade.status.replace(/_/g, " ")}
+          </span>
+        </div>
+      </div>
 
-      {trade.status === "taker_verified" && (
-        <div>
-          <div className="text-[11px] mb-2" style={{ color: "var(--positive)" }}>
-            Taker TX verified by committee. Waiting for maker to send on {trade.dest_chain}.
-          </div>
-          <button
-            onClick={triggerMakerSend}
-            disabled={loading}
-            className="px-4 py-2 rounded border text-xs font-medium transition-all disabled:opacity-40"
-            style={{ background: "var(--surface-2)", borderColor: "var(--border-active)", color: "var(--t0)" }}>
-            {loading ? "Sending…" : "Simulate Maker Send"}
+      <Progress status={trade.status} />
+
+      {/* Open: taker needs to send */}
+      {trade.status === "open" && (
+        <div className="flex items-center gap-2 mt-1">
+          <input type="text" placeholder="0x… transaction hash" value={txHash}
+            onChange={e => setTxHash(e.target.value)}
+            className="flex-1 px-2.5 py-[6px] rounded border text-[11px] font-mono outline-none"
+            style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+          <button onClick={() => confirmTx("taker")} disabled={loading || !txHash.trim()}
+            className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
+            style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+            {loading ? "…" : "Confirm"}
+          </button>
+          <button onClick={genDemoHash}
+            className="px-2 py-[6px] rounded text-[9px] font-mono transition-colors"
+            style={{ background: "var(--surface-3)", color: "var(--t3)", border: "none" }}>
+            Demo TX
           </button>
         </div>
       )}
 
-      {trade.status === "maker_sent" && (
-        <div className="flex items-center gap-2 py-2">
-          <div className="w-3 h-3 rounded-full border-2 animate-spin"
-            style={{ borderColor: "var(--positive)", borderTopColor: "transparent" }} />
-          <span className="text-[11px]" style={{ color: "var(--t2)" }}>
-            Committee verifying maker transaction on {trade.dest_chain}…
-          </span>
+      {/* Taker sent: waiting for committee */}
+      {trade.status === "taker_sent" && (
+        <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
+          <Spinner /> Committee verifying taker TX on {trade.source_chain}…
         </div>
       )}
 
+      {/* Taker verified: maker needs to send */}
+      {trade.status === "taker_verified" && (
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-[11px]" style={{ color: "var(--positive)" }}>Taker verified.</span>
+          <button onClick={simulateMaker} disabled={loading}
+            className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
+            style={{ background: "var(--surface-3)", color: "var(--t0)", border: "1px solid var(--border-active)" }}>
+            {loading ? "…" : "Simulate Maker Send"}
+          </button>
+        </div>
+      )}
+
+      {/* Maker sent: waiting for committee */}
+      {trade.status === "maker_sent" && (
+        <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--t2)" }}>
+          <Spinner /> Committee verifying maker TX on {trade.dest_chain}…
+        </div>
+      )}
+
+      {/* Settled */}
       {trade.status === "settled" && (
-        <div className="flex items-center gap-3 py-1">
-          <span className="text-[11px]" style={{ color: "var(--positive)" }}>
-            Trade settled in {trade.settle_ms ? (trade.settle_ms / 1000).toFixed(1) + "s" : "—"}
-          </span>
+        <div className="flex items-center gap-3">
           {trade.taker_tx_hash && (
             <a href={`https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent)" }}>
+              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>
               Taker TX ↗
             </a>
           )}
           {trade.maker_tx_hash && (
             <a href={`https://testnet.suprascan.io/tx/${trade.maker_tx_hash}`} target="_blank"
-              className="font-mono text-[10px] hover:underline" style={{ color: "var(--accent)" }}>
+              className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>
               Maker TX ↗
             </a>
           )}
@@ -232,41 +170,32 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       )}
 
       {msg && (
-        <div className="mt-2 font-mono text-[11px] px-3 py-2 rounded"
-          style={{
-            background: msg.startsWith("Error") ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)",
-            color: msg.startsWith("Error") ? "var(--negative)" : "var(--positive)",
-          }}>
-          {msg}
-        </div>
+        <div className="mt-1.5 font-mono text-[10px]" style={{ color: "var(--warn)" }}>{msg}</div>
       )}
     </div>
   );
 }
 
 export default function TradeFlow({ trades, onUpdate }: { trades: Trade[]; onUpdate: () => void }) {
-  // Show active (non-settled, non-failed) trades, plus recently settled
   const active = trades.filter(t => !["settled", "failed"].includes(t.status));
-  const recentSettled = trades
-    .filter(t => t.status === "settled")
-    .slice(0, 2);
-  const display = [...active, ...recentSettled];
-
+  const recent = trades.filter(t => t.status === "settled").slice(0, 2);
+  const display = [...active, ...recent];
   if (display.length === 0) return null;
 
   return (
-    <div className="border rounded-md overflow-hidden mb-4 animate-in"
-      style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-      <div className="flex justify-between items-center px-4 py-3 border-b"
+    <div className="rounded border overflow-hidden mb-4 animate-in"
+      style={{ borderColor: active.length > 0 ? "var(--border-active)" : "var(--border)", background: "var(--surface)" }}>
+      <div className="px-4 py-2.5 border-b flex items-center justify-between"
         style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-        <span className="text-xs font-medium" style={{ color: "var(--t1)" }}>Active Trades</span>
-        <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>
-          {active.length} Active
+        <div className="flex items-center gap-2">
+          {active.length > 0 && <div className="w-1 h-1 rounded-full animate-pulse-dot" style={{ background: "var(--warn)" }} />}
+          <span className="text-[11px] font-medium" style={{ color: "var(--t1)" }}>Active Trades</span>
+        </div>
+        <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>
+          {active.length} in flight
         </span>
       </div>
-      {display.map(t => (
-        <ActiveTrade key={t.id} trade={t} onUpdate={onUpdate} />
-      ))}
+      {display.map(t => <ActiveTrade key={t.id} trade={t} onUpdate={onUpdate} />)}
     </div>
   );
 }
