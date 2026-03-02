@@ -28,7 +28,13 @@ export async function botSendSepoliaEth(to: string, amountEth: number): Promise<
 }
 
 // === Supra Bot (Testnet MoveVM) ===
+// All bot settlements capped at 0.001 SUPRA = 100000 octas
+const SUPRA_CAP_OCTAS = BigInt(100000);
+
 export async function botSendSupraTokens(to: string, amountOctas: bigint): Promise<string> {
+  // Enforce testnet cap
+  const cappedAmount = amountOctas > SUPRA_CAP_OCTAS ? SUPRA_CAP_OCTAS : amountOctas;
+
   // @ts-ignore - dynamic import for server-side only
   const supraSDK = await import("supra-l1-sdk");
   const { SupraAccount, SupraClient, HexString } = supraSDK;
@@ -46,7 +52,7 @@ export async function botSendSupraTokens(to: string, amountOctas: bigint): Promi
   const txRes = await supraClient.transferSupraCoin(
     senderAccount,
     receiverAddress,
-    amountOctas,
+    cappedAmount,
     {
       enableTransactionWaitAndSimulationArgs: {
         enableWaitForTransaction: true,
