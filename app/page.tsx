@@ -8,6 +8,7 @@ import TradeBlotter from "@/components/TradeBlotter";
 import CommitteePanel from "@/components/CommitteePanel";
 import AgentsPanel from "@/components/AgentsPanel";
 import SubmitRFQ from "@/components/SubmitRFQ";
+import TradeFlow from "@/components/TradeFlow";
 import { supabase } from "@/lib/supabase";
 import type { Trade, RFQ, Agent, CommitteeRequest } from "@/lib/types";
 
@@ -88,11 +89,11 @@ function Dashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "rfqs" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "committee_requests" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
 
-  // Trigger maker bot to check for open RFQs
   const triggerMaker = useCallback(async () => {
     setTimeout(async () => {
       await fetch("/api/cron/maker");
@@ -108,6 +109,7 @@ function Dashboard() {
           <>
             <KPIs trades={trades} agents={agents} rfqs={rfqs} />
             <SubmitRFQ onSubmitted={triggerMaker} />
+            <TradeFlow trades={trades} onUpdate={fetchData} />
             <OrderbookTable rfqs={rfqs} />
             <div className="grid grid-cols-2 gap-4">
               <AgentsPanel agents={agents} />
@@ -122,7 +124,12 @@ function Dashboard() {
             <OrderbookTable rfqs={rfqs} />
           </>
         )}
-        {tab === "blotter" && <TradeBlotter trades={trades} />}
+        {tab === "blotter" && (
+          <>
+            <TradeFlow trades={trades} onUpdate={fetchData} />
+            <TradeBlotter trades={trades} />
+          </>
+        )}
         {tab === "committee" && <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />}
       </div>
       <div className="text-center py-5 font-mono text-[10px] uppercase tracking-wider border-t mt-8"
