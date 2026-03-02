@@ -31,10 +31,13 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
       if (data.error) {
         setResult({ ok: false, msg: data.error });
       } else {
-        setResult({ ok: true, msg: data.rfq.display_id + " submitted" });
+        const matchMsg = data.matched 
+          ? data.rfq.display_id + " matched → " + data.trade.display_id
+          : data.rfq.display_id + " submitted";
+        setResult({ ok: true, msg: matchMsg });
         setSize("");
         onSubmitted?.();
-        setTimeout(() => setResult(null), 4000);
+        setTimeout(() => setResult(null), 5000);
       }
     } catch (e: any) {
       setResult({ ok: false, msg: e.message });

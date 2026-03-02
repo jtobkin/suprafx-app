@@ -66,9 +66,13 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       const data = await res.json();
       if (data.error) { setMsg(data.error); }
       else {
-        setMsg("TX confirmed — committee verifying…");
+        setMsg(data.verified ? "Verified by committee (5/5)" : "TX confirmed — verifying…");
         setTxHash("");
-        setTimeout(async () => { await fetch("/api/cron/verify"); onUpdate(); }, 3000);
+        onUpdate();
+        // Poll for update if not yet verified
+        if (!data.verified) {
+          setTimeout(() => onUpdate(), 3000);
+        }
       }
     } catch (e: any) { setMsg(e.message); }
     setLoading(false);
@@ -121,7 +125,22 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
 
   const simulateMaker = async () => {
     const hash = "a" + Array.from({ length: 63 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-    await confirmTx("maker", hash);
+    setLoading(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/confirm-tx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tradeId: trade.id, txHash: hash, side: "maker" }),
+      });
+      const data = await res.json();
+      if (data.error) { setMsg(data.error); }
+      else {
+        setMsg(data.status === "settled" ? "Trade settled!" : "Maker TX sent — verifying…");
+        onUpdate();
+      }
+    } catch (e: any) { setMsg(e.message); }
+    setLoading(false);
   };
 
   const hasRealWallet = !!evmAddress && !isDemo;
