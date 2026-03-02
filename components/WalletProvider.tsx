@@ -142,7 +142,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const txHash = await evm.request({
       method: "eth_sendTransaction",
-      params: [{ from, to, value: valueWei, gas: "0x5208" }],
+      params: [{ from, to, value: valueWei }],
     });
     return txHash;
   }, [evmAddress, evmProv]);
