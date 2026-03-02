@@ -49,7 +49,7 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
 }
 
 function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }) {
-  const { evmAddress, isDemo, sendSepoliaEth } = useWallet();
+  const { evmAddress, supraAddress, isDemo, sendSepoliaEth, sendSupraTokens } = useWallet();
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: string; text: string; color?: string }>>([]);
@@ -57,6 +57,7 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
   const autoRef = useRef(false);
 
   const hasWallet = !!evmAddress && !isDemo;
+  const hasSupraWallet = !!supraAddress && !isDemo;
 
   const addLog = (text: string, color?: string) => {
     const now = new Date();
@@ -131,17 +132,45 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
     setLoading(false);
   };
 
-  // === MANUAL: Simulate Maker ===
+  // === MANUAL: Maker Send on Supra ===
   const manualMakerSend = async () => {
     setLoading(true);
-    const hash = "a" + Array.from({ length: 63 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-    addLog("Maker sending on " + trade.dest_chain + "…");
-    const data = await confirmTx("maker", hash);
-    if (data.status === "settled") {
-      addLog("Trade settled in " + (data.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
+
+    if (hasSupraWallet) {
+      // Real Supra send
+      try {
+        addLog("Sending SUPRA tokens to taker on testnet…");
+        // Send 0.01 SUPRA (tiny amount for testnet)
+        const takerAddr = trade.taker_address;
+        const hash = await sendSupraTokens(takerAddr, 0.01);
+        addLog("Supra TX broadcast: " + String(hash).slice(0, 20) + "…", "var(--accent-light)");
+        addLog("Submitting to committee…");
+        const data = await confirmTx("maker", String(hash));
+        if (data.status === "settled") {
+          addLog("Trade settled in " + (data.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
+        } else {
+          addLog("Maker TX sent — verifying…", "var(--warn)");
+        }
+      } catch (e: any) {
+        addLog("Supra send error: " + (e.message || e), "var(--negative)");
+        // Fallback to simulated
+        addLog("Falling back to simulated maker send…", "var(--warn)");
+        const hash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+        const data = await confirmTx("maker", hash);
+        if (data.status === "settled") addLog("Trade settled!", "var(--positive)");
+      }
     } else {
-      addLog("Maker TX submitted, verifying…", "var(--warn)");
+      // Simulated maker send
+      const hash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+      addLog("Simulated maker TX: " + hash.slice(0, 20) + "…");
+      const data = await confirmTx("maker", hash);
+      if (data.status === "settled") {
+        addLog("Trade settled in " + (data.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
+      } else {
+        addLog("Maker TX submitted — verifying…", "var(--warn)");
+      }
     }
+
     onUpdate();
     setLoading(false);
   };
@@ -162,10 +191,11 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
         const makerAddr = trade.maker_address.startsWith("0x")
           ? trade.maker_address
           : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e";
-        addLog("Requesting wallet signature…");
+        addLog("Requesting MetaMask signature…");
         takerHash = await sendSepoliaEth(makerAddr, valueWei);
       } else {
         takerHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+        addLog("Demo taker TX generated");
       }
 
       addLog("Taker TX broadcast: " + takerHash.slice(0, 18) + "…", "var(--accent-light)");
@@ -191,10 +221,23 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
       if (!autoRef.current) return;
 
       // Step 4: Maker sends on Supra
-      addLog("Maker sending on " + trade.dest_chain + "…");
-      await new Promise(r => setTimeout(r, 2000));
-      const makerHash = "a" + Array.from({ length: 63 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-      addLog("Maker TX broadcast: " + makerHash.slice(0, 18) + "…", "var(--accent-light)");
+      addLog("Maker sending SUPRA on " + trade.dest_chain + "…");
+      await new Promise(r => setTimeout(r, 1000));
+
+      let makerHash: string;
+      if (hasSupraWallet) {
+        try {
+          const takerAddr = trade.taker_address;
+          makerHash = String(await sendSupraTokens(takerAddr, 0.01));
+          addLog("Supra TX broadcast: " + makerHash.slice(0, 20) + "…", "var(--accent-light)");
+        } catch (e: any) {
+          addLog("Supra send failed, using simulated TX: " + (e.message || ""), "var(--warn)");
+          makerHash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+        }
+      } else {
+        makerHash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+        addLog("Simulated maker TX: " + makerHash.slice(0, 20) + "…");
+      }
       if (!autoRef.current) return;
 
       // Step 5: Committee verifies maker TX
@@ -317,8 +360,8 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
           <span className="text-[11px]" style={{ color: "var(--positive)" }}>Taker verified (5/5).</span>
           <button onClick={manualMakerSend} disabled={loading}
             className="px-3 py-[6px] rounded text-[10px] font-semibold disabled:opacity-30"
-            style={{ background: "var(--surface-3)", color: "var(--t0)", border: "1px solid var(--border-active)" }}>
-            {loading ? "…" : "Simulate Maker Send"}
+            style={{ background: hasSupraWallet ? "var(--positive)" : "var(--surface-3)", color: hasSupraWallet ? "#fff" : "var(--t0)", border: hasSupraWallet ? "none" : "1px solid var(--border-active)" }}>
+            {loading ? "Sending…" : hasSupraWallet ? "Send on Supra Testnet" : "Simulate Maker Send"}
           </button>
         </div>
       )}
