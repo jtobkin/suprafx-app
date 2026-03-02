@@ -321,6 +321,31 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
         </div>
       </div>
 
+      {/* Addresses & chains */}
+      <div className="flex items-center gap-4 mt-1.5 mb-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Taker</span>
+          <span className="font-mono text-[10px]" style={{ color: "var(--accent-light)" }}>
+            {trade.taker_address.slice(0, 10)}…{trade.taker_address.slice(-4)}
+          </span>
+          <span className="text-[8px] px-1.5 py-0.5 rounded font-mono"
+            style={{ background: "rgba(37,99,235,0.08)", color: "var(--accent-light)" }}>
+            {trade.source_chain}
+          </span>
+        </div>
+        <span className="text-[10px]" style={{ color: "var(--t3)" }}>→</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Maker</span>
+          <span className="font-mono text-[10px]" style={{ color: "var(--positive)" }}>
+            {trade.maker_address === "auto-maker-bot" ? "Auto Bot" : trade.maker_address.slice(0, 10) + "…" + trade.maker_address.slice(-4)}
+          </span>
+          <span className="text-[8px] px-1.5 py-0.5 rounded font-mono"
+            style={{ background: "rgba(16,185,129,0.08)", color: "var(--positive)" }}>
+            {trade.dest_chain}
+          </span>
+        </div>
+      </div>
+
       <Progress status={trade.status} />
 
       {/* === OPEN: Show mode selection === */}
