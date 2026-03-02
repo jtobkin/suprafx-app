@@ -7,6 +7,7 @@ import OrderbookTable from "@/components/OrderbookTable";
 import TradeBlotter from "@/components/TradeBlotter";
 import CommitteePanel from "@/components/CommitteePanel";
 import AgentsPanel from "@/components/AgentsPanel";
+import SubmitRFQ from "@/components/SubmitRFQ";
 import { supabase } from "@/lib/supabase";
 import type { Trade, RFQ, Agent, CommitteeRequest } from "@/lib/types";
 
@@ -62,7 +63,6 @@ function Login() {
 }
 
 function Dashboard() {
-  const { address } = useWallet();
   const [tab, setTab] = useState<"overview" | "orderbook" | "blotter" | "committee">("overview");
   const [trades, setTrades] = useState<Trade[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
@@ -84,15 +84,20 @@ function Dashboard() {
 
   useEffect(() => {
     fetchData();
-
-    // Real-time subscriptions
     const channel = supabase.channel("realtime-all")
       .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "rfqs" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "committee_requests" }, () => fetchData())
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
+  // Trigger maker bot to check for open RFQs
+  const triggerMaker = useCallback(async () => {
+    setTimeout(async () => {
+      await fetch("/api/cron/maker");
+      fetchData();
+    }, 2000);
   }, [fetchData]);
 
   return (
@@ -102,6 +107,7 @@ function Dashboard() {
         {tab === "overview" && (
           <>
             <KPIs trades={trades} agents={agents} rfqs={rfqs} />
+            <SubmitRFQ onSubmitted={triggerMaker} />
             <OrderbookTable rfqs={rfqs} />
             <div className="grid grid-cols-2 gap-4">
               <AgentsPanel agents={agents} />
@@ -110,7 +116,12 @@ function Dashboard() {
             <TradeBlotter trades={trades} />
           </>
         )}
-        {tab === "orderbook" && <OrderbookTable rfqs={rfqs} />}
+        {tab === "orderbook" && (
+          <>
+            <SubmitRFQ onSubmitted={triggerMaker} />
+            <OrderbookTable rfqs={rfqs} />
+          </>
+        )}
         {tab === "blotter" && <TradeBlotter trades={trades} />}
         {tab === "committee" && <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />}
       </div>
@@ -126,7 +137,6 @@ export default function Page() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
-
   return (
     <WalletProvider>
       <Inner />
