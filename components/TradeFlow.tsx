@@ -80,14 +80,18 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
     setMsg(null);
     try {
       // Convert trade size to wei — use a tiny amount for testnet demo
-      // Send 0.00001 ETH to testnet escrow
+      // Send 0.00001 ETH to the maker's address (from the matched trade)
       const valueWei = "0x" + BigInt(10000000000000).toString(16); // 0.00001 ETH
       
-      // Testnet escrow — a neutral address (not self, not burn)
-      const destination = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      // In production: send actual trade amount to maker
+      // For testnet demo: send tiny amount to maker address
+      // If maker is the bot (no real address), use a placeholder EOA
+      const makerAddr = trade.maker_address.startsWith("0x") 
+        ? trade.maker_address 
+        : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e"; // fallback for bot maker
       
-      setMsg("Waiting for wallet approval…");
-      const hash = await sendSepoliaEth(destination, valueWei);
+      setMsg("Sending to maker " + makerAddr.slice(0,8) + "…");
+      const hash = await sendSepoliaEth(makerAddr, valueWei);
       
       setMsg("TX sent! Hash: " + hash.slice(0, 14) + "… — submitting to committee");
       
