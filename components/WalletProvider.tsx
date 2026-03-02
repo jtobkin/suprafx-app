@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 
 interface WalletCtx {
   address: string | null;
@@ -11,96 +11,97 @@ interface WalletCtx {
   evmShort: string;
   isDemo: boolean;
   sendSepoliaEth: (to: string, valueWei: string) => Promise<string>;
+  evmProvider: any;
 }
 
 const Ctx = createContext<WalletCtx>({
-  address: null,
-  evmAddress: null,
-  connect: async () => {},
-  demo: () => {},
-  disconnect: () => {},
-  short: "",
-  evmShort: "",
-  isDemo: false,
-  sendSepoliaEth: async () => "",
+  address: null, evmAddress: null, connect: async () => {}, demo: () => {},
+  disconnect: () => {}, short: "", evmShort: "", isDemo: false,
+  sendSepoliaEth: async () => "", evmProvider: null,
 });
 
 export function useWallet() { return useContext(Ctx); }
 
-const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111
+const SEPOLIA_CHAIN_ID = "0xaa36a7";
 
-async function switchToSepolia(provider: any) {
-  try {
-    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA_CHAIN_ID }] });
-  } catch (switchError: any) {
-    if (switchError.code === 4902) {
-      await provider.request({
-        method: "wallet_addEthereumChain",
-        params: [{
-          chainId: SEPOLIA_CHAIN_ID,
-          chainName: "Sepolia Testnet",
-          nativeCurrency: { name: "SepoliaETH", symbol: "ETH", decimals: 18 },
-          rpcUrls: ["https://rpc.sepolia.org"],
-          blockExplorerUrls: ["https://sepolia.etherscan.io"],
-        }],
-      });
-    }
-  }
+function getEvmProvider(): any {
+  if (typeof window === "undefined") return null;
+  // StarKey may inject as window.starkey.ethereum or window.ethereum
+  return (window as any)?.starkey?.ethereum
+    || (window as any)?.ethereum
+    || null;
+}
+
+function getSupraProvider(): any {
+  if (typeof window === "undefined") return null;
+  return (window as any)?.starkey?.supra || null;
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [evmAddress, setEvmAddress] = useState<string | null>(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [evmProv, setEvmProv] = useState<any>(null);
 
   const connect = useCallback(async () => {
-    // Try StarKey EVM first, then Supra, then MetaMask
-    const starkeyEvm = typeof window !== "undefined" && (window as any)?.starkey?.ethereum;
-    const starkeyMovevm = typeof window !== "undefined" && (window as any)?.starkey?.supra;
-    const metamask = typeof window !== "undefined" && (window as any)?.ethereum;
-
+    let primaryAddr: string | null = null;
     let evmAddr: string | null = null;
-    let supraAddr: string | null = null;
 
-    // Connect EVM (StarKey or MetaMask)
-    const evmProvider = starkeyEvm || metamask;
-    if (evmProvider) {
+    // 1. Try Supra provider (StarKey MoveVM)
+    const supra = getSupraProvider();
+    if (supra) {
       try {
-        const accounts = await evmProvider.request({ method: "eth_requestAccounts" });
-        evmAddr = accounts?.[0] || null;
-        if (evmAddr) {
-          await switchToSepolia(evmProvider);
-          setEvmAddress(evmAddr);
+        const resp = await supra.connect();
+        const acc = Array.isArray(resp) ? resp : await supra.account();
+        if (acc?.[0]) {
+          primaryAddr = acc[0];
+          // If address starts with 0x, it might be EVM-compatible
+          if (primaryAddr?.startsWith("0x")) {
+            evmAddr = primaryAddr;
+          }
         }
-      } catch (e) {
-        console.warn("EVM connect failed:", e);
-      }
+      } catch (e) { console.warn("Supra connect error:", e); }
     }
 
-    // Also connect Supra if available
-    if (starkeyMovevm) {
+    // 2. Try EVM provider (StarKey EVM or MetaMask)
+    const evm = getEvmProvider();
+    if (evm) {
       try {
-        await starkeyMovevm.connect();
-        const acc = await starkeyMovevm.account();
-        supraAddr = acc?.[0] || null;
-      } catch (e) {
-        console.warn("Supra connect failed:", e);
-      }
+        const accounts = await evm.request({ method: "eth_requestAccounts" });
+        if (accounts?.[0]) {
+          evmAddr = accounts[0];
+          if (!primaryAddr) primaryAddr = evmAddr;
+          setEvmProv(evm);
+
+          // Try switching to Sepolia
+          try {
+            await evm.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA_CHAIN_ID }] });
+          } catch (switchErr: any) {
+            if (switchErr.code === 4902) {
+              await evm.request({
+                method: "wallet_addEthereumChain",
+                params: [{
+                  chainId: SEPOLIA_CHAIN_ID,
+                  chainName: "Sepolia Testnet",
+                  nativeCurrency: { name: "SepoliaETH", symbol: "ETH", decimals: 18 },
+                  rpcUrls: ["https://rpc.sepolia.org"],
+                  blockExplorerUrls: ["https://sepolia.etherscan.io"],
+                }],
+              });
+            }
+          }
+        }
+      } catch (e) { console.warn("EVM connect error:", e); }
     }
 
-    const primaryAddr = evmAddr || supraAddr;
     if (primaryAddr) {
       setAddress(primaryAddr);
+      setEvmAddress(evmAddr);
       setIsDemo(false);
-      // Register agent
       await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          walletAddress: primaryAddr,
-          role: "taker",
-          domain: `agent-${primaryAddr.slice(0, 6)}`,
-        }),
+        body: JSON.stringify({ walletAddress: primaryAddr, role: "taker", domain: `agent-${primaryAddr.slice(0, 8)}` }),
       });
     } else {
       alert("No wallet detected. Install StarKey (starkey.app) or MetaMask, or use demo mode.");
@@ -111,6 +112,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const addr = "demo_" + Math.random().toString(16).slice(2, 14);
     setAddress(addr);
     setEvmAddress(null);
+    setEvmProv(null);
     setIsDemo(true);
     fetch("/api/register", {
       method: "POST",
@@ -120,41 +122,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnect = useCallback(() => {
-    const p = typeof window !== "undefined" && (window as any)?.starkey?.supra;
-    if (p) p.disconnect?.();
+    const supra = getSupraProvider();
+    if (supra) supra.disconnect?.();
     setAddress(null);
     setEvmAddress(null);
+    setEvmProv(null);
     setIsDemo(false);
   }, []);
 
   const sendSepoliaEth = useCallback(async (to: string, valueWei: string): Promise<string> => {
-    const evmProvider = typeof window !== "undefined" && ((window as any)?.starkey?.ethereum || (window as any)?.ethereum);
-    if (!evmProvider || !evmAddress) {
-      throw new Error("No EVM wallet connected");
-    }
+    const evm = evmProv || getEvmProvider();
+    const from = evmAddress;
+    if (!evm || !from) throw new Error("No EVM wallet connected");
 
-    // Ensure on Sepolia
-    await switchToSepolia(evmProvider);
+    // Ensure Sepolia
+    try {
+      await evm.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA_CHAIN_ID }] });
+    } catch {}
 
-    // Send transaction
-    const txHash = await evmProvider.request({
+    const txHash = await evm.request({
       method: "eth_sendTransaction",
-      params: [{
-        from: evmAddress,
-        to,
-        value: valueWei,
-        gas: "0x5208", // 21000
-      }],
+      params: [{ from, to, value: valueWei, gas: "0x5208" }],
     });
-
     return txHash;
-  }, [evmAddress]);
+  }, [evmAddress, evmProv]);
 
   const short = address ? address.slice(0, 6) + "…" + address.slice(-4) : "";
   const evmShort = evmAddress ? evmAddress.slice(0, 6) + "…" + evmAddress.slice(-4) : "";
 
   return (
-    <Ctx.Provider value={{ address, evmAddress, connect, demo, disconnect, short, evmShort, isDemo, sendSepoliaEth }}>
+    <Ctx.Provider value={{ address, evmAddress, connect, demo, disconnect, short, evmShort, isDemo, sendSepoliaEth, evmProvider: evmProv }}>
       {children}
     </Ctx.Provider>
   );
