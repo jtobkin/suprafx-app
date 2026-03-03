@@ -588,6 +588,8 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const { supraAddress } = useWallet();
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [expandedCompleted, setExpandedCompleted] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
   const [attestations, setAttestations] = useState<Record<string, string>>({});
 
@@ -791,75 +793,172 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
 
       {completedTrades.length > 0 && (
         <>
-          <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)" }}>
-            <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>
+          <div className="px-4 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/[0.01] transition-colors"
+            style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)" }}
+            onClick={() => setShowCompleted(!showCompleted)}>
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>
+              <span className="text-[10px]" style={{ color: "var(--t3)" }}>{showCompleted ? "▲" : "▼"}</span>
+            </div>
             <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
               {completedTrades.length} execution{completedTrades.length !== 1 ? "s" : ""}
             </span>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr style={{ background: "var(--surface-2)" }}>
-                {["ID","Pair","Size","Rate","Route","Time","Taker TX","Maker TX","Attestation","Status"].map(h => (
-                  <th key={h} className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider border-b"
-                    style={{ color: "var(--t3)", borderColor: "var(--border)" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
+          {showCompleted && (
+            <div>
               {completedTrades.map(t => {
                 const att = attestations[t.id];
                 const takerTxUrl = txUrl(t.taker_tx_hash || "", t.source_chain);
                 const makerTxUrl = txUrl(t.maker_tx_hash || "", t.dest_chain);
+                const isExpanded = expandedCompleted === t.id;
+                const pairClean = displayPair(t.pair);
+                const [base, quote] = t.pair.split("/");
+                const baseClean = base.replace("fx", "");
+                const quoteClean = quote.replace("fx", "");
+                const rfq = rfqs.find(r => r.id === t.rfq_id);
+                const tradeQuotes = rfq ? quotes.filter(q => q.rfq_id === rfq.id) : [];
+                const askingPrice = rfq?.reference_price;
+                const priceDiff = askingPrice && askingPrice > 0 ? ((t.rate - askingPrice) / askingPrice) * 100 : null;
+
                 return (
-                  <tr key={t.id} className="transition-colors hover:bg-white/[0.02]"
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                    <td className="px-3 py-2.5 mono text-[12px]" style={{ color: "var(--t2)" }}>{t.display_id}</td>
-                    <td className="px-3 py-2.5 text-[13px] font-semibold">{displayPair(t.pair)}</td>
-                    <td className="px-3 py-2.5 mono text-[13px]">{t.size}</td>
-                    <td className="px-3 py-2.5 mono text-[13px]" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</td>
-                    <td className="px-3 py-2.5 text-[12px]" style={{ color: "var(--t3)" }}>{t.source_chain} {"→"} {t.dest_chain}</td>
-                    <td className="px-3 py-2.5 mono text-[13px]" style={{ color: t.settle_ms ? "var(--positive)" : "var(--t3)" }}>
-                      {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : "—"}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {t.taker_tx_hash && takerTxUrl ? (
-                        <a href={takerTxUrl} target="_blank" rel="noopener"
-                          className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
-                          {t.source_chain === "sepolia" ? "Etherscan" : "SupraScan"} {"↗"}
-                        </a>
-                      ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"—"}</span>}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {t.maker_tx_hash && makerTxUrl ? (
-                        <a href={makerTxUrl} target="_blank" rel="noopener"
-                          className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
-                          {t.dest_chain === "supra-testnet" ? "SupraScan" : "Etherscan"} {"↗"}
-                        </a>
-                      ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"—"}</span>}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {att ? (
-                        <a href={`https://testnet.suprascan.io/tx/${att.replace(/^0x/, "")}`} target="_blank" rel="noopener"
-                          className="mono text-[12px] hover:underline" style={{ color: "var(--positive)" }}>
-                          On-chain {"↗"}
-                        </a>
-                      ) : t.status === "settled" ? (
-                        <span className="text-[12px]" style={{ color: "var(--t3)" }}>pending</span>
-                      ) : (
-                        <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"—"}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5">
+                  <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
+                      onClick={() => setExpandedCompleted(isExpanded ? null : t.id)}>
+                      <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{t.display_id}</span>
+                      <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
+                      <span className="mono text-[13px] w-24 shrink-0">{t.size} {baseClean}</span>
+                      <span className="mono text-[13px] w-28 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)} {quoteClean}</span>
+                      <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} → {t.dest_chain}</span>
+                      <span className="mono text-[13px] shrink-0" style={{ color: t.settle_ms ? "var(--positive)" : "var(--t3)" }}>
+                        {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : "—"}
+                      </span>
+                      <div className="flex-1" />
                       <span className={`tag tag-${t.status}`}>
                         {t.status === "settled" ? "Settled" : t.status.replace(/_/g, " ")}
                       </span>
-                    </td>
-                  </tr>
+                      <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="px-6 pb-4 pt-1" style={{ background: "var(--bg-raised)" }}>
+                        {/* --- Trade Summary --- */}
+                        <div className="grid grid-cols-3 gap-6 mb-4">
+                          <div>
+                            <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Price Execution</span>
+                            {askingPrice ? (
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px]" style={{ color: "var(--t3)" }}>Asked:</span>
+                                  <span className="mono text-[13px]" style={{ color: "var(--t2)" }}>{fmtRate(askingPrice)} {quoteClean}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px]" style={{ color: "var(--t3)" }}>Filled:</span>
+                                  <span className="mono text-[13px] font-semibold" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)} {quoteClean}</span>
+                                  {priceDiff !== null && (
+                                    <span className="mono text-[11px]" style={{ color: priceDiff >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                                      {priceDiff >= 0 ? "+" : ""}{priceDiff.toFixed(2)}%
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[11px]" style={{ color: "var(--t3)" }}>Notional:</span>
+                                  <span className="mono text-[13px]" style={{ color: "var(--positive)" }}>
+                                    {(t.size * t.rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} {quoteClean}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="mono text-[13px]" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)} {quoteClean}</span>
+                            )}
+                          </div>
+
+                          <div>
+                            <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Counterparties</span>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[11px] w-12" style={{ color: "var(--t3)" }}>Taker:</span>
+                              <AddrWithRep addr={t.taker_address} chain={t.source_chain} agents={agents} isMine={t.taker_address === supraAddress} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] w-12" style={{ color: "var(--t3)" }}>Maker:</span>
+                              <AddrWithRep addr={t.maker_address} chain={t.dest_chain} agents={agents} isMine={t.maker_address === supraAddress} />
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Settlement</span>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[11px] w-16" style={{ color: "var(--t3)" }}>Taker TX:</span>
+                              {t.taker_tx_hash && takerTxUrl ? (
+                                <a href={takerTxUrl} target="_blank" rel="noopener" className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
+                                  {t.taker_tx_hash.slice(0, 10)}…{t.taker_tx_hash.slice(-6)} ↗
+                                </a>
+                              ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>—</span>}
+                            </div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[11px] w-16" style={{ color: "var(--t3)" }}>Maker TX:</span>
+                              {t.maker_tx_hash && makerTxUrl ? (
+                                <a href={makerTxUrl} target="_blank" rel="noopener" className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
+                                  {t.maker_tx_hash.slice(0, 10)}…{t.maker_tx_hash.slice(-6)} ↗
+                                </a>
+                              ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>—</span>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] w-16" style={{ color: "var(--t3)" }}>Attestation:</span>
+                              {att ? (
+                                <a href={`https://testnet.suprascan.io/tx/${att.replace(/^0x/, "")}`} target="_blank" rel="noopener"
+                                  className="mono text-[12px] hover:underline" style={{ color: "var(--positive)" }}>
+                                  {att.slice(0, 10)}…{att.slice(-6)} ↗
+                                </a>
+                              ) : t.status === "settled" ? (
+                                <span className="text-[12px]" style={{ color: "var(--t3)" }}>pending</span>
+                              ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>—</span>}
+                            </div>
+                            {t.settle_ms && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[11px] w-16" style={{ color: "var(--t3)" }}>Duration:</span>
+                                <span className="mono text-[13px] font-semibold" style={{ color: "var(--positive)" }}>
+                                  {(t.settle_ms / 1000).toFixed(1)}s
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* --- Quote History --- */}
+                        {tradeQuotes.length > 0 && (
+                          <div>
+                            <span className="mono text-[10px] uppercase tracking-wider block mb-1.5" style={{ color: "var(--t3)" }}>
+                              Quote History ({tradeQuotes.length} quote{tradeQuotes.length !== 1 ? "s" : ""})
+                            </span>
+                            <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+                              {tradeQuotes.map((q, qi) => {
+                                const qDiff = askingPrice && askingPrice > 0 ? ((q.rate - askingPrice) / askingPrice) * 100 : null;
+                                return (
+                                  <div key={q.id} className="flex items-center gap-4 px-4 py-2"
+                                    style={{ borderBottom: qi < tradeQuotes.length - 1 ? "1px solid var(--border)" : "none", background: q.status === "accepted" ? "rgba(16,185,129,0.04)" : "transparent" }}>
+                                    <div className="w-36">
+                                      <AddrWithRep addr={q.maker_address} chain={t.dest_chain} agents={agents} isMine={q.maker_address === supraAddress} />
+                                    </div>
+                                    <span className="mono text-[13px] w-32" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
+                                    {qDiff !== null && (
+                                      <span className="mono text-[11px] w-20" style={{ color: qDiff >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                                        {qDiff >= 0 ? "+" : ""}{qDiff.toFixed(2)}%
+                                      </span>
+                                    )}
+                                    <span className={`tag tag-${q.status}`}>{q.status}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          )}
         </>
       )}
     </div>
