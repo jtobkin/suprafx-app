@@ -793,19 +793,14 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
 
       {completedTrades.length > 0 && (
         <>
-          <div className="px-4 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/[0.01] transition-colors"
-            style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)" }}
-            onClick={() => setShowCompleted(!showCompleted)}>
-            <div className="flex items-center gap-2">
-              <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>
-              <span className="text-[10px]" style={{ color: "var(--t3)" }}>{showCompleted ? "▲" : "▼"}</span>
-            </div>
+          <div className="px-4 py-2.5 flex items-center justify-between"
+            style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)" }}>
+            <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>
             <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
               {completedTrades.length} execution{completedTrades.length !== 1 ? "s" : ""}
             </span>
           </div>
-          {showCompleted && (
-            <div>
+          <div>
               {completedTrades.map(t => {
                 const att = attestations[t.id];
                 const takerTxUrl = txUrl(t.taker_tx_hash || "", t.source_chain);
@@ -958,7 +953,6 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                 );
               })}
             </div>
-          )}
         </>
       )}
     </div>
