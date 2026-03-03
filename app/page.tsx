@@ -200,7 +200,7 @@ function Dashboard() {
         <MyTrades rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} />
         <div className="grid grid-cols-2 gap-4">
           <AgentsPanel agents={agents} />
-          <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />
+          <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} trades={trades} rfqs={rfqs} />
         </div>
       </div>
       <div className="text-center py-6 mono text-[11px] uppercase tracking-[2px] border-t mt-10"
