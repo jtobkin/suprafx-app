@@ -24,9 +24,8 @@
       "parameters": {
         "action": { "type": "string", "const": "submit_rfq" },
         "agentAddress": { "type": "string", "description": "User's Supra wallet address (0x + 64 hex chars)" },
-        "pair": { "type": "string", "enum": ["ETH/SUPRA", "SUPRA/ETH"], "description": "Trading pair" },
+        "pair": { "type": "string", "enum": ["ETH/SUPRA", "SUPRA/ETH", "fxAAVE/SUPRA", "fxLINK/SUPRA", "fxUSDC/SUPRA", "fxUSDT/SUPRA", "fxAAVE/fxUSDT", "fxAAVE/fxUSDC", "fxUSDT/fxUSDC", "fxLINK/fxUSDC", "fxLINK/fxUSDT"], "description": "Trading pair" },
         "size": { "type": "string", "description": "Amount of source tokens to swap" },
-        "maxDiscount": { "type": "string", "description": "Max acceptable discount vs reference rate, as percentage. Default 0.5" }
       },
       "required": ["action", "agentAddress", "pair", "size"]
     },
@@ -100,12 +99,22 @@
 
   "reference_data": {
     "pairs": {
-      "ETH/SUPRA": { "refPrice": 2200, "sourceChain": "Sepolia (Ethereum testnet)", "destChain": "Supra Testnet" },
-      "SUPRA/ETH": { "refPrice": 0.000454, "sourceChain": "Supra Testnet", "destChain": "Sepolia (Ethereum testnet)" }
+      "ETH/SUPRA": { "refPrice": 2200, "sourceChain": "Sepolia", "destChain": "Supra Testnet" },
+      "SUPRA/ETH": { "refPrice": 0.000454, "sourceChain": "Supra Testnet", "destChain": "Sepolia" },
+      "fxAAVE/SUPRA": { "refPrice": 168, "sourceChain": "Sepolia", "destChain": "Supra Testnet" },
+      "fxLINK/SUPRA": { "refPrice": 8.2, "sourceChain": "Sepolia", "destChain": "Supra Testnet" },
+      "fxUSDC/SUPRA": { "refPrice": 0.56, "sourceChain": "Sepolia", "destChain": "Supra Testnet" },
+      "fxUSDT/SUPRA": { "refPrice": 0.56, "sourceChain": "Sepolia", "destChain": "Supra Testnet" },
+      "fxAAVE/fxUSDT": { "refPrice": 95.50, "sourceChain": "Sepolia", "destChain": "Sepolia" },
+      "fxAAVE/fxUSDC": { "refPrice": 95.50, "sourceChain": "Sepolia", "destChain": "Sepolia" },
+      "fxUSDT/fxUSDC": { "refPrice": 1.0, "sourceChain": "Sepolia", "destChain": "Sepolia" },
+      "fxLINK/fxUSDC": { "refPrice": 14.80, "sourceChain": "Sepolia", "destChain": "Sepolia" },
+      "fxLINK/fxUSDT": { "refPrice": 14.80, "sourceChain": "Sepolia", "destChain": "Sepolia" }
     },
     "settlement_caps": {
       "eth": "0.00001 ETH",
-      "supra": "0.001 SUPRA"
+      "supra": "0.001 SUPRA",
+      "erc20": "0.01 tokens"
     },
     "committee": "3-of-5 independent nodes verify every on-chain transfer"
   },

@@ -4,15 +4,47 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { getBotAddresses } from '@/lib/bot-wallets';
 
+// Normalize clean token names to internal fx-prefixed format
+function normalizePair(pair: string): string {
+  const map: Record<string, string> = {
+    AAVE: 'fxAAVE', LINK: 'fxLINK', USDC: 'fxUSDC', USDT: 'fxUSDT',
+  };
+  const [base, quote] = pair.split('/');
+  return (map[base] || base) + '/' + (map[quote] || quote);
+}
+
 // Reference prices (would come from oracle in production)
 const REF_PRICES: Record<string, number> = {
-  'ETH/SUPRA': 2200,    // 1 ETH = 2200 SUPRA
-  'SUPRA/ETH': 0.000454, // 1 SUPRA = 0.000454 ETH
+  // Cross-chain: ETH ↔ Supra
+  'ETH/SUPRA': 2200,
+  'SUPRA/ETH': 0.000454,
+  // Cross-chain: ERC-20 ↔ Supra
+  'fxAAVE/SUPRA': 168,         // 1 AAVE ≈ 168 SUPRA
+  'fxLINK/SUPRA': 8.2,         // 1 LINK ≈ 8.2 SUPRA
+  'fxUSDC/SUPRA': 0.56,        // 1 USDC ≈ 0.56 SUPRA
+  'fxUSDT/SUPRA': 0.56,        // 1 USDT ≈ 0.56 SUPRA
+  // EVM-only: token swaps on Sepolia
+  'fxAAVE/fxUSDT': 95.50,      // 1 AAVE ≈ 95.50 USDT
+  'fxAAVE/fxUSDC': 95.50,
+  'fxUSDT/fxUSDC': 1.0,
+  'fxLINK/fxUSDC': 14.80,
+  'fxLINK/fxUSDT': 14.80,
 };
 
 const PAIRS: Record<string, { source: string; dest: string }> = {
+  // Cross-chain
   'ETH/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
   'SUPRA/ETH': { source: 'supra-testnet', dest: 'sepolia' },
+  'fxAAVE/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
+  'fxLINK/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
+  'fxUSDC/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
+  'fxUSDT/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
+  // EVM-only
+  'fxAAVE/fxUSDT': { source: 'sepolia', dest: 'sepolia' },
+  'fxAAVE/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
+  'fxUSDT/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
+  'fxLINK/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
+  'fxLINK/fxUSDT': { source: 'sepolia', dest: 'sepolia' },
 };
 
 // All bot settlements capped at 0.001 SUPRA (100000 octas)
@@ -20,7 +52,7 @@ const SETTLEMENT_CAP_OCTAS = 100000;
 const SETTLEMENT_CAP_SUPRA = 0.001;
 const SETTLEMENT_CAP_ETH = 0.00001;
 
-const SPREAD_BPS = 10; // 0.1% spread
+const SPREAD_BPS = 30; // 0.3% — bot quotes 0.3% below reference
 
 /*
  * POST /api/skill/suprafx
@@ -57,35 +89,41 @@ export async function POST(req: NextRequest) {
 
 function handleGetPairs() {
   return NextResponse.json({
-    pairs: Object.entries(REF_PRICES).map(([pair, price]) => ({
-      pair,
-      referencePrice: price,
-      sourceChain: PAIRS[pair].source,
-      destChain: PAIRS[pair].dest,
-      settlementCap: pair.startsWith('ETH') ? `${SETTLEMENT_CAP_ETH} ETH` : `${SETTLEMENT_CAP_SUPRA} SUPRA`,
-    })),
-    note: 'All testnet settlements are capped at 0.001 SUPRA / 0.00001 ETH regardless of notional size.',
+    pairs: Object.entries(REF_PRICES).map(([pair, price]) => {
+      const base = pair.split('/')[0];
+      let cap = `${SETTLEMENT_CAP_ETH} ETH`;
+      if (base === 'SUPRA') cap = `${SETTLEMENT_CAP_SUPRA} SUPRA`;
+      else if (base.startsWith('fx')) cap = `0.01 ${base}`;
+      return {
+        pair,
+        referencePrice: price,
+        sourceChain: PAIRS[pair].source,
+        destChain: PAIRS[pair].dest,
+        settlementCap: cap,
+      };
+    }),
+    note: 'All testnet settlements are capped at small amounts regardless of notional size.',
   });
 }
 
 async function handleSubmitRFQ(body: any) {
-  const { agentAddress, pair, size, maxDiscount } = body;
+  const { agentAddress, pair, size, quotedPrice } = body;
 
   if (!agentAddress) {
     return NextResponse.json({ error: 'agentAddress required — the Supra address of the requesting agent' }, { status: 400 });
   }
-  if (!pair || !PAIRS[pair]) {
+  const normalizedPair = normalizePair(pair);
+  if (!normalizedPair || !PAIRS[normalizedPair]) {
     return NextResponse.json({
-      error: `pair required. Available: ${Object.keys(PAIRS).join(', ')}`,
+      error: `Unsupported pair: ${pair}. Available: ${Object.keys(PAIRS).join(', ')}`,
     }, { status: 400 });
   }
   if (!size || parseFloat(size) <= 0) {
     return NextResponse.json({ error: 'size required — number of tokens to exchange' }, { status: 400 });
   }
 
-  const discount = parseFloat(maxDiscount || '0.5') / 100; // convert percentage to decimal
-  const refPrice = REF_PRICES[pair];
-  const { source, dest } = PAIRS[pair];
+    const refPrice = REF_PRICES[normalizedPair];
+  const { source, dest } = PAIRS[normalizedPair];
 
   const db = getServiceClient();
   const botAddrs = getBotAddresses();
@@ -107,12 +145,12 @@ async function handleSubmitRFQ(body: any) {
   const { data: rfq, error: rfqErr } = await db.from('rfqs').insert({
     display_id: displayId,
     taker_address: agentAddress,
-    pair,
+    pair: normalizedPair,
     size: parseFloat(size),
     source_chain: source,
     dest_chain: dest,
-    max_slippage: discount,
-    reference_price: refPrice,
+    max_slippage: 0,
+    reference_price: quotedPrice ? parseFloat(quotedPrice) : refPrice,
     status: 'open',
     expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
   }).select().single();
@@ -121,7 +159,8 @@ async function handleSubmitRFQ(body: any) {
 
   // Auto-match with maker bot
   const makerAddress = 'auto-maker-bot';
-  const rate = refPrice * (1 + SPREAD_BPS / 10000);
+  const userPrice = quotedPrice ? parseFloat(quotedPrice) : refPrice;
+  const rate = refPrice * (1 - SPREAD_BPS / 10000);
 
   await db.from('agents').upsert({
     wallet_address: makerAddress,
@@ -170,7 +209,6 @@ async function handleSubmitRFQ(body: any) {
       pair,
       size: parseFloat(size),
       referencePrice: refPrice,
-      maxDiscount: parseFloat(maxDiscount || '0.5'),
     },
     trade: {
       id: trade.id,
@@ -290,7 +328,6 @@ export async function GET() {
           agentAddress: 'your_supra_address',
           pair: 'ETH/SUPRA or SUPRA/ETH',
           size: 'number of tokens',
-          maxDiscount: 'max discount percentage (e.g. 0.5 for 0.5%)',
         },
         description: 'Submit a request for quote — auto-matches with maker bot',
       },

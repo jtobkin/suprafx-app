@@ -397,24 +397,28 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
                 {loading ? "Sending…" : "Manual: Send on Sepolia"}
               </button>
             )}
-            <button onClick={manualDemoTx} disabled={loading}
-              className="px-3 py-[7px] rounded text-[14px] font-mono disabled:opacity-30"
-              style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
-              Demo TX
-            </button>
+            {isDemo && (
+              <button onClick={manualDemoTx} disabled={loading}
+                className="px-3 py-[7px] rounded text-[14px] font-mono disabled:opacity-30"
+                style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
+                Demo TX
+              </button>
+            )}
           </div>
-          {/* Manual hash input */}
-          <div className="flex items-center gap-2">
-            <input type="text" placeholder="or paste TX hash: 0x…" value={txHash}
-              onChange={e => setTxHash(e.target.value)}
-              className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
-              style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-            <button onClick={manualSubmitHash} disabled={loading || !txHash.trim()}
-              className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
-              style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
-              Submit
-            </button>
-          </div>
+          {/* Manual hash input — demo only */}
+          {isDemo && (
+            <div className="flex items-center gap-2">
+              <input type="text" placeholder="or paste TX hash: 0x…" value={txHash}
+                onChange={e => setTxHash(e.target.value)}
+                className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
+                style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+              <button onClick={manualSubmitHash} disabled={loading || !txHash.trim()}
+                className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
+                style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
+                Submit
+              </button>
+            </div>
+          )}
         </div>
       )}
 

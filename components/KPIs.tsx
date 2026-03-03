@@ -12,25 +12,27 @@ export default function KPIs({ trades, agents, rfqs }: { trades: Trade[]; agents
   const active = trades.filter(t => !["settled", "failed"].includes(t.status)).length;
 
   const items = [
-    { label: "Counterparties", value: String(agents.length), sub: "connected" },
+    { label: "Agents", value: String(agents.length), sub: "connected" },
     { label: "Open RFQs", value: String(rfqs.filter(r => r.status === "open").length), sub: "in book" },
-    { label: "Active", value: String(active), sub: "in flight", color: active > 0 ? "var(--warn)" : undefined },
+    { label: "In-Flight", value: String(active), sub: "settling", color: active > 0 ? "var(--warn)" : undefined },
     { label: "Settled", value: String(done.length), sub: "completed", color: "var(--positive)" },
-    { label: "Avg Settlement", value: avg > 0 ? avg.toFixed(1) + "s" : "—", sub: "end to end" },
+    { label: "Avg Time", value: avg > 0 ? avg.toFixed(1) + "s" : "—", sub: "settlement" },
     { label: "Volume", value: "$" + fmt(vol, 0), sub: "notional" },
   ];
 
   return (
-    <div className="grid grid-cols-6 mb-4 animate-in" style={{ gap: "1px", background: "var(--border)", borderRadius: "4px", overflow: "hidden", border: "1px solid var(--border)" }}>
-      {items.map(i => (
-        <div key={i.label} className="px-3.5 py-3" style={{ background: "var(--surface)" }}>
-          <div className="text-[13px] font-medium uppercase tracking-[0.8px] mb-1" style={{ color: "var(--t3)" }}>
-            {i.label}
+    <div className="grid grid-cols-6 gap-2 mb-5 animate-in">
+      {items.map((item, i) => (
+        <div key={item.label} className="card px-4 py-3.5 relative overflow-hidden" style={{ animationDelay: `${i * 0.04}s` }}>
+          {item.color && <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: item.color, opacity: 0.6 }} />}
+          <div className="text-[12px] font-medium uppercase tracking-[1px] mb-2" style={{ color: "var(--t3)" }}>
+            {item.label}
           </div>
-          <div className="font-mono text-[17px] font-semibold tracking-tight leading-none" style={{ color: i.color || "var(--t0)" }}>
-            {i.value}
+          <div className="mono text-[22px] font-bold tracking-tight leading-none mb-1"
+            style={{ color: item.color || "var(--t0)" }}>
+            {item.value}
           </div>
-          <div className="text-[13px] mt-0.5" style={{ color: "var(--t3)" }}>{i.sub}</div>
+          <div className="text-[12px]" style={{ color: "var(--t3)" }}>{item.sub}</div>
         </div>
       ))}
     </div>

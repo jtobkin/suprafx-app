@@ -1,61 +1,44 @@
 "use client";
 import { useWallet } from "./WalletProvider";
 
-const tabs = ["overview", "orderbook", "blotter", "committee"] as const;
-type Tab = typeof tabs[number];
-
-export default function Header({ active, onTab, onProfileClick }: { active: Tab; onTab: (t: Tab) => void; onProfileClick: () => void }) {
-  const { supraShort, evmShort, isDemo, isVerified, profile } = useWallet();
+export default function Header({ onProfileClick }: { onProfileClick: () => void }) {
+  const { supraShort, isDemo, isVerified } = useWallet();
 
   return (
-    <header className="h-11 flex items-center justify-between px-5 border-b sticky top-0 z-40"
-      style={{ borderColor: "var(--border)", background: "rgba(6,6,10,0.92)", backdropFilter: "blur(12px)" }}>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-sm" style={{ background: "var(--accent)" }} />
-          <span className="font-mono text-[13px] font-semibold tracking-tight" style={{ color: "var(--t0)" }}>SupraFX</span>
-        </div>
-        <div className="h-3.5 w-px" style={{ background: "var(--border)" }} />
-        <span className="font-mono text-[13px] uppercase tracking-[1.5px]" style={{ color: "var(--t3)" }}>
-          {isDemo ? "Demo" : "Testnet"}
-        </span>
-      </div>
+    <header className="h-12 flex items-center justify-between px-5 border-b sticky top-0 z-40 glass-strong">
+      {/* Left: spacer to balance */}
+      <div style={{ width: "140px" }} />
 
-      <div className="flex h-full">
-        {tabs.map(t => (
-          <button key={t} onClick={() => onTab(t)}
-            className="relative px-4 h-full text-[13px] font-medium tracking-wide transition-colors"
-            style={{ color: active === t ? "var(--t0)" : "var(--t3)", background: "none", border: "none" }}>
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-            {active === t && <div className="absolute bottom-0 left-4 right-4 h-[1.5px] rounded-full" style={{ background: "var(--accent)" }} />}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5">
-          <div className="w-1 h-1 rounded-full animate-pulse-dot" style={{ background: "var(--positive)" }} />
-          <span className="font-mono text-[13px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>
-            {isDemo ? "Demo" : "Live"}
-          </span>
-        </div>
-
-        {/* Profile button */}
-        <button onClick={onProfileClick}
-          className="flex items-center gap-2 px-2.5 py-1 rounded transition-all hover:brightness-110"
-          style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-          {/* Status dots */}
-          <div className="flex items-center gap-1">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} title="Supra verified" />
-            <div className="w-1.5 h-1.5 rounded-full"
-              style={{ background: isVerified ? "var(--positive)" : "var(--warn)" }}
-              title={isVerified ? "EVM verified" : "EVM not linked"} />
+      {/* Center: logo + testnet badge */}
+      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="relative">
+            <div className="w-2.5 h-2.5 rounded-sm rotate-45" style={{ background: "var(--accent)" }} />
+            <div className="absolute inset-0 w-2.5 h-2.5 rounded-sm rotate-45 animate-pulse-dot" style={{ background: "var(--accent)", opacity: 0.4 }} />
           </div>
-          <span className="font-mono text-[14px]" style={{ color: "var(--t1)" }}>
-            {supraShort}
+          <span className="mono text-[14px] font-bold tracking-tight" style={{ color: "var(--t0)" }}>SupraFX</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full"
+          style={{ background: isDemo ? "var(--warn-dim)" : "var(--positive-dim)" }}>
+          <div className="w-1 h-1 rounded-full animate-pulse-dot"
+            style={{ background: isDemo ? "var(--warn)" : "var(--positive)" }} />
+          <span className="mono text-[10px] font-semibold uppercase tracking-wider"
+            style={{ color: isDemo ? "var(--warn)" : "var(--positive)" }}>
+            {isDemo ? "Demo" : "Testnet"}
           </span>
-        </button>
+        </div>
       </div>
+
+      {/* Right: profile */}
+      <button onClick={onProfileClick}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-md transition-all hover:brightness-110"
+        style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+        <div className="flex items-center gap-1">
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: isVerified ? "var(--positive)" : "var(--warn)" }} />
+        </div>
+        <span className="mono text-[12px] font-medium" style={{ color: "var(--t1)" }}>{supraShort}</span>
+      </button>
     </header>
   );
 }
