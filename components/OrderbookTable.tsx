@@ -777,15 +777,8 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
               <div key={r.id} style={{ borderBottom: "1px solid var(--border)" }}>
                 <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
                   onClick={() => setExpandedRfq(isExpanded ? null : r.id)}>
-                  <span className="mono text-[12px] shrink-0 flex items-center gap-2" style={{ color: "var(--t3)" }}>
+                  <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>
                       {generateTxId(r.display_id, r.taker_address)}
-                      {isMine && (
-                        <a onClick={(e) => { e.stopPropagation(); cancelRfq(r.id); }}
-                          className="text-[11px] cursor-pointer hover:underline"
-                          style={{ color: cancelling === r.id ? "var(--t3)" : "var(--negative)" }}>
-                          {cancelling === r.id ? "..." : "cancel"}
-                        </a>
-                      )}
                     </span>
                   <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                   <span className="mono text-[13px] w-24 shrink-0">{r.size} {baseClean}</span>

@@ -91,16 +91,14 @@ export default function OraclePrice({ pair }: { pair: string }) {
   return (
     <div className="border-t" style={{ borderColor: "var(--border)" }}>
       <div className="px-4 py-2.5" style={{ background: flashBg, transition: "background 0.4s" }}>
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-6 flex-wrap justify-center">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="text-[13px] font-semibold" style={{ color: "var(--t1)" }}>Reference Price</span>
             <span className="mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded"
               style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>Supra Oracle</span>
+            <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{ago}s</span>
           </div>
-          <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{ago}s ago</span>
-        </div>
-
-        <div className="flex items-center gap-6 flex-wrap justify-center">
+          <div style={{ borderLeft: "1px solid var(--border)", height: "24px" }} />
           <div>
             <div className="text-[11px] mb-0.5" style={{ color: "var(--t3)" }}>{baseName}</div>
             <div className="flex items-baseline gap-1.5">
