@@ -630,7 +630,11 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       });
       const data = await res.json();
       if (data.error) alert(data.error);
-      else onAcceptQuote?.();
+      else {
+        // Auto-expand the new trade to show settlement UI
+        if (data.trade?.id) setExpandedTrade(data.trade.id);
+        onAcceptQuote?.();
+      }
     } catch (e: any) { alert(e.message); }
     setAccepting(null);
   };
@@ -750,22 +754,33 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
               {activeTrades.map(t => {
                 const isMine = t.taker_address === supraAddress;
                 const pairClean = displayPair(t.pair);
+                const isTradeExpanded = expandedTrade === t.id;
                 return (
-                  <div key={t.id} className="flex items-center gap-4 px-4 py-3 hover:bg-white/[0.01] transition-colors"
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                    <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{t.display_id}</span>
-                    <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
-                    <span className="mono text-[13px] w-24 shrink-0">{t.size}</span>
-                    <span className="mono text-[13px] flex-1" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
-                    <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} {"→"} {t.dest_chain}</span>
-                    <div className="shrink-0">
-                      <AddrWithRep addr={t.taker_address} chain={t.source_chain} agents={agents} isMine={isMine} />
+                  <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
+                      onClick={() => setExpandedTrade(isTradeExpanded ? null : t.id)}>
+                      <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{t.display_id}</span>
+                      <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
+                      <span className="mono text-[13px] w-24 shrink-0">{t.size}</span>
+                      <span className="mono text-[13px] flex-1" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
+                      <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} → {t.dest_chain}</span>
+                      <div className="shrink-0">
+                        <AddrWithRep addr={t.taker_address} chain={t.source_chain} agents={agents} isMine={isMine} />
+                      </div>
+                      <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>↔</span>
+                      <div className="shrink-0">
+                        <AddrWithRep addr={t.maker_address} chain={t.dest_chain} agents={agents} isMine={t.maker_address === supraAddress} />
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
+                        <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "▲" : "▼"}</span>
+                      </div>
                     </div>
-                    <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{"↔"}</span>
-                    <div className="shrink-0">
-                      <AddrWithRep addr={t.maker_address} chain={t.dest_chain} agents={agents} isMine={t.maker_address === supraAddress} />
-                    </div>
-                    <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
+                    {isTradeExpanded && onUpdate && (
+                      <div style={{ background: "var(--bg-raised)" }}>
+                        <ActiveTrade trade={t} onUpdate={onUpdate} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
