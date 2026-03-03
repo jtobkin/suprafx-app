@@ -750,7 +750,16 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
         </div>
       ) : (
         <div>
-          {filteredOpenRfqs.map(r => {
+                      <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>TX ID</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Pair</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>Size</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium flex-1" style={{ color: "var(--t3)" }}>Asking</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Route</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Taker</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Quotes</span>
+            </div>
+            {filteredOpenRfqs.map(r => {
             const isMine = r.taker_address === supraAddress;
             const rfqQuotes = quotes.filter(q => q.rfq_id === r.id).sort((a, b) => b.rate - a.rate);
             const isExpanded = expandedRfq === r.id;
@@ -864,7 +873,17 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                   <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>In-Flight</span>
                 </div>
               )}
-              {filteredActiveTrades.map(t => {
+                          <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>TX ID</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Pair</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>Size</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium flex-1" style={{ color: "var(--t3)" }}>Rate</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Route</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Taker</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Maker</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Status</span>
+            </div>
+            {filteredActiveTrades.map(t => {
                 const isMine = t.taker_address === supraAddress;
                 const pairClean = displayPair(t.pair);
                 const isTradeExpanded = expandedTrade === t.id;
@@ -927,7 +946,18 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             </div>
           </div>
           <div>
-              {filteredCompletedTrades.map(t => {
+                          <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>TX ID</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Pair</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>Size</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Rate</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Route</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Taker</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Maker</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Time</span>
+              <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Status</span>
+            </div>
+            {filteredCompletedTrades.map(t => {
                 const att = attestations[t.id];
                 const takerTxUrl = txUrl(t.taker_tx_hash || "", t.source_chain);
                 const makerTxUrl = txUrl(t.maker_tx_hash || "", t.dest_chain);

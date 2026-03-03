@@ -179,7 +179,18 @@ export default function MyTrades({ rfqs, trades, quotes, agents }: Props) {
 
       {/* Rows */}
       <div>
-        {rows.map(row => {
+                <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>TX ID</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>Pair</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium w-20 shrink-0" style={{ color: "var(--t3)" }}>Size</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Rate</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium w-14 shrink-0" style={{ color: "var(--t3)" }}>Side</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Counterparty</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium flex-1" style={{ color: "var(--t3)" }}>Route</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium w-14 shrink-0" style={{ color: "var(--t3)" }}>Settle</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Status</span>
+          </div>
+          {rows.map(row => {
           const isExpanded = expanded === row.id;
           const pairClean = displayPair(row.pair);
           const [base, quote] = row.pair.split("/");
