@@ -77,3 +77,12 @@ export interface SValue {
   pair: string;
   price: number;
 }
+
+export interface Quote {
+  id: string;
+  rfq_id: string;
+  maker_address: string;
+  rate: number;
+  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  created_at: string;
+}

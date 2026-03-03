@@ -10,7 +10,7 @@ import AgentsPanel from "@/components/AgentsPanel";
 import SubmitRFQ from "@/components/SubmitRFQ";
 import TradeFlow from "@/components/TradeFlow";
 import { supabase } from "@/lib/supabase";
-import type { Trade, RFQ, Agent, CommitteeRequest } from "@/lib/types";
+import type { Trade, RFQ, Agent, CommitteeRequest, Quote } from "@/lib/types";
 
 import { InteractiveGlobe } from "@/components/ui/interactive-globe";
 
@@ -159,18 +159,21 @@ function Dashboard() {
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [requests, setRequests] = useState<CommitteeRequest[]>([]);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
 
   const fetchAll = useCallback(async () => {
-    const [t, r, a, cr] = await Promise.all([
+    const [t, r, a, cr, q] = await Promise.all([
       supabase.from("trades").select("*").order("created_at", { ascending: false }),
       supabase.from("rfqs").select("*").order("created_at", { ascending: false }),
       supabase.from("agents").select("*").order("created_at", { ascending: false }),
       supabase.from("committee_requests").select("*").order("created_at", { ascending: false }),
+      supabase.from("quotes").select("*").order("created_at", { ascending: false }),
     ]);
     if (t.data) setTrades(t.data);
     if (r.data) setRfqs(r.data);
     if (a.data) setAgents(a.data);
     if (cr.data) setRequests(cr.data);
+    if (q.data) setQuotes(q.data);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -181,6 +184,7 @@ function Dashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "committee_requests" }, () => fetchAll())
       .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => fetchAll())
       .on("postgres_changes", { event: "*", schema: "public", table: "committee_votes" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "quotes" }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchAll]);
@@ -194,7 +198,7 @@ function Dashboard() {
         <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <SubmitRFQ onSubmitted={fetchAll} />
         <TradeFlow trades={trades} onUpdate={fetchAll} />
-        <OrderbookTable rfqs={rfqs} trades={trades} />
+        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} />
         <div className="grid grid-cols-2 gap-4">
           <AgentsPanel agents={agents} />
           <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />

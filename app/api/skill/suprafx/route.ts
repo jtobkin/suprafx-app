@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
         return handleCheckTrade(body);
       case 'list_trades':
         return handleListTrades(body);
+      case 'accept_quote':
+        return handleAcceptQuote(body);
       default:
         return NextResponse.json({
           error: 'Unknown action. Available: get_pairs, submit_rfq, check_trade, list_trades',
@@ -231,6 +233,66 @@ async function handleSubmitRFQ(body: any) {
   });
 }
 
+
+async function handleAcceptQuote(body: any) {
+  const { quoteId, agentAddress } = body;
+  if (!quoteId) return NextResponse.json({ error: 'quoteId required' }, { status: 400 });
+  if (!agentAddress) return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
+
+  const db = getServiceClient();
+
+  // Get quote
+  const { data: quote, error: qErr } = await db.from('quotes').select('*').eq('id', quoteId).single();
+  if (qErr || !quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
+  if (quote.status !== 'pending') return NextResponse.json({ error: 'Quote is no longer pending' }, { status: 400 });
+
+  // Get RFQ
+  const { data: rfq, error: rErr } = await db.from('rfqs').select('*').eq('id', quote.rfq_id).single();
+  if (rErr || !rfq) return NextResponse.json({ error: 'RFQ not found' }, { status: 404 });
+  if (rfq.taker_address !== agentAddress) return NextResponse.json({ error: 'Only the RFQ taker can accept quotes' }, { status: 403 });
+  if (rfq.status !== 'open') return NextResponse.json({ error: 'RFQ is no longer open' }, { status: 400 });
+
+  // Accept quote, reject others
+  await db.from('quotes').update({ status: 'accepted' }).eq('id', quoteId);
+  await db.from('quotes').update({ status: 'rejected' }).eq('rfq_id', rfq.id).neq('id', quoteId).eq('status', 'pending');
+  await db.from('rfqs').update({ status: 'matched' }).eq('id', rfq.id);
+
+  // Create trade from accepted quote
+  const tradeCount = ((await db.from('trades').select('id', { count: 'exact' })).count || 0) + 1;
+  const tradeDisplayId = `T-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${String(tradeCount).padStart(3, '0')}`;
+
+  const { data: trade, error: tradeErr } = await db.from('trades').insert({
+    display_id: tradeDisplayId,
+    rfq_id: rfq.id,
+    pair: rfq.pair,
+    size: rfq.size,
+    rate: quote.rate,
+    source_chain: rfq.source_chain,
+    dest_chain: rfq.dest_chain,
+    taker_address: rfq.taker_address,
+    maker_address: quote.maker_address,
+    status: 'open',
+  }).select().single();
+
+  if (tradeErr) return NextResponse.json({ error: tradeErr.message }, { status: 500 });
+
+  return NextResponse.json({
+    success: true,
+    trade: {
+      id: trade.id,
+      displayId: tradeDisplayId,
+      pair: rfq.pair,
+      size: rfq.size,
+      rate: quote.rate,
+      notional: rfq.size * quote.rate,
+      sourceChain: rfq.source_chain,
+      destChain: rfq.dest_chain,
+      status: 'open',
+      maker: quote.maker_address,
+    },
+    nextStep: `Trade created. To settle, POST to /api/confirm-tx with { tradeId: "${trade.id}", txHash: "<your_tx_hash>", side: "taker" }.`,
+  });
+}
 async function handleCheckTrade(body: any) {
   const { tradeId } = body;
   if (!tradeId) return NextResponse.json({ error: 'tradeId required' }, { status: 400 });
