@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from 'next/server';
 const SUPRA_API_KEY = process.env.SUPRA_ORACLE_API_KEY || '9c7f2e4a6b1d8f03a5e9c27d4b6f8a1c3d5e7f902b4a6c8d1e3f5a7b9c0d2e4f';
 const BASE_URL = 'https://prod-kline-rest.supra.com';
 
-// Map our app tokens to Supra oracle pair names
 const TOKEN_TO_ORACLE: Record<string, string> = {
   ETH: 'eth_usdt',
   SUPRA: 'supra_usdt',
@@ -34,7 +33,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Fetch base token price
     const baseRes = await fetch(`${BASE_URL}/latest?trading_pair=${basePair}`, {
       headers: { 'x-api-key': SUPRA_API_KEY },
       cache: 'no-store',
@@ -48,7 +46,6 @@ export async function GET(req: NextRequest) {
 
     let quoteInstrument = null;
     if (quotePair && quote !== 'fxUSDT' && quote !== 'fxUSDC') {
-      // Fetch quote token price for cross rates
       const quoteRes = await fetch(`${BASE_URL}/latest?trading_pair=${quotePair}`, {
         headers: { 'x-api-key': SUPRA_API_KEY },
         cache: 'no-store',
@@ -63,7 +60,7 @@ export async function GET(req: NextRequest) {
     const baseChange = parseFloat(baseInstrument['24h_change']);
     const baseTime = baseInstrument.time;
 
-    let quotePrice = 1; // default for stablecoin quotes
+    let quotePrice = 1;
     let quoteHigh = 1;
     let quoteLow = 1;
     let quoteChange = 0;
@@ -77,7 +74,6 @@ export async function GET(req: NextRequest) {
       quoteTime = quoteInstrument.time;
     }
 
-    // Conversion: how many quote tokens per 1 base token
     const conversionRate = quotePrice > 0 ? basePrice / quotePrice : 0;
 
     const res = NextResponse.json({
@@ -103,9 +99,7 @@ export async function GET(req: NextRequest) {
       conversionRate,
       updatedAt: Date.now(),
     });
-    // Add cache-busting headers
     res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.headers.set('Pragma', 'no-cache');
     return res;
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });

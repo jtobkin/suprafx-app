@@ -100,7 +100,7 @@ export default function OraclePrice({ pair }: { pair: string }) {
           <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{ago}s ago</span>
         </div>
 
-        <div className="flex items-center gap-6 flex-wrap">
+        <div className="flex items-center gap-6 flex-wrap justify-center">
           <div>
             <div className="text-[11px] mb-0.5" style={{ color: "var(--t3)" }}>{baseName}</div>
             <div className="flex items-baseline gap-1.5">
