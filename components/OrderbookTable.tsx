@@ -26,7 +26,7 @@ function txUrl(h: string, chain: string) {
 
 function shortAddr(addr: string) {
   if (addr === "auto-maker-bot") return "SupraFX Bot";
-  if (addr.length > 16) return addr.slice(0, 6) + "\u2026" + addr.slice(-4);
+  if (addr.length > 16) return addr.slice(0, 6) + "…" + addr.slice(-4);
   return addr;
 }
 
@@ -45,7 +45,7 @@ function RepBadge({ score }: { score: number | null }) {
   return (
     <span className="mono text-[10px] ml-1 px-1 py-0.5 rounded"
       style={{ background: "var(--surface-2)", color: Number(score) >= 4 ? "var(--positive)" : "var(--t3)" }}>
-      {"\u2605"} {Number(score).toFixed(1)}
+      {"★"} {Number(score).toFixed(1)}
     </span>
   );
 }
@@ -136,7 +136,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       <div className="card-header">
         <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Active Trades</span>
         <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
-          {openRfqs.length} RFQ{openRfqs.length !== 1 ? "s" : ""} {"\u00B7"} {activeTrades.length} in-flight
+          {openRfqs.length} RFQ{openRfqs.length !== 1 ? "s" : ""} {"·"} {activeTrades.length} in-flight
         </span>
       </div>
 
@@ -168,13 +168,13 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                       {fmtRate(r.reference_price)} {quoteClean}/{baseClean}
                     </span>
                   </div>
-                  <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{r.source_chain} {"\u2192"} {r.dest_chain}</span>
+                  <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{r.source_chain} {"→"} {r.dest_chain}</span>
                   <div className="shrink-0">
                     <AddrWithRep addr={r.taker_address} chain={r.source_chain} agents={agents} isMine={isMine} />
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="tag tag-open">{rfqQuotes.length} quote{rfqQuotes.length !== 1 ? "s" : ""}</span>
-                    <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "\u25B2" : "\u25BC"}</span>
+                    <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
                   </div>
                 </div>
 
@@ -251,11 +251,11 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                     <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                     <span className="mono text-[13px] w-24 shrink-0">{t.size}</span>
                     <span className="mono text-[13px] flex-1" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
-                    <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} {"\u2192"} {t.dest_chain}</span>
+                    <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} {"→"} {t.dest_chain}</span>
                     <div className="shrink-0">
                       <AddrWithRep addr={t.taker_address} chain={t.source_chain} agents={agents} isMine={isMine} />
                     </div>
-                    <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{"\u2194"}</span>
+                    <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{"↔"}</span>
                     <div className="shrink-0">
                       <AddrWithRep addr={t.maker_address} chain={t.dest_chain} agents={agents} isMine={t.maker_address === supraAddress} />
                     </div>
@@ -297,36 +297,36 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                     <td className="px-3 py-2.5 text-[13px] font-semibold">{displayPair(t.pair)}</td>
                     <td className="px-3 py-2.5 mono text-[13px]">{t.size}</td>
                     <td className="px-3 py-2.5 mono text-[13px]" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</td>
-                    <td className="px-3 py-2.5 text-[12px]" style={{ color: "var(--t3)" }}>{t.source_chain} {"\u2192"} {t.dest_chain}</td>
+                    <td className="px-3 py-2.5 text-[12px]" style={{ color: "var(--t3)" }}>{t.source_chain} {"→"} {t.dest_chain}</td>
                     <td className="px-3 py-2.5 mono text-[13px]" style={{ color: t.settle_ms ? "var(--positive)" : "var(--t3)" }}>
-                      {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : "\u2014"}
+                      {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : "—"}
                     </td>
                     <td className="px-3 py-2.5">
                       {t.taker_tx_hash && takerTxUrl ? (
                         <a href={takerTxUrl} target="_blank" rel="noopener"
                           className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
-                          {t.source_chain === "sepolia" ? "Etherscan" : "SupraScan"} {"\u2197"}
+                          {t.source_chain === "sepolia" ? "Etherscan" : "SupraScan"} {"↗"}
                         </a>
-                      ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"\u2014"}</span>}
+                      ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"—"}</span>}
                     </td>
                     <td className="px-3 py-2.5">
                       {t.maker_tx_hash && makerTxUrl ? (
                         <a href={makerTxUrl} target="_blank" rel="noopener"
                           className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
-                          {t.dest_chain === "supra-testnet" ? "SupraScan" : "Etherscan"} {"\u2197"}
+                          {t.dest_chain === "supra-testnet" ? "SupraScan" : "Etherscan"} {"↗"}
                         </a>
-                      ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"\u2014"}</span>}
+                      ) : <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"—"}</span>}
                     </td>
                     <td className="px-3 py-2.5">
                       {att ? (
                         <a href={`https://testnet.suprascan.io/tx/${att.replace(/^0x/, "")}`} target="_blank" rel="noopener"
                           className="mono text-[12px] hover:underline" style={{ color: "var(--positive)" }}>
-                          On-chain {"\u2197"}
+                          On-chain {"↗"}
                         </a>
                       ) : t.status === "settled" ? (
                         <span className="text-[12px]" style={{ color: "var(--t3)" }}>pending</span>
                       ) : (
-                        <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"\u2014"}</span>
+                        <span className="text-[12px]" style={{ color: "var(--t3)" }}>{"—"}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5">

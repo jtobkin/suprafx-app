@@ -79,7 +79,7 @@ function ChainTokenSelector({
           <span className="mono text-[13px] font-semibold leading-tight" style={{ color: "var(--t0)" }}>{token}</span>
           <span className="mono text-[10px] leading-tight" style={{ color: "var(--t3)" }}>{CHAINS[chain]?.name}</span>
         </div>
-        <span className="text-[10px] ml-auto" style={{ color: "var(--t3)" }}>{open ? "\u25B2" : "\u25BC"}</span>
+        <span className="text-[10px] ml-auto" style={{ color: "var(--t3)" }}>{open ? "▲" : "▼"}</span>
       </button>
 
       {open && (
@@ -200,7 +200,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
         <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>New RFQ</span>
         <div className="flex items-center gap-3">
           {isCrossChain && <span className="tag" style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>cross-chain</span>}
-          <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>{CHAINS[sellChain]?.name} \u2192 {CHAINS[buyChain]?.name}</span>
+          <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>{CHAINS[sellChain]?.name} → {CHAINS[buyChain]?.name}</span>
         </div>
       </div>
       <div className="px-4 py-4" style={{ position: "relative", zIndex: 10 }}>
@@ -224,7 +224,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
 
           {/* Arrow */}
           <div className="flex items-center pb-1" style={{ color: "var(--t3)" }}>
-            <span className="text-[16px]">\u2192</span>
+            <span className="text-[16px]">→</span>
           </div>
 
           {/* Buying */}
@@ -261,7 +261,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "var(--t3)" }}>You Receive</label>
             <div className="flex items-center rounded-md px-3 py-2" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
               <span className="mono text-[14px] font-semibold flex-1" style={{ color: receiveAmount > 0 ? "var(--positive)" : "var(--t3)" }}>
-                {receiveAmount > 0 ? (receiveAmount >= 1000 ? receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receiveAmount.toFixed(4)) : "\u2014"}
+                {receiveAmount > 0 ? (receiveAmount >= 1000 ? receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receiveAmount.toFixed(4)) : "—"}
               </span>
               <div className="flex items-center gap-1 ml-2">
                 <CoinIcon token={buyToken} size={14} />
