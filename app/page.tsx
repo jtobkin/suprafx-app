@@ -59,10 +59,9 @@ function Login() {
             {[
               { v: "Multi-Chain", l: "Atomic Settlement" },
               { v: "3-of-5", l: "Committee Multisig" },
-              { v: "<18s", l: "Avg Settle Time" },
             ].map((s, i) => (
               <div key={i} className="flex-1 px-5 py-3.5 text-center"
-                style={{ background: "var(--surface)", borderRight: i < 2 ? "1px solid var(--border)" : "none" }}>
+                style={{ background: "var(--surface)", borderRight: i < 1 ? "1px solid var(--border)" : "none" }}>
                 <div className="mono text-[18px] font-bold tracking-tight" style={{ color: "var(--t0)" }}>{s.v}</div>
                 <div className="text-[11px] mt-0.5 tracking-wide" style={{ color: "var(--t3)" }}>{s.l}</div>
               </div>

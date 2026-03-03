@@ -79,8 +79,8 @@ export default function OraclePrice({ pair }: { pair: string }) {
   );
 
   const [base, quote] = pair.split("/");
-  const baseName = TOKEN_LABELS[base] || base;
-  const quoteName = TOKEN_LABELS[quote] || quote;
+  const baseName = TOKEN_LABELS[base] || base.replace("fx", "");
+  const quoteName = TOKEN_LABELS[quote] || quote.replace("fx", "");
   const changeColor = data.base.change24h >= 0 ? "var(--positive)" : "var(--negative)";
   const changePrefix = data.base.change24h >= 0 ? "+" : "";
   const ago = Math.max(0, Math.round((Date.now() - data.updatedAt) / 1000));
@@ -90,8 +90,8 @@ export default function OraclePrice({ pair }: { pair: string }) {
 
   return (
     <div className="border-t" style={{ borderColor: "var(--border)" }}>
-      <div className="px-4 py-3" style={{ background: flashBg, transition: "background 0.4s" }}>
-        <div className="flex items-center justify-between mb-2">
+      <div className="px-4 py-2.5" style={{ background: flashBg, transition: "background 0.4s" }}>
+        <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-semibold" style={{ color: "var(--t1)" }}>Reference Price</span>
             <span className="mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded"
@@ -100,11 +100,11 @@ export default function OraclePrice({ pair }: { pair: string }) {
           <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{ago}s ago</span>
         </div>
 
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <div className="text-[12px] mb-0.5" style={{ color: "var(--t3)" }}>{baseName} S-Value</div>
             <div className="flex items-baseline gap-2">
-              <span className="mono text-[22px] font-bold tracking-tight" style={{ color: "var(--t0)" }}>{fmt(data.base.price)}</span>
+              <span className="mono text-[18px] font-bold tracking-tight" style={{ color: "var(--t0)" }}>{fmt(data.base.price)}</span>
               <span className="mono text-[13px] font-semibold" style={{ color: changeColor }}>{changePrefix}{data.base.change24h.toFixed(2)}%</span>
             </div>
           </div>
@@ -128,7 +128,7 @@ export default function OraclePrice({ pair }: { pair: string }) {
         </div>
 
         <button onClick={() => setShowSources(!showSources)}
-          className="mt-2 text-[12px] transition-colors hover:underline"
+          className="mt-1.5 text-[12px] transition-colors hover:underline"
           style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           {showSources ? "Hide Sources" : "View Sources"} ({DORA_SOURCES.length})
         </button>
@@ -137,7 +137,7 @@ export default function OraclePrice({ pair }: { pair: string }) {
       {showSources && (
         <div className="px-4 pb-3 animate-slide-down">
           <div className="rounded-md p-3" style={{ background: "var(--bg-raised)" }}>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1.5">
               <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>DORA Aggregation Sources</span>
               <span className="text-[11px]" style={{ color: "var(--t3)" }}>BFT consensus across {DORA_SOURCES.length} exchanges</span>
             </div>

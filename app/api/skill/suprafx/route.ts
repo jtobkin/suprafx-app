@@ -8,27 +8,42 @@ import { getBotAddresses } from '@/lib/bot-wallets';
 function normalizePair(pair: string): string {
   const map: Record<string, string> = {
     AAVE: 'fxAAVE', LINK: 'fxLINK', USDC: 'fxUSDC', USDT: 'fxUSDT',
+    fxAAVE: 'fxAAVE', fxLINK: 'fxLINK', fxUSDC: 'fxUSDC', fxUSDT: 'fxUSDT',
+    ETH: 'ETH', SUPRA: 'SUPRA',
   };
   const [base, quote] = pair.split('/');
-  return (map[base] || base) + '/' + (map[quote] || quote);
+  const nb = map[base] || base;
+  const nq = map[quote] || quote;
+  const normalized = nb + '/' + nq;
+  // Also check reverse
+  if (PAIRS[normalized]) return normalized;
+  const reversed = nq + '/' + nb;
+  if (PAIRS[reversed]) return reversed;
+  return normalized;
 }
 
 // Reference prices (would come from oracle in production)
 const REF_PRICES: Record<string, number> = {
-  // Cross-chain: ETH ↔ Supra
+  // Cross-chain: ETH <-> Supra
   'ETH/SUPRA': 2200,
   'SUPRA/ETH': 0.000454,
-  // Cross-chain: ERC-20 ↔ Supra
-  'fxAAVE/SUPRA': 168,         // 1 AAVE ≈ 168 SUPRA
-  'fxLINK/SUPRA': 8.2,         // 1 LINK ≈ 8.2 SUPRA
-  'fxUSDC/SUPRA': 0.56,        // 1 USDC ≈ 0.56 SUPRA
-  'fxUSDT/SUPRA': 0.56,        // 1 USDT ≈ 0.56 SUPRA
-  // EVM-only: token swaps on Sepolia
-  'fxAAVE/fxUSDT': 95.50,      // 1 AAVE ≈ 95.50 USDT
+  // Cross-chain: ERC-20 <-> Supra
+  'fxAAVE/SUPRA': 168,
+  'fxLINK/SUPRA': 8.2,
+  'fxUSDC/SUPRA': 0.56,
+  'fxUSDT/SUPRA': 0.56,
+  // EVM same-chain swaps
+  'fxAAVE/fxUSDT': 95.50,
   'fxAAVE/fxUSDC': 95.50,
+  'fxAAVE/fxLINK': 6.45,
   'fxUSDT/fxUSDC': 1.0,
   'fxLINK/fxUSDC': 14.80,
   'fxLINK/fxUSDT': 14.80,
+  // ETH <-> ERC-20 (same chain)
+  'ETH/fxAAVE': 26.18,
+  'ETH/fxLINK': 168.92,
+  'ETH/fxUSDC': 2500.00,
+  'ETH/fxUSDT': 2500.00,
 };
 
 const PAIRS: Record<string, { source: string; dest: string }> = {
@@ -39,14 +54,19 @@ const PAIRS: Record<string, { source: string; dest: string }> = {
   'fxLINK/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
   'fxUSDC/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
   'fxUSDT/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
-  // EVM-only
+  // EVM same-chain
   'fxAAVE/fxUSDT': { source: 'sepolia', dest: 'sepolia' },
   'fxAAVE/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
+  'fxAAVE/fxLINK': { source: 'sepolia', dest: 'sepolia' },
   'fxUSDT/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
   'fxLINK/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
   'fxLINK/fxUSDT': { source: 'sepolia', dest: 'sepolia' },
+  // ETH <-> ERC-20
+  'ETH/fxAAVE': { source: 'sepolia', dest: 'sepolia' },
+  'ETH/fxLINK': { source: 'sepolia', dest: 'sepolia' },
+  'ETH/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
+  'ETH/fxUSDT': { source: 'sepolia', dest: 'sepolia' },
 };
-
 // All bot settlements capped at 0.001 SUPRA (100000 octas)
 const SETTLEMENT_CAP_OCTAS = 100000;
 const SETTLEMENT_CAP_SUPRA = 0.001;
