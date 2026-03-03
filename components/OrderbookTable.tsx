@@ -706,7 +706,16 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
               <div key={r.id} style={{ borderBottom: "1px solid var(--border)" }}>
                 <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
                   onClick={() => setExpandedRfq(isExpanded ? null : r.id)}>
-                  <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{r.display_id}</span>
+                  <span className="mono text-[12px] shrink-0 flex items-center gap-2" style={{ color: "var(--t3)" }}>
+                      {r.display_id}
+                      {isMine && (
+                        <a onClick={(e) => { e.stopPropagation(); cancelRfq(r.id); }}
+                          className="text-[11px] cursor-pointer hover:underline"
+                          style={{ color: cancelling === r.id ? "var(--t3)" : "var(--negative)" }}>
+                          {cancelling === r.id ? "..." : "cancel"}
+                        </a>
+                      )}
+                    </span>
                   <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                   <span className="mono text-[13px] w-24 shrink-0">{r.size} {baseClean}</span>
                   <div className="flex-1 min-w-0">
@@ -721,14 +730,6 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="tag tag-open">{rfqQuotes.length} quote{rfqQuotes.length !== 1 ? "s" : ""}</span>
-                    {isMine && (
-                      <button onClick={(e) => { e.stopPropagation(); cancelRfq(r.id); }}
-                        disabled={cancelling === r.id}
-                        className="px-2 py-0.5 rounded text-[11px] font-medium transition-all hover:brightness-110 disabled:opacity-50"
-                        style={{ background: "var(--negative)", color: "#fff", border: "none" }}>
-                        {cancelling === r.id ? "..." : "Cancel"}
-                      </button>
-                    )}
                     <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
                   </div>
                 </div>
