@@ -8,7 +8,6 @@ import OrderbookTable from "@/components/OrderbookTable";
 import CommitteePanel from "@/components/CommitteePanel";
 import AgentsPanel from "@/components/AgentsPanel";
 import SubmitRFQ from "@/components/SubmitRFQ";
-import TradeFlow from "@/components/TradeFlow";
 import { supabase } from "@/lib/supabase";
 import type { Trade, RFQ, Agent, CommitteeRequest, Quote } from "@/lib/types";
 
@@ -197,8 +196,7 @@ function Dashboard() {
       <div className="max-w-[1240px] mx-auto px-5 py-5">
         <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <SubmitRFQ onSubmitted={fetchAll} />
-        <TradeFlow trades={trades} onUpdate={fetchAll} />
-        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} />
+        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} />
         <div className="grid grid-cols-2 gap-4">
           <AgentsPanel agents={agents} />
           <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />
