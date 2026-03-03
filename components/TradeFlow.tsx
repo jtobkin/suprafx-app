@@ -541,7 +541,7 @@ export default function TradeFlow({ trades, onUpdate }: { trades: Trade[]; onUpd
         style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
         <div className="flex items-center gap-2">
           {active.length > 0 && <div className="w-1 h-1 rounded-full animate-pulse-dot" style={{ background: "var(--warn)" }} />}
-          <span className="text-[14px] font-medium" style={{ color: "var(--t1)" }}>Active Trades</span>
+          <span className="text-[14px] font-medium" style={{ color: "var(--t1)" }}>Settlement Progress</span>
         </div>
         <span className="font-mono text-[14px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>
           {active.length} in flight

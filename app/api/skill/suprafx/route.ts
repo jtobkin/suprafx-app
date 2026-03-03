@@ -112,7 +112,7 @@ async function handleSubmitRFQ(body: any) {
   const { agentAddress, pair, size, quotedPrice } = body;
 
   if (!agentAddress) {
-    return NextResponse.json({ error: 'agentAddress required — the Supra address of the requesting agent' }, { status: 400 });
+    return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
   }
   const normalizedPair = normalizePair(pair);
   if (!normalizedPair || !PAIRS[normalizedPair]) {
@@ -121,16 +121,16 @@ async function handleSubmitRFQ(body: any) {
     }, { status: 400 });
   }
   if (!size || parseFloat(size) <= 0) {
-    return NextResponse.json({ error: 'size required — number of tokens to exchange' }, { status: 400 });
+    return NextResponse.json({ error: 'size required' }, { status: 400 });
   }
 
-    const refPrice = REF_PRICES[normalizedPair];
+  const refPrice = REF_PRICES[normalizedPair];
   const { source, dest } = PAIRS[normalizedPair];
+  const userPrice = quotedPrice ? parseFloat(quotedPrice) : refPrice;
 
   const db = getServiceClient();
-  const botAddrs = getBotAddresses();
 
-  // Register agent if not exists
+  // Register taker if not exists
   await db.from('agents').upsert({
     wallet_address: agentAddress,
     role: 'taker',
@@ -140,7 +140,7 @@ async function handleSubmitRFQ(body: any) {
     rep_total: 5.0,
   }, { onConflict: 'wallet_address' });
 
-  // Create RFQ
+  // Create RFQ (stays open until taker accepts a quote)
   const rfqCount = ((await db.from('rfqs').select('id', { count: 'exact' })).count || 0) + 1;
   const displayId = `RFQ-${String(rfqCount).padStart(3, '0')}`;
 
@@ -152,17 +152,16 @@ async function handleSubmitRFQ(body: any) {
     source_chain: source,
     dest_chain: dest,
     max_slippage: 0,
-    reference_price: quotedPrice ? parseFloat(quotedPrice) : refPrice,
+    reference_price: userPrice,
     status: 'open',
     expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
   }).select().single();
 
   if (rfqErr) return NextResponse.json({ error: rfqErr.message }, { status: 500 });
 
-  // Auto-match with maker bot
+  // Bot auto-quotes at 0.3% below reference
   const makerAddress = 'auto-maker-bot';
-  const userPrice = quotedPrice ? parseFloat(quotedPrice) : refPrice;
-  const rate = refPrice * (1 - SPREAD_BPS / 10000);
+  const botRate = refPrice * (1 - SPREAD_BPS / 10000);
 
   await db.from('agents').upsert({
     wallet_address: makerAddress,
@@ -173,63 +172,25 @@ async function handleSubmitRFQ(body: any) {
     rep_total: 5.0,
   }, { onConflict: 'wallet_address' });
 
-  // Create quote
   await db.from('quotes').insert({
     rfq_id: rfq.id,
     maker_address: makerAddress,
-    bid_rate: rate,
-    ask_rate: rate,
-    expires_at: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+    rate: botRate,
+    status: 'pending',
   });
-
-  // Create trade
-  const tradeCount = ((await db.from('trades').select('id', { count: 'exact' })).count || 0) + 1;
-  const tradeDisplayId = `T-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${String(tradeCount).padStart(3, '0')}`;
-
-  const { data: trade, error: tradeErr } = await db.from('trades').insert({
-    display_id: tradeDisplayId,
-    rfq_id: rfq.id,
-    pair,
-    size: parseFloat(size),
-    rate,
-    source_chain: source,
-    dest_chain: dest,
-    taker_address: agentAddress,
-    maker_address: makerAddress,
-    status: 'open',
-  }).select().single();
-
-  if (tradeErr) return NextResponse.json({ error: tradeErr.message }, { status: 500 });
-
-  await db.from('rfqs').update({ status: 'matched' }).eq('id', rfq.id);
 
   return NextResponse.json({
     success: true,
     rfq: {
       id: rfq.id,
       displayId: displayId,
-      pair,
+      pair: normalizedPair,
       size: parseFloat(size),
+      takerPrice: userPrice,
       referencePrice: refPrice,
-    },
-    trade: {
-      id: trade.id,
-      displayId: tradeDisplayId,
-      pair,
-      size: parseFloat(size),
-      rate,
-      notional: parseFloat(size) * rate,
-      sourceChain: source,
-      destChain: dest,
       status: 'open',
-      makerBot: makerAddress,
     },
-    settlementCap: {
-      note: 'Regardless of size, actual on-chain settlement is capped for testnet',
-      ethLeg: `${SETTLEMENT_CAP_ETH} ETH`,
-      supraLeg: `${SETTLEMENT_CAP_SUPRA} SUPRA`,
-    },
-    nextStep: `Trade matched. To settle, POST to /api/confirm-tx with { tradeId: "${trade.id}", txHash: "<your_tx_hash>", side: "taker" }. The maker bot will auto-send on the other chain once taker TX is verified.`,
+    nextStep: 'RFQ created. Quotes will appear from makers. Accept a quote to create a trade.',
   });
 }
 
