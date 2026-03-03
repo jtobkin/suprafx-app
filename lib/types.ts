@@ -83,6 +83,6 @@ export interface Quote {
   rfq_id: string;
   maker_address: string;
   rate: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  status: 'pending' | 'accepted' | 'rejected' | 'expired' | 'withdrawn';
   created_at: string;
 }

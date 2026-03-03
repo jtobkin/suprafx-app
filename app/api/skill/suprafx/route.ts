@@ -79,6 +79,10 @@ export async function POST(req: NextRequest) {
         return handleListTrades(body);
       case 'accept_quote':
         return handleAcceptQuote(body);
+      case 'cancel_rfq':
+        return handleCancelRFQ(body);
+      case 'withdraw_quote':
+        return handleWithdrawQuote(body);
       default:
         return NextResponse.json({
           error: 'Unknown action. Available: get_pairs, submit_rfq, check_trade, list_trades',
@@ -254,6 +258,43 @@ async function handleAcceptQuote(body: any) {
     nextStep: `Trade created. To settle, POST to /api/confirm-tx with { tradeId: "${trade.id}", txHash: "<your_tx_hash>", side: "taker" }.`,
   });
 }
+
+async function handleCancelRFQ(body: any) {
+  const { rfqId, agentAddress } = body;
+  if (!rfqId) return NextResponse.json({ error: 'rfqId required' }, { status: 400 });
+  if (!agentAddress) return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
+
+  const db = getServiceClient();
+
+  const { data: rfq, error: rErr } = await db.from('rfqs').select('*').eq('id', rfqId).single();
+  if (rErr || !rfq) return NextResponse.json({ error: 'RFQ not found' }, { status: 404 });
+  if (rfq.taker_address !== agentAddress) return NextResponse.json({ error: 'Only the RFQ taker can cancel' }, { status: 403 });
+  if (rfq.status !== 'open') return NextResponse.json({ error: 'RFQ is no longer open' }, { status: 400 });
+
+  // Cancel RFQ and reject all pending quotes
+  await db.from('rfqs').update({ status: 'cancelled' }).eq('id', rfqId);
+  await db.from('quotes').update({ status: 'rejected' }).eq('rfq_id', rfqId).eq('status', 'pending');
+
+  return NextResponse.json({ success: true, message: 'RFQ cancelled, all pending quotes rejected.' });
+}
+
+async function handleWithdrawQuote(body: any) {
+  const { quoteId, agentAddress } = body;
+  if (!quoteId) return NextResponse.json({ error: 'quoteId required' }, { status: 400 });
+  if (!agentAddress) return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
+
+  const db = getServiceClient();
+
+  const { data: quote, error: qErr } = await db.from('quotes').select('*').eq('id', quoteId).single();
+  if (qErr || !quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
+  if (quote.maker_address !== agentAddress) return NextResponse.json({ error: 'Only the quote maker can withdraw' }, { status: 403 });
+  if (quote.status !== 'pending') return NextResponse.json({ error: 'Quote is no longer pending' }, { status: 400 });
+
+  await db.from('quotes').update({ status: 'withdrawn' }).eq('id', quoteId);
+
+  return NextResponse.json({ success: true, message: 'Quote withdrawn.' });
+}
+
 async function handleCheckTrade(body: any) {
   const { tradeId } = body;
   if (!tradeId) return NextResponse.json({ error: 'tradeId required' }, { status: 400 });

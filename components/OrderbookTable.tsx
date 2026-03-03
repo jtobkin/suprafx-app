@@ -591,6 +591,8 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedCompleted, setExpandedCompleted] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState<string | null>(null);
   const [attestations, setAttestations] = useState<Record<string, string>>({});
 
   const openRfqs = rfqs.filter(r => r.status === "open")
@@ -641,6 +643,39 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
     setAccepting(null);
   };
 
+  const cancelRfq = async (rfqId: string) => {
+    if (!supraAddress) return;
+    setCancelling(rfqId);
+    try {
+      const res = await fetch("/api/skill/suprafx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_rfq", rfqId, agentAddress: supraAddress }),
+      });
+      const data = await res.json();
+      if (data.error) alert(data.error);
+      else onAcceptQuote?.();
+    } catch (e: any) { alert(e.message); }
+    setCancelling(null);
+  };
+
+  const withdrawQuote = async (quoteId: string) => {
+    if (!supraAddress) return;
+    setWithdrawing(quoteId);
+    try {
+      const res = await fetch("/api/skill/suprafx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "withdraw_quote", quoteId, agentAddress: supraAddress }),
+      });
+      const data = await res.json();
+      if (data.error) alert(data.error);
+      else onAcceptQuote?.();
+    } catch (e: any) { alert(e.message); }
+    setWithdrawing(null);
+  };
+
+
   const activeCount = openRfqs.length + activeTrades.length;
 
   return (
@@ -686,6 +721,14 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="tag tag-open">{rfqQuotes.length} quote{rfqQuotes.length !== 1 ? "s" : ""}</span>
+                    {isMine && (
+                      <button onClick={(e) => { e.stopPropagation(); cancelRfq(r.id); }}
+                        disabled={cancelling === r.id}
+                        className="px-2 py-0.5 rounded text-[11px] font-medium transition-all hover:brightness-110 disabled:opacity-50"
+                        style={{ background: "var(--negative)", color: "#fff", border: "none" }}>
+                        {cancelling === r.id ? "..." : "Cancel"}
+                      </button>
+                    )}
                     <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
                   </div>
                 </div>
@@ -733,6 +776,14 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                                   className="px-3 py-1 rounded text-[12px] font-semibold transition-all hover:brightness-110 disabled:opacity-50"
                                   style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
                                   {accepting === q.id ? "..." : "Accept"}
+                                </button>
+                              )}
+                              {q.maker_address === supraAddress && q.status === "pending" && (
+                                <button onClick={(e) => { e.stopPropagation(); withdrawQuote(q.id); }}
+                                  disabled={withdrawing === q.id}
+                                  className="px-3 py-1 rounded text-[12px] font-semibold transition-all hover:brightness-110 disabled:opacity-50"
+                                  style={{ background: "var(--negative)", color: "#fff", border: "none" }}>
+                                  {withdrawing === q.id ? "..." : "Withdraw"}
                                 </button>
                               )}
                             </div>
