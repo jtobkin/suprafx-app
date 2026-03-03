@@ -404,20 +404,6 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
         return (
           <div className="mb-3">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-[13px]" style={{ color: "var(--t3)" }}>{(() => { const r = rfq; return r ? generateTxId(r.display_id, r.taker_address) : trade.display_id; })()}</span>
-                <span className="text-[14px] font-semibold">{pairClean}</span>
-                <span className="font-mono text-[13px]">{trade.size} {baseClean}</span>
-                <span className="text-[12px] px-2 py-0.5 rounded" style={{ background: "rgba(37,99,235,0.08)", color: "var(--accent-light)" }}>
-                  {trade.source_chain} → {trade.dest_chain}
-                </span>
-              </div>
-              <span className={`tag tag-${trade.status === "open" ? "open_trade" : trade.status}`}>
-                {trade.status === "settled" ? "Settled" : trade.status.replace(/_/g, " ")}
-              </span>
-            </div>
-
             <div className="grid grid-cols-3 gap-6 mb-3 px-1">
               <div>
                 <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Price</span>

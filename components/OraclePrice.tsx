@@ -92,7 +92,7 @@ export default function OraclePrice({ pair }: { pair: string }) {
     <div className="border-t" style={{ borderColor: "var(--border)" }}>
       <div className="px-4 py-2.5" style={{ background: flashBg, transition: "background 0.4s" }}>
         <div className="flex items-center gap-6 flex-wrap justify-center">
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0" style={{ marginTop: "5px" }}>
             <span className="text-[13px] font-semibold" style={{ color: "var(--t1)" }}>Reference Price</span>
             <span className="mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded"
               style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>Supra Oracle</span>

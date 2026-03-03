@@ -47,7 +47,7 @@ export default function AgentsPanel({ agents }: { agents: Agent[] }) {
   );
 
   return (
-    <div className="card mb-4 animate-in">
+    <div className="card mb-4 animate-in" style={{ overflow: "hidden" }}>
       <div className="card-header">
         <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Counterparties</span>
         <div className="flex items-center gap-3">
@@ -72,16 +72,16 @@ export default function AgentsPanel({ agents }: { agents: Agent[] }) {
             {pageItems.map((a, i) => {
               const url = addrUrl(a.wallet_address);
               return (
-                <div key={a.id} className="flex items-center gap-4 px-4 py-2.5 hover:bg-white/[0.01] transition-colors"
+                <div key={a.id} className="flex items-center gap-3 px-3 py-2 hover:bg-white/[0.01] transition-colors"
                   style={{ borderBottom: i < pageItems.length - 1 ? "1px solid var(--border)" : "none" }}>
-                  <div className="flex items-center gap-2 w-48 shrink-0">
+                  <div className="flex items-center gap-2 w-36 shrink-0">
                     {url ? (
                       <a href={url} target="_blank" rel="noopener"
-                        className="mono text-[13px] hover:underline truncate" style={{ color: "var(--accent-light)" }}>
+                        className="mono text-[12px] hover:underline truncate" style={{ color: "var(--accent-light)" }}>
                         {a.domain || shortAddr(a.wallet_address)} ↗
                       </a>
                     ) : (
-                      <span className="mono text-[13px] truncate" style={{ color: "var(--t2)" }}>
+                      <span className="mono text-[12px] truncate" style={{ color: "var(--t2)" }}>
                         {a.domain || shortAddr(a.wallet_address)}
                       </span>
                     )}
@@ -91,7 +91,7 @@ export default function AgentsPanel({ agents }: { agents: Agent[] }) {
                     <span className={`tag tag-${a.role}`}>{a.role}</span>
                   </div>
 
-                  <div className="flex items-center gap-1 w-40 shrink-0">
+                  <div className="flex items-center gap-1 w-28 shrink-0">
                     {(a.chains || []).map(ch => (
                       <span key={ch} className="mono text-[10px] px-1.5 py-0.5 rounded"
                         style={{ background: "var(--surface-2)", color: "var(--t3)", border: "1px solid var(--border)" }}>
@@ -100,14 +100,14 @@ export default function AgentsPanel({ agents }: { agents: Agent[] }) {
                     ))}
                   </div>
 
-                  <div className="flex items-center gap-1 w-20 shrink-0">
-                    <span className="mono text-[13px] font-semibold" style={{ color: Number(a.rep_total) >= 4 ? "var(--positive)" : "var(--t3)" }}>
+                  <div className="flex items-center gap-1 w-16 shrink-0">
+                    <span className="mono text-[12px] font-semibold" style={{ color: Number(a.rep_total) >= 4 ? "var(--positive)" : "var(--t3)" }}>
                       ★ {Number(a.rep_total).toFixed(1)}
                     </span>
                   </div>
 
                   <div className="w-16 shrink-0">
-                    <span className="mono text-[13px]" style={{ color: "var(--t2)" }}>{a.trade_count || 0}</span>
+                    <span className="mono text-[12px]" style={{ color: "var(--t2)" }}>{a.trade_count || 0}</span>
                     <span className="text-[10px] ml-1" style={{ color: "var(--t3)" }}>trades</span>
                   </div>
 
