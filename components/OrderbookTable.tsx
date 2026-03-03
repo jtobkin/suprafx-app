@@ -118,7 +118,7 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
   );
 }
 
-function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }) {
+function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: { trade: Trade; onUpdate: () => void; rfq?: RFQ; tradeQuotes?: Quote[]; agents?: Agent[]; supraAddr?: string }) {
   const { profile, isDemo, sendSepoliaEth, sendSupraTokens, supraAddress } = useWallet();
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
@@ -388,66 +388,130 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
 
   return (
     <div className="px-4 py-3 border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
-      {/* Trade info */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-[14px]" style={{ color: "var(--t3)" }}>{trade.display_id}</span>
-          <span className="text-[14px] font-semibold">{trade.pair}</span>
-          <span className="font-mono text-[14px]">{trade.size}</span>
-          <span className="font-mono text-[13px]" style={{ color: "var(--t2)" }}>
-            @ ${Number(trade.rate)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {trade.status === "settled" && trade.settle_ms && (
-            <span className="font-mono text-[14px]" style={{ color: "var(--positive)" }}>
-              {(trade.settle_ms / 1000).toFixed(1)}s
-            </span>
-          )}
-          <span className={`tag tag-${trade.status === "open" ? "open_trade" : trade.status}`}>
-            {trade.status === "settled" ? "Settled" : trade.status.replace(/_/g, " ")}
-          </span>
-        </div>
-      </div>
+      {/* Deal Summary */}
+      {(() => {
+        const [base, quote] = trade.pair.split("/");
+        const baseClean = base.replace("fx", "");
+        const quoteClean = quote.replace("fx", "");
+        const pairClean = trade.pair.replace(/fx/g, "");
+        const askingPrice = rfq?.reference_price;
+        const priceDiff = askingPrice && askingPrice > 0 ? ((trade.rate - askingPrice) / askingPrice) * 100 : null;
+        const notional = trade.size * trade.rate;
+        const takerAgent = agents?.find(a => a.wallet_address === trade.taker_address);
+        const makerAgent = agents?.find(a => a.wallet_address === trade.maker_address);
+        const isMine = trade.taker_address === supraAddr;
 
-      {/* Addresses & chains */}
-      <div className="flex items-center gap-4 mt-1.5 mb-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[13px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Taker</span>
-          <a href={trade.source_chain === "sepolia"
-              ? `https://sepolia.etherscan.io/address/${trade.taker_address}`
-              : `https://testnet.suprascan.io/account/${trade.taker_address.replace(/^0x/, "")}`}
-            target="_blank" rel="noopener"
-            className="font-mono text-[14px] hover:underline" style={{ color: "var(--accent-light)" }}>
-            {trade.taker_address.slice(0, 10)}…{trade.taker_address.slice(-4)} ↗
-          </a>
-          <span className="text-[8px] px-1.5 py-0.5 rounded font-mono"
-            style={{ background: "rgba(37,99,235,0.08)", color: "var(--accent-light)" }}>
-            {trade.source_chain}
-          </span>
-        </div>
-        <span className="text-[14px]" style={{ color: "var(--t3)" }}>→</span>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[13px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Maker</span>
-          {(() => {
-            const botSupraAddr = "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a";
-            const addr = trade.maker_address === "auto-maker-bot" ? botSupraAddr : trade.maker_address;
-            const explorerUrl = trade.dest_chain === "supra-testnet"
-              ? `https://testnet.suprascan.io/account/${addr.replace(/^0x/, "")}`
-              : `https://sepolia.etherscan.io/address/${addr}`;
-            return (
-              <a href={explorerUrl} target="_blank" rel="noopener"
-                className="font-mono text-[14px] hover:underline" style={{ color: "var(--positive)" }}>
-                {addr.slice(0, 10)}…{addr.slice(-4)} ↗
-              </a>
-            );
-          })()}
-          <span className="text-[8px] px-1.5 py-0.5 rounded font-mono"
-            style={{ background: "rgba(16,185,129,0.08)", color: "var(--positive)" }}>
-            {trade.dest_chain}
-          </span>
-        </div>
-      </div>
+        return (
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-[13px]" style={{ color: "var(--t3)" }}>{trade.display_id}</span>
+                <span className="text-[14px] font-semibold">{pairClean}</span>
+                <span className="font-mono text-[13px]">{trade.size} {baseClean}</span>
+                <span className="text-[12px] px-2 py-0.5 rounded" style={{ background: "rgba(37,99,235,0.08)", color: "var(--accent-light)" }}>
+                  {trade.source_chain} → {trade.dest_chain}
+                </span>
+              </div>
+              <span className={`tag tag-${trade.status === "open" ? "open_trade" : trade.status}`}>
+                {trade.status === "settled" ? "Settled" : trade.status.replace(/_/g, " ")}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-6 mb-3 px-1">
+              <div>
+                <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Price</span>
+                {askingPrice ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px]" style={{ color: "var(--t3)" }}>Asked:</span>
+                      <span className="mono text-[13px]" style={{ color: "var(--t2)" }}>
+                        {askingPrice >= 1000 ? askingPrice.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : askingPrice >= 1 ? askingPrice.toFixed(4) : askingPrice.toFixed(6)} {quoteClean}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px]" style={{ color: "var(--t3)" }}>Filled:</span>
+                      <span className="mono text-[13px] font-semibold" style={{ color: "var(--t1)" }}>
+                        {trade.rate >= 1000 ? trade.rate.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : trade.rate >= 1 ? trade.rate.toFixed(4) : trade.rate.toFixed(6)} {quoteClean}
+                      </span>
+                      {priceDiff !== null && (
+                        <span className="mono text-[11px]" style={{ color: priceDiff >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                          {priceDiff >= 0 ? "+" : ""}{priceDiff.toFixed(2)}%
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <span className="mono text-[13px] font-semibold" style={{ color: "var(--t1)" }}>
+                    {trade.rate >= 1000 ? trade.rate.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : trade.rate >= 1 ? trade.rate.toFixed(4) : trade.rate.toFixed(6)} {quoteClean}
+                  </span>
+                )}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[11px]" style={{ color: "var(--t3)" }}>Notional:</span>
+                  <span className="mono text-[13px]" style={{ color: "var(--positive)" }}>
+                    {notional >= 1000 ? notional.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:4}) : notional.toFixed(4)} {quoteClean}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Counterparties</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[11px] w-12" style={{ color: "var(--t3)" }}>Taker:</span>
+                  <span className="mono text-[12px]" style={{ color: isMine ? "var(--accent)" : "var(--t2)" }}>
+                    {isMine ? "You" : trade.taker_address.length > 16 ? trade.taker_address.slice(0,6) + "…" + trade.taker_address.slice(-4) : trade.taker_address}
+                  </span>
+                  {takerAgent && (
+                    <span className="mono text-[10px] px-1 py-0.5 rounded" style={{ background: "var(--surface-2)", color: Number(takerAgent.rep_total) >= 4 ? "var(--positive)" : "var(--t3)" }}>
+                      ★ {Number(takerAgent.rep_total).toFixed(1)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] w-12" style={{ color: "var(--t3)" }}>Maker:</span>
+                  <span className="mono text-[12px]" style={{ color: "var(--t2)" }}>
+                    {trade.maker_address === "auto-maker-bot" ? "SupraFX Bot" : trade.maker_address.length > 16 ? trade.maker_address.slice(0,6) + "…" + trade.maker_address.slice(-4) : trade.maker_address}
+                  </span>
+                  {makerAgent && (
+                    <span className="mono text-[10px] px-1 py-0.5 rounded" style={{ background: "var(--surface-2)", color: Number(makerAgent.rep_total) >= 4 ? "var(--positive)" : "var(--t3)" }}>
+                      ★ {Number(makerAgent.rep_total).toFixed(1)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Settlement</span>
+                {trade.taker_tx_hash ? (
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[11px]" style={{ color: "var(--t3)" }}>Taker TX:</span>
+                    <a href={trade.source_chain === "sepolia" ? `https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}` : `https://testnet.suprascan.io/tx/${trade.taker_tx_hash.replace(/^0x/,"")}`}
+                      target="_blank" rel="noopener" className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
+                      {trade.taker_tx_hash.slice(0,10)}… ↗
+                    </a>
+                  </div>
+                ) : (
+                  <div className="text-[11px] mb-1" style={{ color: "var(--t3)" }}>Awaiting taker settlement</div>
+                )}
+                {trade.maker_tx_hash && (
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[11px]" style={{ color: "var(--t3)" }}>Maker TX:</span>
+                    <a href={trade.dest_chain === "supra-testnet" ? `https://testnet.suprascan.io/tx/${trade.maker_tx_hash.replace(/^0x/,"")}` : `https://sepolia.etherscan.io/tx/${trade.maker_tx_hash}`}
+                      target="_blank" rel="noopener" className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
+                      {trade.maker_tx_hash.slice(0,10)}… ↗
+                    </a>
+                  </div>
+                )}
+                {trade.settle_ms && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px]" style={{ color: "var(--t3)" }}>Duration:</span>
+                    <span className="mono text-[13px] font-semibold" style={{ color: "var(--positive)" }}>{(trade.settle_ms / 1000).toFixed(1)}s</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <Progress status={trade.status} />
 
@@ -458,7 +522,7 @@ function ActiveTrade({ trade, onUpdate }: { trade: Trade; onUpdate: () => void }
             <button onClick={runAutoMode}
               className="px-4 py-[7px] rounded text-[13px] font-semibold transition-all"
               style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
-              Auto Settlement
+              Settle
             </button>
             {hasWallet && (
               <button onClick={manualSendSepolia} disabled={loading}
@@ -832,7 +896,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                     </div>
                     {isTradeExpanded && onUpdate && (
                       <div style={{ background: "var(--bg-raised)" }}>
-                        <ActiveTrade trade={t} onUpdate={onUpdate} />
+                        <ActiveTrade trade={t} onUpdate={onUpdate} rfq={rfqs.find(r => r.id === t.rfq_id)} tradeQuotes={quotes.filter(q => q.rfq_id === t.rfq_id)} agents={agents} supraAddr={supraAddress || undefined} />
                       </div>
                     )}
                   </div>
