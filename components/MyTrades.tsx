@@ -1,10 +1,10 @@
 "use client";
+import { useState } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
+import { generateTxId } from "@/lib/tx-id";
 
-function displayPair(pair: string) {
-  return pair.replace(/fx/g, "");
-}
+function displayPair(pair: string) { return pair.replace(/fx/g, ""); }
 
 function fmtRate(n: number) {
   if (n >= 1000) return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18,17 +18,37 @@ function shortAddr(addr: string) {
   return addr;
 }
 
-function statusLabel(status: string) {
-  switch (status) {
-    case "settled": return "Settled";
-    case "failed": return "Failed";
-    case "open": return "Open";
-    case "cancelled": return "Cancelled";
-    case "matched": return "Matched";
-    case "expired": return "Expired";
-    default: return status.replace(/_/g, " ");
+function txUrl(h: string, chain: string) {
+  if (!h) return null;
+  if (chain === "supra-testnet" || chain === "supra") {
+    const clean = h.startsWith("0x") ? h.slice(2) : h;
+    return `https://testnet.suprascan.io/tx/${clean}`;
   }
+  return `https://sepolia.etherscan.io/tx/${h.startsWith("0x") ? h : "0x" + h}`;
 }
+
+// Unified row type
+type HistoryRow = {
+  id: string;
+  txId: string;
+  type: "trade" | "rfq";
+  pair: string;
+  size: number;
+  rate: number | null;
+  side: "Taker" | "Maker";
+  counterparty: string;
+  counterChain: string;
+  sourceChain: string;
+  destChain: string;
+  status: string;
+  settleMs: number | null;
+  createdAt: string;
+  // For detail expansion
+  trade?: Trade;
+  rfq?: RFQ;
+  rfqForTrade?: RFQ;
+  tradeQuotes?: Quote[];
+};
 
 interface Props {
   rfqs: RFQ[];
@@ -39,31 +59,81 @@ interface Props {
 
 export default function MyTrades({ rfqs, trades, quotes, agents }: Props) {
   const { supraAddress } = useWallet();
+  const [expanded, setExpanded] = useState<string | null>(null);
+
   if (!supraAddress) return null;
 
-  // All RFQs I created
-  const myRfqs = rfqs
-    .filter(r => r.taker_address === supraAddress)
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  // Build unified list
+  const rows: HistoryRow[] = [];
 
-  // All trades I'm part of (taker or maker)
-  const myTrades = trades
+  // Add trades
+  trades
     .filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress)
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    .forEach(t => {
+      const side = t.taker_address === supraAddress ? "Taker" as const : "Maker" as const;
+      const rfqForTrade = rfqs.find(r => r.id === t.rfq_id);
+      const txId = rfqForTrade ? generateTxId(rfqForTrade.display_id, rfqForTrade.taker_address) : t.display_id;
+      rows.push({
+        id: t.id,
+        txId,
+        type: "trade",
+        pair: t.pair,
+        size: t.size,
+        rate: t.rate,
+        side,
+        counterparty: side === "Taker" ? t.maker_address : t.taker_address,
+        counterChain: side === "Taker" ? t.dest_chain : t.source_chain,
+        sourceChain: t.source_chain,
+        destChain: t.dest_chain,
+        status: t.status,
+        settleMs: t.settle_ms,
+        createdAt: t.created_at,
+        trade: t,
+        rfqForTrade,
+        tradeQuotes: rfqForTrade ? quotes.filter(q => q.rfq_id === rfqForTrade.id) : [],
+      });
+    });
+
+  // Add cancelled/expired RFQs that don't have a trade
+  const rfqIdsWithTrades = new Set(trades.map(t => t.rfq_id));
+  rfqs
+    .filter(r => r.taker_address === supraAddress && ["cancelled", "expired"].includes(r.status) && !rfqIdsWithTrades.has(r.id))
+    .forEach(r => {
+      rows.push({
+        id: r.id,
+        txId: generateTxId(r.display_id, r.taker_address),
+        type: "rfq",
+        pair: r.pair,
+        size: r.size,
+        rate: r.reference_price,
+        side: "Taker",
+        counterparty: "",
+        counterChain: "",
+        sourceChain: r.source_chain,
+        destChain: r.dest_chain,
+        status: r.status,
+        settleMs: null,
+        createdAt: r.created_at,
+        rfq: r,
+        tradeQuotes: quotes.filter(q => q.rfq_id === r.id),
+      });
+    });
+
+  // Sort by created_at descending
+  rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  if (rows.length === 0) return null;
 
   // Stats
-  const settled = myTrades.filter(t => t.status === "settled").length;
-  const inFlight = myTrades.filter(t => !["settled", "failed"].includes(t.status)).length;
-  const failed = myTrades.filter(t => t.status === "failed").length;
-  const cancelled = myRfqs.filter(r => r.status === "cancelled").length;
+  const settled = rows.filter(r => r.status === "settled").length;
+  const inFlight = rows.filter(r => r.type === "trade" && !["settled", "failed"].includes(r.status)).length;
+  const failed = rows.filter(r => r.status === "failed").length;
+  const cancelled = rows.filter(r => r.status === "cancelled").length;
   const avgSettleMs = (() => {
-    const times = myTrades.filter(t => t.settle_ms).map(t => t.settle_ms!);
+    const times = rows.filter(r => r.settleMs).map(r => r.settleMs!);
     return times.length > 0 ? times.reduce((a, b) => a + b, 0) / times.length : 0;
   })();
-
   const myAgent = agents.find(a => a.wallet_address === supraAddress);
-
-  if (myRfqs.length === 0 && myTrades.length === 0) return null;
 
   return (
     <div className="card mb-4 animate-in">
@@ -72,11 +142,11 @@ export default function MyTrades({ rfqs, trades, quotes, agents }: Props) {
         <div className="flex items-center gap-3">
           {myAgent && (
             <span className="mono text-[11px] px-1.5 py-0.5 rounded" style={{ background: "var(--surface-2)", color: "var(--positive)" }}>
-              {"★"} {Number(myAgent.rep_total).toFixed(1)} rep
+              ★ {Number(myAgent.rep_total).toFixed(1)} rep
             </span>
           )}
           <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
-            {supraAddress.slice(0, 8)}{"…"}{supraAddress.slice(-4)}
+            {supraAddress.slice(0, 8)}…{supraAddress.slice(-4)}
           </span>
         </div>
       </div>
@@ -97,7 +167,7 @@ export default function MyTrades({ rfqs, trades, quotes, agents }: Props) {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Cancelled</span>
-          <span className="mono text-[14px] font-semibold" style={{ color: "var(--t3)" }}>{cancelled}</span>
+          <span className="mono text-[14px] font-semibold" style={{ color: cancelled > 0 ? "var(--negative)" : "var(--t3)" }}>{cancelled}</span>
         </div>
         {avgSettleMs > 0 && (
           <div className="flex items-center gap-1.5">
@@ -107,71 +177,200 @@ export default function MyTrades({ rfqs, trades, quotes, agents }: Props) {
         )}
       </div>
 
-      {/* Trade list */}
-      {myTrades.length > 0 && (
-        <div>
-          <div className="px-4 py-1.5 flex items-center gap-4" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
-            {["ID", "Pair", "Size", "Rate", "Side", "Counterparty", "Route", "Time", "Status"].map(h => (
-              <span key={h} className={"mono text-[10px] uppercase tracking-wider font-medium " +
-                (h === "ID" ? "w-24" : h === "Pair" ? "w-24" : h === "Size" ? "w-20" : h === "Rate" ? "w-28" : h === "Side" ? "w-14" : h === "Counterparty" ? "w-28" : h === "Route" ? "flex-1" : h === "Time" ? "w-16" : "w-20")}
-                style={{ color: "var(--t3)" }}>{h}</span>
-            ))}
-          </div>
-          {myTrades.map(t => {
-            const side = t.taker_address === supraAddress ? "Taker" : "Maker";
-            const counterparty = side === "Taker" ? t.maker_address : t.taker_address;
-            const counterChain = side === "Taker" ? t.dest_chain : t.source_chain;
-            const pairClean = displayPair(t.pair);
-            const [, quote] = t.pair.split("/");
-            const quoteClean = quote?.replace("fx", "") || "";
+      {/* Rows */}
+      <div>
+        {rows.map(row => {
+          const isExpanded = expanded === row.id;
+          const pairClean = displayPair(row.pair);
+          const [base, quote] = row.pair.split("/");
+          const baseClean = base.replace("fx", "");
+          const quoteClean = quote?.replace("fx", "") || "";
 
-            return (
-              <div key={t.id} className="px-4 py-2.5 flex items-center gap-4 hover:bg-white/[0.02] transition-colors"
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                <span className="mono text-[12px] w-24" style={{ color: "var(--t3)" }}>{t.display_id}</span>
-                <span className="text-[13px] font-semibold w-24">{pairClean}</span>
-                <span className="mono text-[13px] w-20">{t.size}</span>
-                <span className="mono text-[13px] w-28" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)} {quoteClean}</span>
-                <span className="text-[12px] w-14 font-medium" style={{ color: side === "Taker" ? "var(--accent)" : "var(--positive)" }}>{side}</span>
-                <span className="mono text-[12px] w-28" style={{ color: "var(--t2)" }}>{shortAddr(counterparty)}</span>
-                <span className="text-[12px] flex-1" style={{ color: "var(--t3)" }}>{t.source_chain} {"→"} {t.dest_chain}</span>
-                <span className="mono text-[12px] w-16" style={{ color: t.settle_ms ? "var(--positive)" : "var(--t3)" }}>
-                  {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : "—"}
+          return (
+            <div key={row.id} style={{ borderBottom: "1px solid var(--border)" }}>
+              <div className="flex items-center gap-4 px-4 py-2.5 cursor-pointer hover:bg-white/[0.01] transition-colors"
+                onClick={() => setExpanded(isExpanded ? null : row.id)}>
+                <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{row.txId}</span>
+                <span className="text-[13px] font-semibold w-24 shrink-0">{pairClean}</span>
+                <span className="mono text-[13px] w-20 shrink-0">{row.size}</span>
+                <span className="mono text-[13px] w-28 shrink-0" style={{ color: "var(--t1)" }}>
+                  {row.rate ? `${fmtRate(row.rate)} ${quoteClean}` : "—"}
                 </span>
-                <span className="w-20">
-                  <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{statusLabel(t.status)}</span>
+                <span className="text-[12px] w-14 shrink-0 font-medium" style={{ color: row.side === "Taker" ? "var(--accent)" : "var(--positive)" }}>{row.side}</span>
+                <span className="mono text-[12px] w-28 shrink-0" style={{ color: "var(--t2)" }}>
+                  {row.counterparty ? shortAddr(row.counterparty) : "—"}
                 </span>
+                <span className="text-[12px] flex-1" style={{ color: "var(--t3)" }}>{row.sourceChain} → {row.destChain}</span>
+                <span className="mono text-[12px] w-14 shrink-0" style={{ color: row.settleMs ? "var(--positive)" : "var(--t3)" }}>
+                  {row.settleMs ? (row.settleMs / 1000).toFixed(1) + "s" : "—"}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`tag tag-${row.status === "cancelled" ? "cancelled" : row.status === "open" ? "open_trade" : row.status}`}>
+                    {row.status === "settled" ? "Settled" : row.status === "cancelled" ? "Cancelled" : row.status === "expired" ? "Expired" : row.status === "failed" ? "Failed" : row.status.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
+                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* Cancelled RFQs */}
-      {cancelled > 0 && (
-        <div>
-          <div className="px-4 py-1.5" style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
-            <span className="mono text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Cancelled RFQs</span>
-          </div>
-          {myRfqs.filter(r => r.status === "cancelled").map(r => {
-            const pairClean = displayPair(r.pair);
-            const [base, quote] = r.pair.split("/");
-            const baseClean = base.replace("fx", "");
-            const quoteClean = quote?.replace("fx", "") || "";
-            return (
-              <div key={r.id} className="px-4 py-2.5 flex items-center gap-4 hover:bg-white/[0.02] transition-colors"
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                <span className="mono text-[12px] w-24" style={{ color: "var(--t3)" }}>{r.display_id}</span>
-                <span className="text-[13px] font-semibold w-24">{pairClean}</span>
-                <span className="mono text-[13px] w-20">{r.size} {baseClean}</span>
-                <span className="mono text-[13px] w-28" style={{ color: "var(--t2)" }}>Asked {fmtRate(r.reference_price)} {quoteClean}</span>
-                <span className="text-[12px] flex-1" style={{ color: "var(--t3)" }}>{r.source_chain} {"→"} {r.dest_chain}</span>
-                <span className="w-20"><span className="tag tag-cancelled">Cancelled</span></span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              {isExpanded && (
+                <div className="px-6 pb-4 pt-1" style={{ background: "var(--bg-raised)" }}>
+                  <div className="grid grid-cols-3 gap-6 mb-3">
+                    {/* Price */}
+                    <div>
+                      <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Price</span>
+                      {row.rfqForTrade || row.rfq ? (() => {
+                        const rfqRef = row.rfqForTrade || row.rfq;
+                        const askingPrice = rfqRef?.reference_price;
+                        const filledRate = row.trade?.rate || row.rate;
+                        const priceDiff = askingPrice && filledRate && askingPrice > 0 ? ((filledRate - askingPrice) / askingPrice) * 100 : null;
+                        return (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px]" style={{ color: "var(--t3)" }}>Asked:</span>
+                              <span className="mono text-[13px]" style={{ color: "var(--t2)" }}>
+                                {askingPrice ? `${fmtRate(askingPrice)} ${quoteClean}` : "—"}
+                              </span>
+                            </div>
+                            {filledRate && row.type === "trade" && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px]" style={{ color: "var(--t3)" }}>Filled:</span>
+                                <span className="mono text-[13px] font-semibold" style={{ color: "var(--t1)" }}>
+                                  {fmtRate(filledRate)} {quoteClean}
+                                </span>
+                                {priceDiff !== null && (
+                                  <span className="mono text-[11px]" style={{ color: priceDiff >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                                    {priceDiff >= 0 ? "+" : ""}{priceDiff.toFixed(2)}%
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {row.type === "trade" && filledRate && (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[11px]" style={{ color: "var(--t3)" }}>Notional:</span>
+                                <span className="mono text-[13px]" style={{ color: "var(--positive)" }}>
+                                  {(row.size * filledRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} {quoteClean}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })() : (
+                        <span className="mono text-[13px]" style={{ color: "var(--t1)" }}>
+                          {row.rate ? `${fmtRate(row.rate)} ${quoteClean}` : "—"}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Counterparties */}
+                    <div>
+                      <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Counterparties</span>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[11px] w-12" style={{ color: "var(--t3)" }}>Taker:</span>
+                        <span className="mono text-[12px]" style={{ color: "var(--accent)" }}>
+                          {(row.trade?.taker_address || row.rfq?.taker_address) === supraAddress ? "You" : shortAddr(row.trade?.taker_address || row.rfq?.taker_address || "")}
+                        </span>
+                        {(() => {
+                          const addr = row.trade?.taker_address || row.rfq?.taker_address;
+                          const agent = addr ? agents.find(a => a.wallet_address === addr) : null;
+                          return agent ? (
+                            <span className="mono text-[10px] px-1 py-0.5 rounded" style={{ background: "var(--surface-2)", color: Number(agent.rep_total) >= 4 ? "var(--positive)" : "var(--t3)" }}>
+                              ★ {Number(agent.rep_total).toFixed(1)}
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
+                      {row.counterparty && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] w-12" style={{ color: "var(--t3)" }}>Maker:</span>
+                          <span className="mono text-[12px]" style={{ color: "var(--t2)" }}>{shortAddr(row.counterparty)}</span>
+                          {(() => {
+                            const agent = agents.find(a => a.wallet_address === row.counterparty);
+                            return agent ? (
+                              <span className="mono text-[10px] px-1 py-0.5 rounded" style={{ background: "var(--surface-2)", color: Number(agent.rep_total) >= 4 ? "var(--positive)" : "var(--t3)" }}>
+                                ★ {Number(agent.rep_total).toFixed(1)}
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Settlement */}
+                    <div>
+                      <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Settlement</span>
+                      {row.trade ? (
+                        <>
+                          {row.trade.taker_tx_hash ? (
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[11px] w-16" style={{ color: "var(--t3)" }}>Taker TX:</span>
+                              {(() => { const url = txUrl(row.trade.taker_tx_hash!, row.trade.source_chain); return url ? (
+                                <a href={url} target="_blank" rel="noopener" className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
+                                  {row.trade.taker_tx_hash!.slice(0, 10)}… ↗
+                                </a>
+                              ) : null; })()}
+                            </div>
+                          ) : null}
+                          {row.trade.maker_tx_hash ? (
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[11px] w-16" style={{ color: "var(--t3)" }}>Maker TX:</span>
+                              {(() => { const url = txUrl(row.trade.maker_tx_hash!, row.trade.dest_chain); return url ? (
+                                <a href={url} target="_blank" rel="noopener" className="mono text-[12px] hover:underline" style={{ color: "var(--accent)" }}>
+                                  {row.trade.maker_tx_hash!.slice(0, 10)}… ↗
+                                </a>
+                              ) : null; })()}
+                            </div>
+                          ) : null}
+                          {row.trade.settle_ms && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] w-16" style={{ color: "var(--t3)" }}>Duration:</span>
+                              <span className="mono text-[13px] font-semibold" style={{ color: "var(--positive)" }}>{(row.trade.settle_ms / 1000).toFixed(1)}s</span>
+                            </div>
+                          )}
+                          {row.status === "open" && (
+                            <span className="text-[11px]" style={{ color: "var(--t3)" }}>Awaiting settlement</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[11px]" style={{ color: "var(--t3)" }}>
+                          {row.status === "cancelled" ? "RFQ cancelled before settlement" : "No settlement data"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quote History */}
+                  {row.tradeQuotes && row.tradeQuotes.length > 0 && (
+                    <div>
+                      <span className="mono text-[10px] uppercase tracking-wider block mb-1.5" style={{ color: "var(--t3)" }}>
+                        Quote History ({row.tradeQuotes.length} quote{row.tradeQuotes.length !== 1 ? "s" : ""})
+                      </span>
+                      <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+                        {row.tradeQuotes.map((q, qi) => {
+                          const askP = (row.rfqForTrade || row.rfq)?.reference_price;
+                          const qDiff = askP && askP > 0 ? ((q.rate - askP) / askP) * 100 : null;
+                          return (
+                            <div key={q.id} className="flex items-center gap-4 px-4 py-2"
+                              style={{ borderBottom: qi < row.tradeQuotes!.length - 1 ? "1px solid var(--border)" : "none", background: q.status === "accepted" ? "rgba(16,185,129,0.04)" : "transparent" }}>
+                              <span className="mono text-[12px] w-36" style={{ color: "var(--t2)" }}>{shortAddr(q.maker_address)}</span>
+                              <span className="mono text-[13px] w-32" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
+                              {qDiff !== null && (
+                                <span className="mono text-[11px] w-20" style={{ color: qDiff >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                                  {qDiff >= 0 ? "+" : ""}{qDiff.toFixed(2)}%
+                                </span>
+                              )}
+                              <span className={`tag tag-${q.status}`}>{q.status}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
+import { generateTxId } from "@/lib/tx-id";
 
 function addrUrl(addr: string, chain: string) {
   if (!addr || addr === "auto-maker-bot") return null;
@@ -405,7 +406,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
           <div className="mb-3">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
-                <span className="font-mono text-[13px]" style={{ color: "var(--t3)" }}>{trade.display_id}</span>
+                <span className="font-mono text-[13px]" style={{ color: "var(--t3)" }}>{(() => { const r = rfq; return r ? generateTxId(r.display_id, r.taker_address) : trade.display_id; })()}</span>
                 <span className="text-[14px] font-semibold">{pairClean}</span>
                 <span className="font-mono text-[13px]">{trade.size} {baseClean}</span>
                 <span className="text-[12px] px-2 py-0.5 rounded" style={{ background: "rgba(37,99,235,0.08)", color: "var(--accent-light)" }}>
@@ -777,7 +778,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                 <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
                   onClick={() => setExpandedRfq(isExpanded ? null : r.id)}>
                   <span className="mono text-[12px] shrink-0 flex items-center gap-2" style={{ color: "var(--t3)" }}>
-                      {r.display_id}
+                      {generateTxId(r.display_id, r.taker_address)}
                       {isMine && (
                         <a onClick={(e) => { e.stopPropagation(); cancelRfq(r.id); }}
                           className="text-[11px] cursor-pointer hover:underline"
@@ -883,7 +884,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                   <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
                     <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
                       onClick={() => setExpandedTrade(isTradeExpanded ? null : t.id)}>
-                      <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{t.display_id}</span>
+                      <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const rfqForTrade = rfqs.find(r => r.id === t.rfq_id); return rfqForTrade ? generateTxId(rfqForTrade.display_id, rfqForTrade.taker_address) : t.display_id; })()}</span>
                       <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                       <span className="mono text-[13px] w-24 shrink-0">{t.size}</span>
                       <span className="mono text-[13px] flex-1" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
@@ -956,7 +957,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                   <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
                     <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
                       onClick={() => setExpandedCompleted(isExpanded ? null : t.id)}>
-                      <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{t.display_id}</span>
+                      <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const rfqForTrade = rfqs.find(r => r.id === t.rfq_id); return rfqForTrade ? generateTxId(rfqForTrade.display_id, rfqForTrade.taker_address) : t.display_id; })()}</span>
                       <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                       <span className="mono text-[13px] w-24 shrink-0">{t.size} {baseClean}</span>
                       <span className="mono text-[13px] w-28 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)} {quoteClean}</span>

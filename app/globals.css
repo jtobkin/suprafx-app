@@ -67,6 +67,8 @@ code, .mono { font-family: 'JetBrains Mono', 'Menlo', monospace; }
 .tag-maker { background: var(--accent-dim); color: var(--accent); }
 .tag-taker { background: rgba(255,255,255,0.04); color: var(--t2); }
 .tag-expired { background: rgba(255,255,255,0.03); color: var(--t3); }
+.tag-cancelled { background: var(--negative-dim); color: var(--negative); }
+.tag-withdrawn { background: rgba(255,255,255,0.03); color: var(--t3); }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
