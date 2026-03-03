@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/verify",
       "schedule": "*/1 * * * *"
-    },
-    {
-      "path": "/api/cron/maker",
-      "schedule": "*/1 * * * *"
     }
   ]
 }
