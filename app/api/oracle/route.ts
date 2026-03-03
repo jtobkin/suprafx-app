@@ -80,12 +80,6 @@ export async function GET(req: NextRequest) {
     // Conversion: how many quote tokens per 1 base token
     const conversionRate = quotePrice > 0 ? basePrice / quotePrice : 0;
 
-    // Compute 24h change as percentage if API returns absolute value
-    // If the API value looks like a percentage already (small number), use as-is
-    // If it looks like absolute price change, compute percentage
-    const baseChangePercent = Math.abs(baseChange) < 100 ? baseChange : (basePrice > 0 ? (baseChange / basePrice) * 100 : 0);
-    const quoteChangePercent = Math.abs(quoteChange) < 100 ? quoteChange : (quotePrice > 0 ? (quoteChange / quotePrice) * 100 : 0);
-
     const res = NextResponse.json({
       pair,
       base: {
@@ -94,8 +88,7 @@ export async function GET(req: NextRequest) {
         price: basePrice,
         high24h: baseHigh,
         low24h: baseLow,
-        change24h: baseChangePercent,
-        change24hRaw: baseChange,
+        change24h: baseChange,
         timestamp: baseTime,
       },
       quote: quoteInstrument ? {
@@ -104,8 +97,7 @@ export async function GET(req: NextRequest) {
         price: quotePrice,
         high24h: quoteHigh,
         low24h: quoteLow,
-        change24h: quoteChangePercent,
-        change24hRaw: quoteChange,
+        change24h: quoteChange,
         timestamp: quoteTime,
       } : null,
       conversionRate,

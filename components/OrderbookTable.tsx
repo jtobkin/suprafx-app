@@ -789,11 +789,20 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                     </span>
                   <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                   <span className="mono text-[13px] w-24 shrink-0">{r.size} {baseClean}</span>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Asking </span>
-                    <span className="mono text-[13px] font-semibold" style={{ color: "var(--t1)" }}>
-                      {fmtRate(r.reference_price)} {quoteClean}/{baseClean}
-                    </span>
+                  <div className="flex-1 min-w-0 flex items-center gap-3">
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Asking </span>
+                      <span className="mono text-[13px] font-semibold" style={{ color: "var(--t1)" }}>
+                        {fmtRate(r.reference_price)} {quoteClean}/{baseClean}
+                      </span>
+                    </div>
+                    {isMine && (
+                      <a onClick={(e) => { e.stopPropagation(); if (window.confirm("Cancel this RFQ? All pending quotes will be rejected.")) cancelRfq(r.id); }}
+                        className="text-[11px] cursor-pointer hover:underline shrink-0"
+                        style={{ color: cancelling === r.id ? "var(--t3)" : "var(--negative)" }}>
+                        {cancelling === r.id ? "cancelling..." : "cancel"}
+                      </a>
+                    )}
                   </div>
                   <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{r.source_chain} {"→"} {r.dest_chain}</span>
                   <div className="shrink-0">

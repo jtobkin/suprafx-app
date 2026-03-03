@@ -235,7 +235,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
           </div>
 
           {/* Your Price */}
-          <div style={{ width: 140 }}>
+          <div style={{ width: 180 }}>
             <div className="flex items-center justify-between mb-1.5">
               <label className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Price</label>
               {oracleRate && priceEdited && (
@@ -257,7 +257,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
           </div>
 
           {/* You Receive */}
-          <div style={{ width: 150 }}>
+          <div style={{ width: 180 }}>
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "var(--t3)" }}>You Receive</label>
             <div className="flex items-center rounded-md px-3 py-2" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
               <span className="mono text-[14px] font-semibold flex-1" style={{ color: receiveAmount > 0 ? "var(--positive)" : "var(--t3)" }}>

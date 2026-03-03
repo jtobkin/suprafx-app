@@ -100,30 +100,30 @@ export default function OraclePrice({ pair }: { pair: string }) {
           <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{ago}s ago</span>
         </div>
 
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-6 flex-wrap">
           <div>
-            <div className="text-[12px] mb-0.5" style={{ color: "var(--t3)" }}>{baseName} S-Value</div>
-            <div className="flex items-baseline gap-2">
-              <span className="mono text-[18px] font-bold tracking-tight" style={{ color: "var(--t0)" }}>{fmt(data.base.price)}</span>
-              <span className="mono text-[13px] font-semibold" style={{ color: changeColor }}>{changePrefix}{data.base.change24h.toFixed(2)}%</span>
+            <div className="text-[11px] mb-0.5" style={{ color: "var(--t3)" }}>{baseName}</div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="mono text-[16px] font-bold tracking-tight" style={{ color: "var(--t0)" }}>{fmt(data.base.price)}</span>
+              <span className="mono text-[12px] font-semibold" style={{ color: changeColor }}>{changePrefix}{data.base.change24h.toFixed(2)}%</span>
             </div>
           </div>
 
-          <div>
-            <div className="text-[12px] mb-0.5" style={{ color: "var(--t3)" }}>24h Range</div>
-            <div className="mono text-[13px]" style={{ color: "var(--t2)" }}>{fmt(data.base.low24h)} — {fmt(data.base.high24h)}</div>
+          <div style={{ borderLeft: "1px solid var(--border)", paddingLeft: "1rem" }}>
+            <div className="text-[11px] mb-0.5" style={{ color: "var(--t3)" }}>24h Range</div>
+            <div className="mono text-[12px]" style={{ color: "var(--t2)" }}>{fmt(data.base.low24h)} — {fmt(data.base.high24h)}</div>
           </div>
 
           {data.quote && (
-            <div>
-              <div className="text-[12px] mb-0.5" style={{ color: "var(--t3)" }}>{quoteName} S-Value</div>
-              <div className="mono text-[14px] font-semibold" style={{ color: "var(--t1)" }}>{fmt(data.quote.price)}</div>
+            <div style={{ borderLeft: "1px solid var(--border)", paddingLeft: "1rem" }}>
+              <div className="text-[11px] mb-0.5" style={{ color: "var(--t3)" }}>{quoteName}</div>
+              <div className="mono text-[13px] font-semibold" style={{ color: "var(--t1)" }}>{fmt(data.quote.price)}</div>
             </div>
           )}
 
-          <div>
-            <div className="text-[12px] mb-0.5" style={{ color: "var(--t3)" }}>Conversion Rate</div>
-            <div className="mono text-[14px] font-semibold" style={{ color: "var(--accent)" }}>1 {baseName} = {fmtRate(data.conversionRate)} {quoteName}</div>
+          <div style={{ borderLeft: "1px solid var(--border)", paddingLeft: "1rem" }}>
+            <div className="text-[11px] mb-0.5" style={{ color: "var(--t3)" }}>Rate</div>
+            <div className="mono text-[13px] font-semibold" style={{ color: "var(--accent)" }}>1 {baseName} = {fmtRate(data.conversionRate)} {quoteName}</div>
           </div>
         </div>
 
