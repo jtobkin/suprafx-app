@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import ProfilePanel from "@/components/ProfilePanel";
 import KPIs from "@/components/KPIs";
 import OrderbookTable from "@/components/OrderbookTable";
+import MyTrades from "@/components/MyTrades";
 import CommitteePanel from "@/components/CommitteePanel";
 import AgentsPanel from "@/components/AgentsPanel";
 import SubmitRFQ from "@/components/SubmitRFQ";
@@ -197,6 +198,7 @@ function Dashboard() {
         <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <SubmitRFQ onSubmitted={fetchAll} />
         <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} />
+        <MyTrades rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} />
         <div className="grid grid-cols-2 gap-4">
           <AgentsPanel agents={agents} />
           <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} />

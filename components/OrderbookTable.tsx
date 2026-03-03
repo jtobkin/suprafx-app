@@ -654,6 +654,8 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedCompleted, setExpandedCompleted] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
+  const [completedFilter, setCompletedFilter] = useState<"all" | "mine">("all");
   const [accepting, setAccepting] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
@@ -740,10 +742,14 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   };
 
 
-  const activeCount = openRfqs.length + activeTrades.length;
+  const filteredOpenRfqs = activeFilter === "mine" ? openRfqs.filter(r => r.taker_address === supraAddress) : openRfqs;
+  const filteredActiveTrades = activeFilter === "mine" ? activeTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress) : activeTrades;
+  const filteredCompletedTrades = completedFilter === "mine" ? completedTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress) : completedTrades;
+  const activeCount = filteredOpenRfqs.length + filteredActiveTrades.length;
 
   return (
-    <div className="card mb-4 animate-in">
+    <>
+      <div className="card mb-4 animate-in">
       <div className="card-header">
         <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Active Trades</span>
         <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
@@ -757,7 +763,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
         </div>
       ) : (
         <div>
-          {openRfqs.map(r => {
+          {filteredOpenRfqs.map(r => {
             const isMine = r.taker_address === supraAddress;
             const rfqQuotes = quotes.filter(q => q.rfq_id === r.id).sort((a, b) => b.rate - a.rate);
             const isExpanded = expandedRfq === r.id;
@@ -862,14 +868,14 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             );
           })}
 
-          {activeTrades.length > 0 && (
+          {filteredActiveTrades.length > 0 && (
             <>
-              {openRfqs.length > 0 && (
+              {filteredOpenRfqs.length > 0 && (
                 <div className="px-4 py-2" style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
                   <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>In-Flight</span>
                 </div>
               )}
-              {activeTrades.map(t => {
+              {filteredActiveTrades.map(t => {
                 const isMine = t.taker_address === supraAddress;
                 const pairClean = displayPair(t.pair);
                 const isTradeExpanded = expandedTrade === t.id;
@@ -907,17 +913,32 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
         </div>
       )}
 
+      </div>
+
       {completedTrades.length > 0 && (
-        <>
-          <div className="px-4 py-2.5 flex items-center justify-between"
-            style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)" }}>
+        <div className="card mb-4 animate-in">
+          <div className="card-header">
             <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>
-            <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
-              {completedTrades.length} execution{completedTrades.length !== 1 ? "s" : ""}
-            </span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <button onClick={() => setCompletedFilter("all")}
+                  className="px-2 py-0.5 rounded text-[11px] font-medium transition-all"
+                  style={{ background: completedFilter === "all" ? "var(--accent)" : "transparent", color: completedFilter === "all" ? "#fff" : "var(--t3)", border: "1px solid " + (completedFilter === "all" ? "var(--accent)" : "var(--border)") }}>
+                  All
+                </button>
+                <button onClick={() => setCompletedFilter("mine")}
+                  className="px-2 py-0.5 rounded text-[11px] font-medium transition-all"
+                  style={{ background: completedFilter === "mine" ? "var(--accent)" : "transparent", color: completedFilter === "mine" ? "#fff" : "var(--t3)", border: "1px solid " + (completedFilter === "mine" ? "var(--accent)" : "var(--border)") }}>
+                  Mine
+                </button>
+              </div>
+              <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
+                {completedTrades.length} execution{completedTrades.length !== 1 ? "s" : ""}
+              </span>
+            </div>
           </div>
           <div>
-              {completedTrades.map(t => {
+              {filteredCompletedTrades.map(t => {
                 const att = attestations[t.id];
                 const takerTxUrl = txUrl(t.taker_tx_hash || "", t.source_chain);
                 const makerTxUrl = txUrl(t.maker_tx_hash || "", t.dest_chain);
@@ -1069,8 +1090,8 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                 );
               })}
             </div>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 }
