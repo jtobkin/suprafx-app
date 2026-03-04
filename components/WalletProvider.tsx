@@ -1,11 +1,19 @@
 "use client";
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 
+export interface LinkedAddress {
+  chain: string;
+  address: string;
+  walletProvider: string;
+  verifiedAt: string;
+}
+
 export interface ProfileData {
   supraAddress: string;
-  evmAddress: string | null;
-  evmVerified: boolean;
+  evmAddress: string | null;       // primary EVM (first linked)
+  evmVerified: boolean;            // has at least one EVM linked
   evmSignature: string | null;
+  linkedAddresses: LinkedAddress[];
 }
 
 interface WalletCtx {
@@ -59,19 +67,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const loadProfile = useCallback(async (addr: string) => {
     try {
       const res = await fetch(`/api/link-address?supra=${encodeURIComponent(addr)}`);
-      const { link } = await res.json();
+      const { link, links } = await res.json();
+      const linkedAddresses: LinkedAddress[] = (links || []).map((l: any) => ({
+        chain: l.chain,
+        address: l.linked_address,
+        walletProvider: l.wallet_provider,
+        verifiedAt: l.verified_at,
+      }));
       if (link) {
         setProfile({
           supraAddress: addr,
           evmAddress: link.evm_address,
           evmVerified: !!link.evm_verified_at,
           evmSignature: link.evm_signature,
+          linkedAddresses,
         });
       } else {
-        setProfile({ supraAddress: addr, evmAddress: null, evmVerified: false, evmSignature: null });
+        setProfile({ supraAddress: addr, evmAddress: null, evmVerified: false, evmSignature: null, linkedAddresses });
       }
     } catch {
-      setProfile({ supraAddress: addr, evmAddress: null, evmVerified: false, evmSignature: null });
+      setProfile({ supraAddress: addr, evmAddress: null, evmVerified: false, evmSignature: null, linkedAddresses: [] });
     }
   }, []);
 
@@ -114,6 +129,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       supraAddress: addr,
       evmAddress: "0xdemo" + addr.slice(5),
       evmVerified: true,
+      linkedAddresses: [{ chain: "sepolia", address: "0xdemo" + addr.slice(5), walletProvider: "demo", verifiedAt: new Date().toISOString() }],
       evmSignature: null,
     });
     fetch("/api/register", {
@@ -220,12 +236,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const data = await res.json();
       if (data.verified) {
-        setProfile({
-          supraAddress,
-          evmAddress: evmAddr.toLowerCase(),
-          evmVerified: true,
-          evmSignature: signature,
-        });
+        // Reload full profile to get updated linked addresses
+        await loadProfile(supraAddress);
         return true;
       } else {
         alert("Verification failed: " + (data.error || "unknown error"));

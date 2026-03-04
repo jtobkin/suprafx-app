@@ -1,14 +1,15 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useWallet } from "./WalletProvider";
+import { useWallet, LinkedAddress } from "./WalletProvider";
 
 export default function ProfilePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { supraAddress, profile, isVerified, isDemo, linkEvmAddress, disconnect, supraShort, evmShort } = useWallet();
+  const { supraAddress, profile, isVerified, isDemo, linkEvmAddress, disconnect, supraShort } = useWallet();
   const [linking, setLinking] = useState(false);
-  const [linkingProvider, setLinkingProvider] = useState<"metamask" | "starkey" | null>(null);
+  const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showWalletChoice, setShowWalletChoice] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -18,6 +19,7 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
       });
     } else {
       setVisible(false);
+      setShowWalletChoice(false);
       const t = setTimeout(() => setMounted(false), 280);
       return () => clearTimeout(t);
     }
@@ -32,7 +34,30 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
     setLinkingProvider(null);
   };
 
+  const handleRemove = async (addr: LinkedAddress) => {
+    if (!supraAddress) return;
+    setRemoving(addr.address);
+    try {
+      const res = await fetch("/api/link-address", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supraAddress, linkedAddress: addr.address, chain: addr.chain }),
+      });
+      const data = await res.json();
+      if (data.deleted) {
+        // Reload profile
+        window.location.reload();
+      }
+    } catch {}
+    setRemoving(null);
+  };
+
   if (!mounted) return null;
+
+  const linkedAddresses = profile?.linkedAddresses || [];
+  const hasAnyEvm = linkedAddresses.length > 0 || profile?.evmVerified;
+
+  const shortAddr = (a: string) => a.slice(0, 6) + "\u2026" + a.slice(-4);
 
   return (
     <>
@@ -82,8 +107,8 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
                 <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>
                   Supra (MoveVM)
                 </span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] mono" style={{ background: "var(--surface-3)", color: "var(--t3)" }}>
-                  StarKey
+                <span className="px-1.5 py-0.5 rounded text-[9px] mono uppercase" style={{ background: "rgba(34,197,94,0.1)", color: "var(--positive)" }}>
+                  Primary
                 </span>
               </div>
               <div className="flex items-center gap-1">
@@ -94,96 +119,99 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
             <div className="mono text-[13px] break-all" style={{ color: "var(--t0)" }}>
               {supraAddress}
             </div>
-            <div className="text-[13px] mt-1.5" style={{ color: "var(--t3)" }}>
-              Primary identity for reputation and trading
+            <div className="text-[12px] mt-1.5" style={{ color: "var(--t3)" }}>
+              Reputation accumulates on this address
             </div>
           </div>
 
-          {/* Linked Addresses */}
+          {/* Linked EVM Addresses */}
           <div>
-            <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>
-              Linked Addresses
+            <div className="flex items-center justify-between mb-3">
+              <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>
+                Linked EVM Addresses
+              </span>
+              <span className="text-[11px] mono" style={{ color: "var(--t3)" }}>
+                {linkedAddresses.length} linked
+              </span>
             </div>
 
-            {/* EVM Address */}
-            <div className="card p-3.5" style={{
-              borderColor: profile?.evmVerified ? undefined : "var(--warn)",
-            }}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>
-                    Ethereum (Sepolia)
-                  </span>
-                  {profile?.evmVerified && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] mono" style={{ background: "var(--surface-3)", color: "var(--t3)" }}>
-                      {/* Show which wallet was used */}
-                      verified
-                    </span>
-                  )}
-                </div>
-                {profile?.evmVerified ? (
-                  <div className="flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
-                    <span className="mono text-[12px]" style={{ color: "var(--positive)" }}>linked</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--warn)" }} />
-                    <span className="mono text-[12px]" style={{ color: "var(--warn)" }}>not linked</span>
-                  </div>
-                )}
-              </div>
-
-              {profile?.evmVerified ? (
-                <>
-                  <div className="mono text-[13px] break-all" style={{ color: "var(--t0)" }}>
-                    {profile.evmAddress}
-                  </div>
-                  <div className="text-[13px] mt-1.5" style={{ color: "var(--t3)" }}>
-                    Ownership verified via signed message
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-[13px] mb-3" style={{ color: "var(--t2)" }}>
-                    Link your Ethereum address to enable cross-chain settlement. This proves you own the address by signing a message.
-                  </div>
-
-                  {linking ? (
-                    <div className="flex items-center gap-2 py-2">
-                      <div className="w-3 h-3 rounded-full border-[1.5px] animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
-                      <span className="text-[13px]" style={{ color: "var(--t2)" }}>
-                        Waiting for {linkingProvider === "starkey" ? "StarKey" : "MetaMask"} signature...
+            <div className="space-y-2">
+              {/* Existing linked addresses */}
+              {linkedAddresses.map((la) => (
+                <div key={la.address} className="card p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="mono text-[10px] uppercase" style={{ color: "var(--t3)" }}>{la.chain}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] mono" style={{ background: "var(--surface-3)", color: "var(--t3)" }}>
+                        {la.walletProvider}
                       </span>
                     </div>
-                  ) : showWalletChoice ? (
-                    <div className="space-y-2">
-                      <div className="text-[12px] mb-2" style={{ color: "var(--t3)" }}>Choose wallet to sign with:</div>
-                      <button onClick={() => handleLink("starkey")}
-                        className="w-full py-2.5 rounded-md text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-2"
-                        style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                        StarKey (EVM)
-                      </button>
-                      <button onClick={() => handleLink("metamask")}
-                        className="w-full py-2.5 rounded-md text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-2"
-                        style={{ background: "var(--surface-3)", color: "var(--t1)", border: "1px solid var(--border)" }}>
-                        MetaMask
-                      </button>
-                      <button onClick={() => setShowWalletChoice(false)}
-                        className="w-full py-1.5 text-[12px] transition-all"
-                        style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
-                        cancel
-                      </button>
+                    <div className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
+                      <span className="mono text-[11px]" style={{ color: "var(--positive)" }}>verified</span>
                     </div>
-                  ) : (
-                    <button onClick={() => setShowWalletChoice(true)}
-                      className="w-full py-2.5 rounded-md text-[14px] font-semibold transition-all hover:brightness-110"
-                      style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                      Link EVM Address
+                  </div>
+                  <div className="mono text-[13px] break-all" style={{ color: "var(--t0)" }}>
+                    {la.address}
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-[11px]" style={{ color: "var(--t3)" }}>
+                      {new Date(la.verifiedAt).toLocaleDateString()}
+                    </span>
+                    <button
+                      onClick={() => handleRemove(la)}
+                      disabled={removing === la.address}
+                      className="text-[11px] px-2 py-0.5 rounded transition-all hover:brightness-110 disabled:opacity-50"
+                      style={{ color: "var(--negative)", background: "var(--surface-3)", border: "none", cursor: "pointer" }}>
+                      {removing === la.address ? "Removing\u2026" : "Remove"}
                     </button>
-                  )}
-                </>
+                  </div>
+                </div>
+              ))}
+
+              {/* No addresses yet */}
+              {linkedAddresses.length === 0 && !profile?.evmVerified && (
+                <div className="text-[13px] py-2" style={{ color: "var(--t3)" }}>
+                  No EVM addresses linked yet. Link at least one to enable cross-chain settlement.
+                </div>
               )}
+
+              {/* Add new address */}
+              <div className="card p-3" style={{ borderColor: "var(--border)", borderStyle: "dashed" }}>
+                {linking ? (
+                  <div className="flex items-center gap-2 py-1">
+                    <div className="w-3 h-3 rounded-full border-[1.5px] animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+                    <span className="text-[13px]" style={{ color: "var(--t2)" }}>
+                      Waiting for {linkingProvider === "starkey" ? "StarKey" : "MetaMask"} signature...
+                    </span>
+                  </div>
+                ) : showWalletChoice ? (
+                  <div className="space-y-2">
+                    <div className="text-[12px] mb-1" style={{ color: "var(--t3)" }}>Choose wallet to sign with:</div>
+                    <button onClick={() => handleLink("starkey")}
+                      className="w-full py-2 rounded-md text-[13px] font-semibold transition-all hover:brightness-110"
+                      style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                      StarKey (EVM)
+                    </button>
+                    <button onClick={() => handleLink("metamask")}
+                      className="w-full py-2 rounded-md text-[13px] font-semibold transition-all hover:brightness-110"
+                      style={{ background: "var(--surface-3)", color: "var(--t1)", border: "1px solid var(--border)" }}>
+                      MetaMask
+                    </button>
+                    <button onClick={() => setShowWalletChoice(false)}
+                      className="w-full py-1 text-[12px]"
+                      style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+                      cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setShowWalletChoice(true)}
+                    className="w-full py-1.5 text-[13px] font-medium transition-all"
+                    style={{ color: "var(--accent-light)", background: "none", border: "none", cursor: "pointer" }}>
+                    + Add EVM Address
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -194,8 +222,8 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
             </div>
             <div className="text-[13px] mt-1" style={{ color: "var(--t3)" }}>
               {isVerified
-                ? "Both addresses verified. Cross-chain settlement enabled. Reputation is shared across linked addresses."
-                : "Link your EVM address to enable settlement on Sepolia."}
+                ? `${linkedAddresses.length} EVM address${linkedAddresses.length !== 1 ? "es" : ""} linked. Reputation shared across all addresses.`
+                : "Link at least one EVM address to enable settlement."}
             </div>
           </div>
 
@@ -225,8 +253,10 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
               <div className="flex items-center justify-between py-2 px-3 rounded-md text-[14px]"
                 style={{ background: "var(--surface-2)" }}>
                 <span style={{ color: "var(--t3)" }}>Sepolia ETH legs</span>
-                <span className="mono" style={{ color: profile?.evmVerified ? "var(--t1)" : "var(--t3)" }}>
-                  {profile?.evmVerified ? evmShort : "—"}
+                <span className="mono" style={{ color: hasAnyEvm ? "var(--t1)" : "var(--t3)" }}>
+                  {linkedAddresses.length > 0
+                    ? shortAddr(linkedAddresses[0].address)
+                    : profile?.evmAddress ? shortAddr(profile.evmAddress) : "\u2014"}
                 </span>
               </div>
               <div className="flex items-center justify-between py-2 px-3 rounded-md text-[14px]"
