@@ -166,10 +166,22 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
   // Determine which chain and wallet to use based on role
   const myChain = isTaker ? trade.source_chain : trade.dest_chain;
   const mySide: "taker" | "maker" = isTaker ? "taker" : "maker";
-  const recipient = isTaker ? trade.maker_address : trade.taker_address;
   const isEvmChain = myChain === "sepolia" || myChain === "ethereum";
   const isSupraChain = myChain === "supra-testnet" || myChain === "supra";
   const canSettle = isEvmChain ? hasWallet : isSupraChain ? hasSupraWallet : false;
+
+  // Resolve recipient: use the settlement address for the target chain
+  // Taker sends on source_chain TO maker's source_chain address (maker_settlement_address)
+  // Maker sends on dest_chain TO taker's dest_chain address (taker_settlement_address)
+  const recipient = (() => {
+    if (isTaker) {
+      // Taker sending on source_chain — need maker's address on source_chain
+      return (trade as any).maker_settlement_address || trade.maker_address;
+    } else {
+      // Maker sending on dest_chain — need taker's address on dest_chain
+      return (trade as any).taker_settlement_address || trade.taker_address;
+    }
+  })();
 
   // Validate recipient address for the target chain
   const isValidRecipient = (() => {
@@ -208,7 +220,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
     }
 
     if (!isValidRecipient) {
-      addLog("Cannot settle: counterparty address is not valid for " + chainName(myChain), "var(--negative)");
+      addLog("Cannot settle: counterparty has no linked address on " + chainName(myChain) + ". Ask them to link their address in their Profile.", "var(--negative)");
       setLoading(false);
       return;
     }

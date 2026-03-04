@@ -45,6 +45,8 @@ export interface Trade {
   taker_tx_confirmed_at: string | null;
   maker_tx_hash: string | null;
   maker_tx_confirmed_at: string | null;
+  taker_settlement_address: string | null;  // resolved address for source_chain
+  maker_settlement_address: string | null;  // resolved address for dest_chain
   settle_ms: number | null;
   created_at: string;
   settled_at: string | null;

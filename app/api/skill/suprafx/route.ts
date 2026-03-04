@@ -248,6 +248,15 @@ async function handleAcceptQuote(body: any) {
   const tradeCount = ((await db.from('trades').select('id', { count: 'exact' })).count || 0) + 1;
   const tradeDisplayId = `T-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${String(tradeCount).padStart(3, '0')}`;
 
+  // Resolve settlement addresses for both parties
+  const { resolveTradeAddresses } = await import('@/lib/resolve-address');
+  const { takerSettlementAddress, makerSettlementAddress } = await resolveTradeAddresses(
+    rfq.taker_address,
+    quote.maker_address,
+    rfq.source_chain,
+    rfq.dest_chain,
+  );
+
   const { data: trade, error: tradeErr } = await db.from('trades').insert({
     display_id: tradeDisplayId,
     rfq_id: rfq.id,
@@ -258,6 +267,8 @@ async function handleAcceptQuote(body: any) {
     dest_chain: rfq.dest_chain,
     taker_address: rfq.taker_address,
     maker_address: quote.maker_address,
+    taker_settlement_address: takerSettlementAddress,
+    maker_settlement_address: makerSettlementAddress,
     status: 'open',
   }).select().single();
 
