@@ -15,10 +15,13 @@ function normalizePair(pair: string): string {
   const nb = map[base] || base;
   const nq = map[quote] || quote;
   const normalized = nb + '/' + nq;
-  // Also check reverse
+  // The pair MUST exist as-is — no silent reversing.
+  // Both directions (A/B and B/A) should be explicitly defined in PAIRS
+  // with their correct source/dest chains.
   if (PAIRS[normalized]) return normalized;
+  // Fallback for same-chain pairs only (where source === dest, order doesn't affect chain routing)
   const reversed = nq + '/' + nb;
-  if (PAIRS[reversed]) return reversed;
+  if (PAIRS[reversed] && PAIRS[reversed].source === PAIRS[reversed].dest) return reversed;
   return normalized;
 }
 
@@ -54,6 +57,23 @@ const PAIRS: Record<string, { source: string; dest: string }> = {
   'fxLINK/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
   'fxUSDC/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
   'fxUSDT/SUPRA': { source: 'sepolia', dest: 'supra-testnet' },
+  // Reverse cross-chain: SUPRA -> ERC-20
+  'SUPRA/fxAAVE': { source: 'supra-testnet', dest: 'sepolia' },
+  'SUPRA/fxLINK': { source: 'supra-testnet', dest: 'sepolia' },
+  'SUPRA/fxUSDC': { source: 'supra-testnet', dest: 'sepolia' },
+  'SUPRA/fxUSDT': { source: 'supra-testnet', dest: 'sepolia' },
+  // Reverse EVM same-chain
+  'fxUSDT/fxAAVE': { source: 'sepolia', dest: 'sepolia' },
+  'fxUSDC/fxAAVE': { source: 'sepolia', dest: 'sepolia' },
+  'fxLINK/fxAAVE': { source: 'sepolia', dest: 'sepolia' },
+  'fxUSDC/fxUSDT': { source: 'sepolia', dest: 'sepolia' },
+  'fxUSDC/fxLINK': { source: 'sepolia', dest: 'sepolia' },
+  'fxUSDT/fxLINK': { source: 'sepolia', dest: 'sepolia' },
+  // Reverse ETH <-> ERC-20
+  'fxAAVE/ETH': { source: 'sepolia', dest: 'sepolia' },
+  'fxLINK/ETH': { source: 'sepolia', dest: 'sepolia' },
+  'fxUSDC/ETH': { source: 'sepolia', dest: 'sepolia' },
+  'fxUSDT/ETH': { source: 'sepolia', dest: 'sepolia' },
   // EVM same-chain
   'fxAAVE/fxUSDT': { source: 'sepolia', dest: 'sepolia' },
   'fxAAVE/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
