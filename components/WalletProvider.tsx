@@ -143,9 +143,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return false;
       }
     } else {
-      evm = getEvmProvider();
+      // Find the real MetaMask — not StarKey's ethereum provider
+      // MetaMask injects window.ethereum and also window.ethereum.providers[] when multiple wallets exist
+      const win = window as any;
+      if (win.ethereum?.providers?.length) {
+        // Multiple providers: find the one that is truly MetaMask
+        evm = win.ethereum.providers.find((p: any) => p.isMetaMask && !p.isStarKey) || null;
+      } else if (win.ethereum?.isMetaMask && !win.ethereum?.isStarKey) {
+        evm = win.ethereum;
+      }
       if (!evm) {
-        alert("MetaMask not detected. Please install MetaMask or use StarKey EVM.");
+        alert("MetaMask not detected. If you have MetaMask installed, try disabling other wallet extensions temporarily.");
         return false;
       }
     }
@@ -170,24 +178,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Sign verification message
       const message = `SupraFX: Link EVM address ${evmAddr.toLowerCase()} to Supra account ${supraAddress}`;
+      const hexMsg = "0x" + Array.from(new TextEncoder().encode(message), b => b.toString(16).padStart(2, "0")).join("");
       let signature: string | null = null;
-      try {
-        signature = await evm.request({ method: "personal_sign", params: [message, evmAddr] });
-      } catch (signErr: any) {
-        if (signErr.code === 4001 || signErr.message?.includes("rejected")) {
-          return false; // User rejected
-        }
-        // Try with hex-encoded message as fallback
+
+      // Try multiple approaches — wallets differ on param order and message encoding
+      const attempts = [
+        { method: "personal_sign", params: [hexMsg, evmAddr], label: "personal_sign (hex, msg-first)" },
+        { method: "personal_sign", params: [evmAddr, hexMsg], label: "personal_sign (hex, addr-first)" },
+        { method: "personal_sign", params: [message, evmAddr], label: "personal_sign (string, msg-first)" },
+        { method: "personal_sign", params: [evmAddr, message], label: "personal_sign (string, addr-first)" },
+      ];
+
+      for (const attempt of attempts) {
         try {
-          const hexMsg = "0x" + Array.from(new TextEncoder().encode(message), b => b.toString(16).padStart(2, "0")).join("");
-          signature = await evm.request({ method: "personal_sign", params: [hexMsg, evmAddr] });
-        } catch {
-          throw signErr; // Re-throw original
+          console.log("[SupraFX] Trying:", attempt.label);
+          signature = await evm.request({ method: attempt.method, params: attempt.params });
+          if (signature) {
+            console.log("[SupraFX] Success with:", attempt.label);
+            break;
+          }
+        } catch (e: any) {
+          if (e.code === 4001 || e.message?.includes("rejected")) {
+            return false; // User rejected — stop trying
+          }
+          console.warn("[SupraFX]", attempt.label, "failed:", e.message);
+          continue;
         }
       }
 
       if (!signature) {
-        alert("MetaMask did not return a signature. Try disconnecting and reconnecting MetaMask.");
+        alert("Wallet did not return a signature. Please try a different wallet option.");
         return false;
       }
 
