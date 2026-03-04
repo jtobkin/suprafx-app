@@ -220,28 +220,38 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
   const manualMakerSend = async () => {
     setLoading(true);
 
-    if (hasSupraWallet) {
-      // Real Supra send
+    // Calculate the amount to send: for SUPRA leg, use 0.001 SUPRA (testnet cap)
+    const sendAmount = 0.001;
+    const takerAddr = trade.taker_address;
+    const isValidSupraAddr = takerAddr && !takerAddr.startsWith("demo_") && (takerAddr.startsWith("0x") || /^[0-9a-fA-F]{64}$/.test(takerAddr));
+
+    if (hasSupraWallet && isValidSupraAddr) {
+      // Real Supra send to a real taker address
       try {
-        addLog("Sending SUPRA tokens to taker on testnet…");
-        // Send 0.01 SUPRA (tiny amount for testnet)
-        const takerAddr = trade.taker_address;
-        const hash = await sendSupraTokens(takerAddr, 0.01);
+        addLog("Preparing to send " + sendAmount + " SUPRA to taker on testnet…");
+        addLog("Taker address: " + takerAddr.slice(0, 12) + "…");
+        addLog("Requesting StarKey wallet signature…");
+        const hash = await sendSupraTokens(takerAddr, sendAmount);
         addLog("Supra TX broadcast: " + String(hash).slice(0, 20) + "…", "var(--accent-light)");
-        addLog("Submitting to committee…");
+        addLog("Submitting to Settlement Council…");
         const data = await confirmTx("maker", String(hash));
         if (data.status === "settled") {
           addLog("Trade settled in " + (data.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
         } else {
-          addLog("Maker TX sent — verifying…", "var(--warn)");
+          addLog("Maker TX sent — Council verifying…", "var(--warn)");
         }
       } catch (e: any) {
-        addLog("Supra send error: " + (e.message || e), "var(--negative)");
-        // Fallback to simulated
-        addLog("Falling back to simulated maker send…", "var(--warn)");
-        const hash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-        const data = await confirmTx("maker", hash);
-        if (data.status === "settled") addLog("Trade settled!", "var(--positive)");
+        if (e.code === 4001 || e.message?.includes("rejected")) {
+          addLog("Transaction rejected by user", "var(--negative)");
+        } else {
+          addLog("Supra send error: " + (e.message || e), "var(--negative)");
+          addLog("Falling back to simulated maker send…", "var(--warn)");
+          const hash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+          addLog("Simulated maker TX: " + hash.slice(0, 20) + "…");
+          const data = await confirmTx("maker", hash);
+          if (data.status === "settled") addLog("Trade settled!", "var(--positive)");
+          else addLog("Council verifying…", "var(--warn)");
+        }
       }
     } else {
       // Simulated maker send
