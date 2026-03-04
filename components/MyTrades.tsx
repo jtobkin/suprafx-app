@@ -187,9 +187,8 @@ export default function MyTrades({ rfqs, trades, quotes, agents }: Props) {
             <span className="mono text-[10px] uppercase tracking-wider font-medium w-14 shrink-0" style={{ color: "var(--t3)" }}>Side</span>
             <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Counterparty</span>
             <span className="mono text-[10px] uppercase tracking-wider font-medium w-40 shrink-0" style={{ color: "var(--t3)" }}>Route</span>
-            <span className="flex-1" />
-            <span className="mono text-[10px] uppercase tracking-wider font-medium w-16 shrink-0 text-right" style={{ color: "var(--t3)" }}>Settle</span>
-            <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0 text-right" style={{ color: "var(--t3)" }}>Status</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium w-16 shrink-0" style={{ color: "var(--t3)" }}>Settle</span>
+            <span className="mono text-[10px] uppercase tracking-wider font-medium flex-1 text-right" style={{ color: "var(--t3)" }}>Status</span>
           </div>
           {rows.map(row => {
           const isExpanded = expanded === row.id;
@@ -213,11 +212,10 @@ export default function MyTrades({ rfqs, trades, quotes, agents }: Props) {
                   {row.counterparty ? shortAddr(row.counterparty) : "—"}
                 </span>
                 <span className="text-[12px] w-40 shrink-0" style={{ color: "var(--t3)" }}>{row.sourceChain} → {row.destChain}</span>
-                <span className="flex-1" />
-                <span className="mono text-[12px] w-16 shrink-0 text-right" style={{ color: row.settleMs ? "var(--positive)" : "var(--t3)" }}>
+                <span className="mono text-[12px] w-16 shrink-0" style={{ color: row.settleMs ? "var(--positive)" : "var(--t3)" }}>
                   {row.settleMs ? (row.settleMs / 1000).toFixed(1) + "s" : "—"}
                 </span>
-                <div className="flex items-center gap-2 w-24 shrink-0 justify-end">
+                <div className="flex items-center gap-2 flex-1 justify-end">
                   <span className={`tag tag-${row.status === "cancelled" ? "cancelled" : row.status === "open" ? "open_trade" : row.status}`}>
                     {row.status === "settled" ? "Settled" : row.status === "cancelled" ? "Cancelled" : row.status === "expired" ? "Expired" : row.status === "failed" ? "Failed" : row.status.replace(/_/g, " ")}
                   </span>
