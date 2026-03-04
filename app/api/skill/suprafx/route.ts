@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { getBotAddresses } from '@/lib/bot-wallets';
+import { storeSignedAction } from '@/lib/signed-actions';
 
 // Normalize clean token names to internal fx-prefixed format
 function normalizePair(pair: string): string {
@@ -155,7 +156,7 @@ function handleGetPairs() {
 }
 
 async function handleSubmitRFQ(body: any) {
-  const { agentAddress, pair, size, quotedPrice } = body;
+  const { agentAddress, pair, size, quotedPrice, signedPayload, signature, payloadHash, sessionNonce, sessionCreatedAt } = body;
 
   if (!agentAddress) {
     return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
@@ -201,9 +202,25 @@ async function handleSubmitRFQ(body: any) {
     reference_price: userPrice,
     status: 'open',
     expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    taker_signature: signature || null,
+    taker_payload_hash: payloadHash || null,
   }).select().single();
 
   if (rfqErr) return NextResponse.json({ error: rfqErr.message }, { status: 500 });
+
+  // Store signed action in audit trail
+  if (signature) {
+    await storeSignedAction({
+      actionType: 'submit_rfq',
+      signerAddress: agentAddress,
+      payload: signedPayload || { action: 'submit_rfq', pair: normalizedPair, size, quotedPrice },
+      payloadHash: payloadHash || '',
+      signature,
+      sessionNonce,
+      sessionCreatedAt,
+      rfqId: rfq.id,
+    });
+  }
 
   // Bot auto-quotes at 0.3% below reference
   const makerAddress = 'auto-maker-bot';
@@ -242,7 +259,7 @@ async function handleSubmitRFQ(body: any) {
 
 
 async function handleAcceptQuote(body: any) {
-  const { quoteId, agentAddress } = body;
+  const { quoteId, agentAddress, signedPayload: acceptPayload, signature: acceptSig, payloadHash: acceptHash, sessionNonce: acceptSessionNonce, sessionCreatedAt: acceptSessionCreatedAt } = body;
   if (!quoteId) return NextResponse.json({ error: 'quoteId required' }, { status: 400 });
   if (!agentAddress) return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
 
@@ -289,10 +306,28 @@ async function handleAcceptQuote(body: any) {
     maker_address: quote.maker_address,
     taker_settlement_address: takerSettlementAddress,
     maker_settlement_address: makerSettlementAddress,
+    taker_accept_signature: acceptSig || null,
+    taker_accept_payload_hash: acceptHash || null,
     status: 'open',
   }).select().single();
 
   if (tradeErr) return NextResponse.json({ error: tradeErr.message }, { status: 500 });
+
+  // Store signed action for acceptance
+  if (acceptSig) {
+    await storeSignedAction({
+      actionType: 'accept_quote',
+      signerAddress: rfq.taker_address,
+      payload: acceptPayload || { action: 'accept_quote', quoteId, rate: quote.rate },
+      payloadHash: acceptHash || '',
+      signature: acceptSig,
+      sessionNonce: acceptSessionNonce,
+      sessionCreatedAt: acceptSessionCreatedAt,
+      rfqId: rfq.id,
+      quoteId,
+      tradeId: trade.id,
+    });
+  }
 
   return NextResponse.json({
     success: true,

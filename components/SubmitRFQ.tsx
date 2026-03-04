@@ -115,7 +115,7 @@ function ChainTokenSelector({
 }
 
 export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void }) {
-  const { supraAddress } = useWallet();
+  const { supraAddress, signAction } = useWallet();
   const [sellChain, setSellChain] = useState("sepolia");
   const [sellToken, setSellToken] = useState("ETH");
   const [buyChain, setBuyChain] = useState("supra-testnet");
@@ -174,13 +174,24 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
       const res = await fetch("/api/skill/suprafx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "submit_rfq",
-          agentAddress: supraAddress,
-          pair,
-          size: amount,
-          quotedPrice: price,
-        }),
+        body: await (async () => {
+          const baseBody: any = {
+            action: "submit_rfq",
+            agentAddress: supraAddress,
+            pair,
+            size: amount,
+            quotedPrice: price,
+          };
+          try {
+            const signed = await signAction("submit_rfq", { pair, size: amount, quotedPrice: price });
+            baseBody.signedPayload = signed.payload;
+            baseBody.signature = signed.signature;
+            baseBody.payloadHash = signed.payloadHash;
+            baseBody.sessionNonce = signed.payload.sessionNonce;
+            baseBody.sessionCreatedAt = signed.payload.sessionNonce; // session nonce is in payload
+          } catch {}
+          return JSON.stringify(baseBody);
+        })(),
       });
       const data = await res.json();
       if (data.error) { setResult({ ok: false, msg: data.error }); }

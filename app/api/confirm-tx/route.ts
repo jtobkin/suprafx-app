@@ -6,6 +6,7 @@ import { verifySepoliaTx } from '@/lib/chains';
 import { updateReputation } from '@/lib/reputation';
 import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation } from '@/lib/bot-wallets';
 import { generateMultisig } from '@/lib/committee-sig';
+import { storeSignedAction } from '@/lib/signed-actions';
 
 const COMMITTEE_NODES = ['N-1', 'N-2', 'N-3', 'N-4', 'N-5'];
 
@@ -57,7 +58,7 @@ async function runCommittee(db: any, tradeId: string, verificationType: string, 
 
 export async function POST(req: NextRequest) {
   try {
-    const { tradeId, txHash, side } = await req.json();
+    const { tradeId, txHash, side, signedPayload, signature, payloadHash, sessionNonce, sessionCreatedAt } = await req.json();
     if (!tradeId || !txHash || !side) {
       return NextResponse.json({ error: 'tradeId, txHash, and side required' }, { status: 400 });
     }
@@ -73,6 +74,20 @@ export async function POST(req: NextRequest) {
 
       // Update to taker_sent
       await db.from('trades').update({ taker_tx_hash: txHash, status: 'taker_sent' }).eq('id', tradeId);
+
+      // Store signed action
+      if (signature) {
+        await storeSignedAction({
+          actionType: 'confirm_taker_tx',
+          signerAddress: trade.taker_address,
+          payload: signedPayload || { action: 'confirm_taker_tx', tradeId, txHash },
+          payloadHash: payloadHash || '',
+          signature,
+          sessionNonce,
+          sessionCreatedAt,
+          tradeId,
+        });
+      }
 
       // Committee verify taker TX
       const tradeInfo = { pair: trade.pair, size: trade.size, rate: trade.rate, takerTxHash: txHash };
@@ -193,6 +208,20 @@ export async function POST(req: NextRequest) {
       }
 
       await db.from('trades').update({ maker_tx_hash: txHash, status: 'maker_sent' }).eq('id', tradeId);
+
+      // Store signed action
+      if (signature) {
+        await storeSignedAction({
+          actionType: 'confirm_maker_tx',
+          signerAddress: trade.maker_address,
+          payload: signedPayload || { action: 'confirm_maker_tx', tradeId, txHash },
+          payloadHash: payloadHash || '',
+          signature,
+          sessionNonce,
+          sessionCreatedAt,
+          tradeId,
+        });
+      }
 
       const makerTradeInfo = { pair: trade.pair, size: trade.size, rate: trade.rate, takerTxHash: trade.taker_tx_hash, makerTxHash: txHash };
       const { verified } = await runCommittee(db, tradeId, 'verify_maker_tx', trade.dest_chain, txHash, makerTradeInfo);

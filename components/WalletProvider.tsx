@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { initSession, clearSession, signAction, isSessionValid, getSessionInfo } from "@/lib/signing";
 
 export interface LinkedAddress {
   chain: string;
@@ -27,12 +28,16 @@ interface WalletCtx {
   linkEvmAddress: (provider?: "metamask" | "starkey") => Promise<boolean>;
   sendSepoliaEth: (to: string, valueWei: string) => Promise<string>;
   sendSupraTokens: (to: string, amount: number) => Promise<string>;
+  signAction: (action: string, data: Record<string, any>) => Promise<{ payload: any; signature: string; payloadHash: string }>;
+  sessionValid: boolean;
   supraShort: string;
   evmShort: string;
 }
 
 const Ctx = createContext<WalletCtx>({
   supraAddress: null, profile: null, isVerified: false, isDemo: false,
+  signAction: async () => { throw new Error("No wallet connected"); },
+  sessionValid: false,
   connect: async () => {}, demo: () => {}, disconnect: () => {},
   linkEvmAddress: async (_provider?: "metamask" | "starkey") => false,
   sendSepoliaEth: async () => "", sendSupraTokens: async () => "",
@@ -104,8 +109,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [supraAddress, setSupraAddress] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [sessionValid, setSessionValid] = useState(false);
 
   const isVerified = !!(profile?.supraAddress && profile?.evmVerified);
+
+  // Session signing wrapper — components call this to sign platform actions
+  const handleSignAction = useCallback(async (action: string, data: Record<string, any>) => {
+    if (!supraAddress) throw new Error("No wallet connected");
+    if (!isSessionValid()) {
+      // Re-init session if expired
+      await initSession(supraAddress);
+      setSessionValid(true);
+    }
+    return await signAction(action, supraAddress, data);
+  }, [supraAddress]);
 
   // Load profile from API when supra address is set
   const loadProfile = useCallback(async (addr: string) => {
@@ -152,6 +169,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         try { await supra.changeNetwork({ chainId: SUPRA_TESTNET_CHAIN_ID }); } catch {}
         await loadProfile(addr);
 
+        // Initialize signing session (silent, no popup)
+        await initSession(addr);
+        setSessionValid(true);
+        console.log("[SupraFX] Session initialized for", addr.slice(0, 10) + "...");
+
         // Register agent
         await fetch("/api/register", {
           method: "POST",
@@ -184,6 +206,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnect = useCallback(() => {
+    clearSession();
+    setSessionValid(false);
     const supra = getSupraProvider();
     if (supra) supra.disconnect?.();
     setSupraAddress(null);
@@ -366,7 +390,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{
       supraAddress, profile, isVerified, isDemo,
-      connect, demo, disconnect, linkEvmAddress,
+      connect, demo, disconnect, linkEvmAddress, signAction: handleSignAction, sessionValid,
       sendSepoliaEth, sendSupraTokens,
       supraShort, evmShort,
     }}>

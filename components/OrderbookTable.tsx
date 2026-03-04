@@ -130,7 +130,7 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
 }
 
 function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: { trade: Trade; onUpdate: () => void; rfq?: RFQ; tradeQuotes?: Quote[]; agents?: Agent[]; supraAddr?: string }) {
-  const { profile, isDemo, sendSepoliaEth, sendSupraTokens, supraAddress } = useWallet();
+  const { profile, isDemo, sendSepoliaEth, sendSupraTokens, supraAddress, signAction } = useWallet();
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: string; text: string; color?: string }>>([]);
@@ -155,10 +155,19 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
   };
 
   const confirmTx = async (side: "taker" | "maker", hash: string): Promise<any> => {
+    const body: any = { tradeId: trade.id, txHash: hash, side };
+    try {
+      const signed = await signAction("confirm_" + side + "_tx", { tradeId: trade.id, txHash: hash });
+      body.signedPayload = signed.payload;
+      body.signature = signed.signature;
+      body.payloadHash = signed.payloadHash;
+      body.sessionNonce = signed.payload.sessionNonce;
+      body.sessionCreatedAt = signed.payload.sessionNonce;
+    } catch {}
     const res = await fetch("/api/confirm-tx", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tradeId: trade.id, txHash: hash, side }),
+      body: JSON.stringify(body),
     });
     return res.json();
   };
@@ -620,7 +629,7 @@ interface Props {
 }
 
 export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate }: Props) {
-  const { supraAddress } = useWallet();
+  const { supraAddress, signAction } = useWallet();
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -670,7 +679,18 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       const res = await fetch("/api/skill/suprafx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "accept_quote", quoteId, agentAddress: supraAddress }),
+        body: await (async () => {
+          const body: any = { action: "accept_quote", quoteId, agentAddress: supraAddress };
+          try {
+            const signed = await signAction("accept_quote", { quoteId });
+            body.signedPayload = signed.payload;
+            body.signature = signed.signature;
+            body.payloadHash = signed.payloadHash;
+            body.sessionNonce = signed.payload.sessionNonce;
+            body.sessionCreatedAt = signed.payload.sessionNonce;
+          } catch {}
+          return JSON.stringify(body);
+        })(),
       });
       const data = await res.json();
       if (data.error) alert(data.error);
@@ -707,7 +727,18 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       await fetch("/api/skill/suprafx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "place_quote", rfqId, makerAddress: supraAddress, rate: quotePrice }),
+        body: await (async () => {
+          const body: any = { action: "place_quote", rfqId, makerAddress: supraAddress, rate: quotePrice };
+          try {
+            const signed = await signAction("place_quote", { rfqId, rate: quotePrice });
+            body.signedPayload = signed.payload;
+            body.signature = signed.signature;
+            body.payloadHash = signed.payloadHash;
+            body.sessionNonce = signed.payload.sessionNonce;
+            body.sessionCreatedAt = signed.payload.sessionNonce;
+          } catch {}
+          return JSON.stringify(body);
+        })(),
       });
       setQuotePrice("");
       setQuotingRfq(null);
