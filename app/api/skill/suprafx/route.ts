@@ -31,23 +31,40 @@ const REF_PRICES: Record<string, number> = {
   // Cross-chain: ETH <-> Supra
   'ETH/SUPRA': 2200,
   'SUPRA/ETH': 0.000454,
-  // Cross-chain: ERC-20 <-> Supra
+  // Cross-chain: ERC-20 -> Supra
   'fxAAVE/SUPRA': 168,
   'fxLINK/SUPRA': 8.2,
   'fxUSDC/SUPRA': 0.56,
   'fxUSDT/SUPRA': 0.56,
-  // EVM same-chain swaps
+  // Cross-chain: Supra -> ERC-20 (inverse prices)
+  'SUPRA/fxAAVE': 0.00595,    // 1/168
+  'SUPRA/fxLINK': 0.122,      // 1/8.2
+  'SUPRA/fxUSDC': 1.786,      // 1/0.56
+  'SUPRA/fxUSDT': 1.786,      // 1/0.56
+  // EVM same-chain swaps (both directions)
   'fxAAVE/fxUSDT': 95.50,
   'fxAAVE/fxUSDC': 95.50,
   'fxAAVE/fxLINK': 6.45,
   'fxUSDT/fxUSDC': 1.0,
   'fxLINK/fxUSDC': 14.80,
   'fxLINK/fxUSDT': 14.80,
+  // Reverse EVM same-chain
+  'fxUSDT/fxAAVE': 0.01047,   // 1/95.5
+  'fxUSDC/fxAAVE': 0.01047,
+  'fxLINK/fxAAVE': 0.155,     // 1/6.45
+  'fxUSDC/fxUSDT': 1.0,
+  'fxUSDC/fxLINK': 0.0676,    // 1/14.8
+  'fxUSDT/fxLINK': 0.0676,
   // ETH <-> ERC-20 (same chain)
   'ETH/fxAAVE': 26.18,
   'ETH/fxLINK': 168.92,
   'ETH/fxUSDC': 2500.00,
   'ETH/fxUSDT': 2500.00,
+  // Reverse ETH <-> ERC-20
+  'fxAAVE/ETH': 0.0382,       // 1/26.18
+  'fxLINK/ETH': 0.00592,      // 1/168.92
+  'fxUSDC/ETH': 0.0004,       // 1/2500
+  'fxUSDT/ETH': 0.0004,
 };
 
 const PAIRS: Record<string, { source: string; dest: string }> = {
