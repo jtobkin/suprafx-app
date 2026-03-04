@@ -7,6 +7,7 @@ import { updateReputation } from '@/lib/reputation';
 import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation } from '@/lib/bot-wallets';
 import { generateMultisig } from '@/lib/committee-sig';
 import { storeSignedAction } from '@/lib/signed-actions';
+import { botSignAction } from '@/lib/bot-signing';
 
 const COMMITTEE_NODES = ['N-1', 'N-2', 'N-3', 'N-4', 'N-5'];
 
@@ -76,18 +77,16 @@ export async function POST(req: NextRequest) {
       await db.from('trades').update({ taker_tx_hash: txHash, status: 'taker_sent' }).eq('id', tradeId);
 
       // Store signed action
-      if (signature) {
-        await storeSignedAction({
-          actionType: 'confirm_taker_tx',
-          signerAddress: trade.taker_address,
-          payload: signedPayload || { action: 'confirm_taker_tx', tradeId, txHash },
-          payloadHash: payloadHash || '',
-          signature,
-          sessionNonce,
-          sessionCreatedAt,
-          tradeId,
-        });
-      }
+      await storeSignedAction({
+        actionType: 'confirm_taker_tx',
+        signerAddress: trade.taker_address,
+        payload: signedPayload || { action: 'confirm_taker_tx', tradeId, txHash },
+        payloadHash: payloadHash || '',
+        signature: signature || '',
+        sessionNonce,
+        sessionCreatedAt,
+        tradeId,
+      });
 
       // Committee verify taker TX
       const tradeInfo = { pair: trade.pair, size: trade.size, rate: trade.rate, takerTxHash: txHash };
@@ -131,7 +130,19 @@ export async function POST(req: NextRequest) {
             });
           }
 
-          // Maker TX succeeded — proceed with verification
+          // Maker TX succeeded — bot signs the TX confirmation same as a human would
+          const botMakerSig = await botSignAction('confirm_maker_tx', { tradeId, txHash: makerTxHash });
+          await storeSignedAction({
+            actionType: 'confirm_maker_tx',
+            signerAddress: trade.maker_address,
+            payload: botMakerSig.payload,
+            payloadHash: botMakerSig.payloadHash,
+            signature: botMakerSig.signature,
+            sessionNonce: botMakerSig.sessionNonce,
+            sessionCreatedAt: botMakerSig.sessionCreatedAt,
+            tradeId,
+          });
+
           await db.from('trades').update({
             maker_tx_hash: makerTxHash,
             status: 'maker_sent',
@@ -210,18 +221,16 @@ export async function POST(req: NextRequest) {
       await db.from('trades').update({ maker_tx_hash: txHash, status: 'maker_sent' }).eq('id', tradeId);
 
       // Store signed action
-      if (signature) {
-        await storeSignedAction({
-          actionType: 'confirm_maker_tx',
-          signerAddress: trade.maker_address,
-          payload: signedPayload || { action: 'confirm_maker_tx', tradeId, txHash },
-          payloadHash: payloadHash || '',
-          signature,
-          sessionNonce,
-          sessionCreatedAt,
-          tradeId,
-        });
-      }
+      await storeSignedAction({
+        actionType: 'confirm_maker_tx',
+        signerAddress: trade.maker_address,
+        payload: signedPayload || { action: 'confirm_maker_tx', tradeId, txHash },
+        payloadHash: payloadHash || '',
+        signature: signature || '',
+        sessionNonce,
+        sessionCreatedAt,
+        tradeId,
+      });
 
       const makerTradeInfo = { pair: trade.pair, size: trade.size, rate: trade.rate, takerTxHash: trade.taker_tx_hash, makerTxHash: txHash };
       const { verified } = await runCommittee(db, tradeId, 'verify_maker_tx', trade.dest_chain, txHash, makerTradeInfo);

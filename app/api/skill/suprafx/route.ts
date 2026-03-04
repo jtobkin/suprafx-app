@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { getBotAddresses } from '@/lib/bot-wallets';
 import { storeSignedAction } from '@/lib/signed-actions';
+import { botSignAction } from '@/lib/bot-signing';
 
 // Normalize clean token names to internal fx-prefixed format
 function normalizePair(pair: string): string {
@@ -226,20 +227,18 @@ async function handleSubmitRFQ(body: any) {
   if (rfqErr) return NextResponse.json({ error: rfqErr.message }, { status: 500 });
 
   // Store signed action in audit trail
-  if (signature) {
-    await storeSignedAction({
-      actionType: 'submit_rfq',
-      signerAddress: agentAddress,
-      payload: signedPayload || { action: 'submit_rfq', pair: normalizedPair, size, quotedPrice },
-      payloadHash: payloadHash || '',
-      signature,
-      sessionNonce,
-      sessionCreatedAt,
-      rfqId: rfq.id,
-    });
-  }
+  await storeSignedAction({
+    actionType: 'submit_rfq',
+    signerAddress: agentAddress,
+    payload: signedPayload || { action: 'submit_rfq', pair: normalizedPair, size, quotedPrice },
+    payloadHash: payloadHash || '',
+    signature: signature || '',
+    sessionNonce,
+    sessionCreatedAt,
+    rfqId: rfq.id,
+  });
 
-  // Bot auto-quotes at 0.3% below reference
+  // Bot auto-quotes at 0.3% below reference — same signing process as humans
   const makerAddress = 'auto-maker-bot';
   const botRate = refPrice * (1 - SPREAD_BPS / 10000);
 
@@ -252,11 +251,29 @@ async function handleSubmitRFQ(body: any) {
     rep_total: 5.0,
   }, { onConflict: 'wallet_address' });
 
-  await db.from('quotes').insert({
+  // Bot signs its quote the same way a human maker would
+  const botQuoteSig = await botSignAction('place_quote', { rfqId: rfq.id, rate: botRate });
+
+  const { data: botQuote } = await db.from('quotes').insert({
     rfq_id: rfq.id,
     maker_address: makerAddress,
     rate: botRate,
     status: 'pending',
+    maker_signature: botQuoteSig.signature,
+    maker_payload_hash: botQuoteSig.payloadHash,
+  }).select().single();
+
+  // Store bot's signed action in audit trail
+  await storeSignedAction({
+    actionType: 'place_quote',
+    signerAddress: makerAddress,
+    payload: botQuoteSig.payload,
+    payloadHash: botQuoteSig.payloadHash,
+    signature: botQuoteSig.signature,
+    sessionNonce: botQuoteSig.sessionNonce,
+    sessionCreatedAt: botQuoteSig.sessionCreatedAt,
+    rfqId: rfq.id,
+    quoteId: botQuote?.id,
   });
 
   return NextResponse.json({
@@ -331,20 +348,18 @@ async function handleAcceptQuote(body: any) {
   if (tradeErr) return NextResponse.json({ error: tradeErr.message }, { status: 500 });
 
   // Store signed action for acceptance
-  if (acceptSig) {
-    await storeSignedAction({
-      actionType: 'accept_quote',
-      signerAddress: rfq.taker_address,
-      payload: acceptPayload || { action: 'accept_quote', quoteId, rate: quote.rate },
-      payloadHash: acceptHash || '',
-      signature: acceptSig,
-      sessionNonce: acceptSessionNonce,
-      sessionCreatedAt: acceptSessionCreatedAt,
-      rfqId: rfq.id,
-      quoteId,
-      tradeId: trade.id,
-    });
-  }
+  await storeSignedAction({
+    actionType: 'accept_quote',
+    signerAddress: rfq.taker_address,
+    payload: acceptPayload || { action: 'accept_quote', quoteId, rate: quote.rate },
+    payloadHash: acceptHash || '',
+    signature: acceptSig || '',
+    sessionNonce: acceptSessionNonce,
+    sessionCreatedAt: acceptSessionCreatedAt,
+    rfqId: rfq.id,
+    quoteId,
+    tradeId: trade.id,
+  });
 
   return NextResponse.json({
     success: true,

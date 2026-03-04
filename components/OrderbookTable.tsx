@@ -162,8 +162,9 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
       body.signature = signed.signature;
       body.payloadHash = signed.payloadHash;
       body.sessionNonce = signed.payload.sessionNonce;
-      body.sessionCreatedAt = signed.payload.sessionNonce;
-    } catch {}
+      body.sessionCreatedAt = Date.now();
+      console.log("[SupraFX] TX confirm signed:", signed.payloadHash.slice(0, 16) + "...");
+    } catch (e) { console.warn("[SupraFX] TX confirm signing failed:", e); }
     const res = await fetch("/api/confirm-tx", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -687,8 +688,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             body.signature = signed.signature;
             body.payloadHash = signed.payloadHash;
             body.sessionNonce = signed.payload.sessionNonce;
-            body.sessionCreatedAt = signed.payload.sessionNonce;
-          } catch {}
+            body.sessionCreatedAt = Date.now();
+            console.log("[SupraFX] Action signed:", signed.payloadHash.slice(0, 16) + "...");
+          } catch (e) { console.warn("[SupraFX] Signing failed:", e); }
           return JSON.stringify(body);
         })(),
       });
@@ -735,8 +737,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             body.signature = signed.signature;
             body.payloadHash = signed.payloadHash;
             body.sessionNonce = signed.payload.sessionNonce;
-            body.sessionCreatedAt = signed.payload.sessionNonce;
-          } catch {}
+            body.sessionCreatedAt = Date.now();
+            console.log("[SupraFX] Action signed:", signed.payloadHash.slice(0, 16) + "...");
+          } catch (e) { console.warn("[SupraFX] Signing failed:", e); }
           return JSON.stringify(body);
         })(),
       });
