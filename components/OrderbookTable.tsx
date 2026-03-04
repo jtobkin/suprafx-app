@@ -173,15 +173,51 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
   // Resolve recipient: use the settlement address for the target chain
   // Taker sends on source_chain TO maker's source_chain address (maker_settlement_address)
   // Maker sends on dest_chain TO taker's dest_chain address (taker_settlement_address)
-  const recipient = (() => {
-    if (isTaker) {
-      // Taker sending on source_chain — need maker's address on source_chain
-      return (trade as any).maker_settlement_address || trade.maker_address;
-    } else {
-      // Maker sending on dest_chain — need taker's address on dest_chain
-      return (trade as any).taker_settlement_address || trade.taker_address;
+  const [resolvedRecipient, setResolvedRecipient] = useState<string | null>(null);
+  const [recipientLoading, setRecipientLoading] = useState(false);
+
+  // Resolve counterparty's chain-specific address
+  useEffect(() => {
+    if (!isTaker && !isMaker) return;
+    const storedAddr = isTaker
+      ? (trade as any).maker_settlement_address
+      : (trade as any).taker_settlement_address;
+
+    // If we already have a valid settlement address for this chain, use it
+    if (storedAddr && storedAddr.length > 10) {
+      setResolvedRecipient(storedAddr);
+      return;
     }
-  })();
+
+    // Otherwise, look up the counterparty's address for this chain via API
+    const counterpartySupraAddr = isTaker ? trade.maker_address : trade.taker_address;
+    setRecipientLoading(true);
+    fetch(`/api/link-address?supra=${encodeURIComponent(counterpartySupraAddr)}`)
+      .then(r => r.json())
+      .then(data => {
+        // Check linked_addresses first
+        const links = data.links || [];
+        const chainMatch = links.find((l: any) => l.chain === myChain);
+        if (chainMatch) {
+          setResolvedRecipient(chainMatch.linked_address);
+        } else if (links.length > 0 && isEvmChain) {
+          // Any EVM address works for any EVM chain
+          setResolvedRecipient(links[0].linked_address);
+        } else if (data.link?.evm_address && isEvmChain) {
+          // Legacy table
+          setResolvedRecipient(data.link.evm_address);
+        } else if (isSupraChain) {
+          // For Supra chains, the supra address IS the settlement address
+          setResolvedRecipient(counterpartySupraAddr);
+        } else {
+          setResolvedRecipient(null);
+        }
+      })
+      .catch(() => setResolvedRecipient(null))
+      .finally(() => setRecipientLoading(false));
+  }, [trade.id, isTaker, isMaker, myChain, isEvmChain, isSupraChain]);
+
+  const recipient = resolvedRecipient;
 
   // Validate recipient address for the target chain
   const isValidRecipient = (() => {
@@ -193,6 +229,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
   // Send tokens on the appropriate chain
   const sendOnChain = async (): Promise<string> => {
+    if (!recipient) throw new Error("No recipient address resolved");
     if (isEvmChain) {
       const toAddr = recipient.startsWith("0x") ? recipient : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e";
       const valueWei = "0x" + BigInt(10000000000000).toString(16); // 0.00001 ETH
@@ -220,7 +257,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
     }
 
     if (!isValidRecipient) {
-      addLog("Cannot settle: counterparty has no linked address on " + chainName(myChain) + ". Ask them to link their address in their Profile.", "var(--negative)");
+      addLog("Cannot settle: counterparty has no linked address on " + chainName(myChain) + ". They need to link a " + (isEvmChain ? "MetaMask or StarKey EVM" : "Supra") + " address in their Profile.", "var(--negative)");
       setLoading(false);
       return;
     }
@@ -410,7 +447,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
           {isTaker ? (
             <>
               <div className="flex items-center gap-2 mb-2">
-                <button onClick={settle} disabled={loading || !canSettle}
+                <button onClick={settle} disabled={loading || !canSettle || recipientLoading || !isValidRecipient}
                   className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
                   style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
                   {loading ? "Settling…" : "Settle on " + chainName(myChain)}
@@ -419,6 +456,26 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
               {!canSettle && (
                 <div className="text-[12px] mb-2" style={{ color: "var(--warn)" }}>
                   {isEvmChain ? "Connect MetaMask or StarKey EVM to settle" : "Connect StarKey to settle"}
+                </div>
+              )}
+              {canSettle && !recipientLoading && !isValidRecipient && (
+                <div className="text-[12px] mb-2" style={{ color: "var(--warn)" }}>
+                  Counterparty has not linked a {isEvmChain ? "Sepolia" : "Supra"} address yet
+                </div>
+              )}
+              {recipientLoading && (
+                <div className="text-[12px] mb-2" style={{ color: "var(--t3)" }}>
+                  Resolving counterparty address...
+                </div>
+              )}
+              {canSettle && !recipientLoading && !isValidRecipient && (
+                <div className="text-[12px] mb-2" style={{ color: "var(--warn)" }}>
+                  Counterparty has not linked a {isEvmChain ? "Sepolia" : "Supra"} address yet
+                </div>
+              )}
+              {recipientLoading && (
+                <div className="text-[12px] mb-2" style={{ color: "var(--t3)" }}>
+                  Resolving counterparty address...
                 </div>
               )}
               <div className="flex items-center gap-2">
@@ -471,7 +528,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
                 </span>
               </div>
               <div className="flex items-center gap-2 mb-2">
-                <button onClick={settle} disabled={loading || !canSettle}
+                <button onClick={settle} disabled={loading || !canSettle || recipientLoading || !isValidRecipient}
                   className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
                   style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
                   {loading ? "Settling…" : "Settle on " + chainName(myChain)}
