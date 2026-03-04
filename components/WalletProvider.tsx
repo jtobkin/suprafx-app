@@ -16,7 +16,7 @@ interface WalletCtx {
   connect: () => Promise<void>;
   demo: () => void;
   disconnect: () => void;
-  linkEvmAddress: () => Promise<boolean>;
+  linkEvmAddress: (provider?: "metamask" | "starkey") => Promise<boolean>;
   sendSepoliaEth: (to: string, valueWei: string) => Promise<string>;
   sendSupraTokens: (to: string, amount: number) => Promise<string>;
   supraShort: string;
@@ -26,7 +26,7 @@ interface WalletCtx {
 const Ctx = createContext<WalletCtx>({
   supraAddress: null, profile: null, isVerified: false, isDemo: false,
   connect: async () => {}, demo: () => {}, disconnect: () => {},
-  linkEvmAddress: async () => false,
+  linkEvmAddress: async (_provider?: "metamask" | "starkey") => false,
   sendSepoliaEth: async () => "", sendSupraTokens: async () => "",
   supraShort: "", evmShort: "",
 });
@@ -131,14 +131,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsDemo(false);
   }, []);
 
-  // Link & verify EVM address via MetaMask signature
-  const linkEvmAddress = useCallback(async (): Promise<boolean> => {
+  // Link & verify EVM address via wallet signature
+  const linkEvmAddress = useCallback(async (provider: "metamask" | "starkey" = "metamask"): Promise<boolean> => {
     if (!supraAddress) return false;
 
-    const evm = getEvmProvider();
-    if (!evm) {
-      alert("MetaMask not detected. Please install MetaMask to link your EVM address.");
-      return false;
+    let evm: any;
+    if (provider === "starkey") {
+      evm = (window as any)?.starkey?.ethereum;
+      if (!evm) {
+        alert("StarKey EVM provider not found. Make sure StarKey is installed and unlocked.");
+        return false;
+      }
+    } else {
+      evm = getEvmProvider();
+      if (!evm) {
+        alert("MetaMask not detected. Please install MetaMask or use StarKey EVM.");
+        return false;
+      }
     }
 
     try {
@@ -161,13 +170,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Sign verification message
       const message = `SupraFX: Link EVM address ${evmAddr.toLowerCase()} to Supra account ${supraAddress}`;
-      const signature = await evm.request({ method: "personal_sign", params: [message, evmAddr] });
+      let signature: string | null = null;
+      try {
+        signature = await evm.request({ method: "personal_sign", params: [message, evmAddr] });
+      } catch (signErr: any) {
+        if (signErr.code === 4001 || signErr.message?.includes("rejected")) {
+          return false; // User rejected
+        }
+        // Try with hex-encoded message as fallback
+        try {
+          const hexMsg = "0x" + Array.from(new TextEncoder().encode(message), b => b.toString(16).padStart(2, "0")).join("");
+          signature = await evm.request({ method: "personal_sign", params: [hexMsg, evmAddr] });
+        } catch {
+          throw signErr; // Re-throw original
+        }
+      }
+
+      if (!signature) {
+        alert("MetaMask did not return a signature. Try disconnecting and reconnecting MetaMask.");
+        return false;
+      }
 
       // Submit to API for server-side verification
       const res = await fetch("/api/link-address", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supraAddress, evmAddress: evmAddr, signature }),
+        body: JSON.stringify({ supraAddress, evmAddress: evmAddr, signature, walletProvider: provider, chain: "sepolia" }),
       });
 
       const data = await res.json();

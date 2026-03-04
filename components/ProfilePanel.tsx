@@ -5,8 +5,10 @@ import { useWallet } from "./WalletProvider";
 export default function ProfilePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { supraAddress, profile, isVerified, isDemo, linkEvmAddress, disconnect, supraShort, evmShort } = useWallet();
   const [linking, setLinking] = useState(false);
+  const [linkingProvider, setLinkingProvider] = useState<"metamask" | "starkey" | null>(null);
   const [visible, setVisible] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [showWalletChoice, setShowWalletChoice] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -21,10 +23,13 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
     }
   }, [open]);
 
-  const handleLink = async () => {
+  const handleLink = async (provider: "metamask" | "starkey") => {
     setLinking(true);
-    await linkEvmAddress();
+    setLinkingProvider(provider);
+    setShowWalletChoice(false);
+    await linkEvmAddress(provider);
     setLinking(false);
+    setLinkingProvider(null);
   };
 
   if (!mounted) return null;
@@ -73,9 +78,14 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
           {/* Supra Address */}
           <div className="card p-3.5">
             <div className="flex items-center justify-between mb-2">
-              <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>
-                Supra (MoveVM)
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>
+                  Supra (MoveVM)
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] mono" style={{ background: "var(--surface-3)", color: "var(--t3)" }}>
+                  StarKey
+                </span>
+              </div>
               <div className="flex items-center gap-1">
                 <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
                 <span className="mono text-[12px]" style={{ color: "var(--positive)" }}>verified</span>
@@ -85,52 +95,96 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
               {supraAddress}
             </div>
             <div className="text-[13px] mt-1.5" style={{ color: "var(--t3)" }}>
-              Signed via StarKey wallet connection
+              Primary identity for reputation and trading
             </div>
           </div>
 
-          {/* EVM Address */}
-          <div className="card p-3.5" style={{
-            borderColor: profile?.evmVerified ? undefined : "var(--warn)",
-          }}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>
-                Ethereum (EVM)
-              </span>
-              {profile?.evmVerified ? (
-                <div className="flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
-                  <span className="mono text-[12px]" style={{ color: "var(--positive)" }}>verified</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--warn)" }} />
-                  <span className="mono text-[12px]" style={{ color: "var(--warn)" }}>not linked</span>
-                </div>
-              )}
+          {/* Linked Addresses */}
+          <div>
+            <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>
+              Linked Addresses
             </div>
 
-            {profile?.evmVerified ? (
-              <>
-                <div className="mono text-[13px] break-all" style={{ color: "var(--t0)" }}>
-                  {profile.evmAddress}
+            {/* EVM Address */}
+            <div className="card p-3.5" style={{
+              borderColor: profile?.evmVerified ? undefined : "var(--warn)",
+            }}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>
+                    Ethereum (Sepolia)
+                  </span>
+                  {profile?.evmVerified && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] mono" style={{ background: "var(--surface-3)", color: "var(--t3)" }}>
+                      {/* Show which wallet was used */}
+                      verified
+                    </span>
+                  )}
                 </div>
-                <div className="text-[13px] mt-1.5" style={{ color: "var(--t3)" }}>
-                  Verified via personal_sign on Sepolia
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-[14px] mb-3" style={{ color: "var(--t2)" }}>
-                  Link your Ethereum address to enable cross-chain settlement. MetaMask will ask you to sign a verification message.
-                </div>
-                <button onClick={handleLink} disabled={linking}
-                  className="w-full py-2.5 rounded-md text-[14px] font-semibold transition-all disabled:opacity-50"
-                  style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                  {linking ? "Waiting for MetaMask…" : "Link EVM Address via MetaMask"}
-                </button>
-              </>
-            )}
+                {profile?.evmVerified ? (
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
+                    <span className="mono text-[12px]" style={{ color: "var(--positive)" }}>linked</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--warn)" }} />
+                    <span className="mono text-[12px]" style={{ color: "var(--warn)" }}>not linked</span>
+                  </div>
+                )}
+              </div>
+
+              {profile?.evmVerified ? (
+                <>
+                  <div className="mono text-[13px] break-all" style={{ color: "var(--t0)" }}>
+                    {profile.evmAddress}
+                  </div>
+                  <div className="text-[13px] mt-1.5" style={{ color: "var(--t3)" }}>
+                    Ownership verified via signed message
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[13px] mb-3" style={{ color: "var(--t2)" }}>
+                    Link your Ethereum address to enable cross-chain settlement. This proves you own the address by signing a message.
+                  </div>
+
+                  {linking ? (
+                    <div className="flex items-center gap-2 py-2">
+                      <div className="w-3 h-3 rounded-full border-[1.5px] animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+                      <span className="text-[13px]" style={{ color: "var(--t2)" }}>
+                        Waiting for {linkingProvider === "starkey" ? "StarKey" : "MetaMask"} signature...
+                      </span>
+                    </div>
+                  ) : showWalletChoice ? (
+                    <div className="space-y-2">
+                      <div className="text-[12px] mb-2" style={{ color: "var(--t3)" }}>Choose wallet to sign with:</div>
+                      <button onClick={() => handleLink("starkey")}
+                        className="w-full py-2.5 rounded-md text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-2"
+                        style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                        StarKey (EVM)
+                      </button>
+                      <button onClick={() => handleLink("metamask")}
+                        className="w-full py-2.5 rounded-md text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-2"
+                        style={{ background: "var(--surface-3)", color: "var(--t1)", border: "1px solid var(--border)" }}>
+                        MetaMask
+                      </button>
+                      <button onClick={() => setShowWalletChoice(false)}
+                        className="w-full py-1.5 text-[12px] transition-all"
+                        style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+                        cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowWalletChoice(true)}
+                      className="w-full py-2.5 rounded-md text-[14px] font-semibold transition-all hover:brightness-110"
+                      style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                      Link EVM Address
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           {/* Verification Status */}
@@ -140,7 +194,7 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
             </div>
             <div className="text-[13px] mt-1" style={{ color: "var(--t3)" }}>
               {isVerified
-                ? "Both addresses verified. Cross-chain settlement enabled."
+                ? "Both addresses verified. Cross-chain settlement enabled. Reputation is shared across linked addresses."
                 : "Link your EVM address to enable settlement on Sepolia."}
             </div>
           </div>
