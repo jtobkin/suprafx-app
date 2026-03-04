@@ -72,8 +72,8 @@ function ChainTokenSelector({
     <div ref={ref} className="relative">
       <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "var(--t3)" }}>{label}</label>
       <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-2 rounded-md transition-colors w-full"
-        style={{ background: "var(--bg-raised)", border: open ? "1px solid var(--border-active)" : "1px solid var(--border)" }}>
+        className="flex items-center gap-2 px-3 rounded-md transition-colors w-full"
+        style={{ background: "var(--bg-raised)", border: open ? "1px solid var(--border-active)" : "1px solid var(--border)", height: 46 }}>
         <CoinIcon token={token} size={18} />
         <div className="flex flex-col items-start">
           <span className="mono text-[13px] font-semibold leading-tight" style={{ color: "var(--t0)" }}>{token}</span>
@@ -205,37 +205,39 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
       </div>
       <div className="px-4 py-4" style={{ position: "relative", zIndex: 10 }}>
         {/* Single row: Selling | Amount | arrow | Buying | Price | Receive | Submit */}
-        <div className="flex items-end gap-2 flex-wrap justify-center">
+        <div className="flex items-start gap-3 flex-wrap justify-center">
           {/* Selling */}
-          <div style={{ width: 160 }}>
+          <div style={{ width: 150 }}>
             <ChainTokenSelector label="Selling" chain={sellChain} token={sellToken}
               onChainChange={setSellChain} onTokenChange={setSellToken}
               excludeChain={buyChain} excludeToken={buyToken} />
           </div>
 
           {/* Amount */}
-          <div style={{ width: 130 }}>
+          <div style={{ width: 120 }}>
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "var(--t3)" }}>Amount</label>
             <input type="number" step="0.01" min="0" placeholder="0.00" value={amount}
               onChange={e => setAmount(e.target.value)}
               className="w-full px-3 rounded-md mono text-[14px] outline-none"
-              style={{ background: "var(--bg-raised)", color: "var(--t0)", border: "1px solid var(--border)", height: 42 }} />
+              style={{ background: "var(--bg-raised)", color: "var(--t0)", border: "1px solid var(--border)", height: 46 }} />
           </div>
 
           {/* Arrow */}
-          <div className="flex items-center pb-1" style={{ color: "var(--t3)" }}>
-            <span className="text-[16px]">→</span>
+          <div style={{ paddingTop: 22 }}>
+            <div className="flex items-center" style={{ color: "var(--t3)", height: 46 }}>
+              <span className="text-[16px]">→</span>
+            </div>
           </div>
 
           {/* Buying */}
-          <div style={{ width: 160 }}>
+          <div style={{ width: 150 }}>
             <ChainTokenSelector label="Buying" chain={buyChain} token={buyToken}
               onChainChange={setBuyChain} onTokenChange={setBuyToken}
               excludeChain={sellChain} excludeToken={sellToken} />
           </div>
 
           {/* Your Price */}
-          <div style={{ width: 180 }}>
+          <div style={{ width: 160 }}>
             <div className="flex items-center justify-between mb-1.5">
               <label className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Price</label>
               {oracleRate && priceEdited && (
@@ -246,7 +248,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
                 </button>
               )}
             </div>
-            <div className="flex items-center rounded-md overflow-hidden" style={{ border: "1px solid var(--border)", height: 42 }}>
+            <div className="flex items-center rounded-md overflow-hidden" style={{ border: "1px solid var(--border)", height: 46 }}>
               <input type="number" step="any" min="0" placeholder="0.00" value={price}
                 onChange={e => { setPrice(e.target.value); setPriceEdited(true); }}
                 className="flex-1 px-3 mono text-[14px] outline-none h-full" style={{ minWidth: 0, background: "var(--bg-raised)", color: "var(--t0)", border: "none" }} />
@@ -257,9 +259,9 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
           </div>
 
           {/* You Receive */}
-          <div style={{ width: 180 }}>
+          <div style={{ width: 160 }}>
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "var(--t3)" }}>You Receive</label>
-            <div className="flex items-center rounded-md px-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", height: 42 }}>
+            <div className="flex items-center rounded-md px-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", height: 46 }}>
               <span className="mono text-[14px] font-semibold flex-1" style={{ color: receiveAmount > 0 ? "var(--positive)" : "var(--t3)" }}>
                 {receiveAmount > 0 ? (receiveAmount >= 1000 ? receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receiveAmount.toFixed(4)) : "—"}
               </span>
@@ -275,7 +277,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "transparent" }}>.</label>
             <button onClick={submit} disabled={loading || parsedAmount <= 0 || parsedPrice <= 0}
               className="px-5 rounded-md text-[13px] font-semibold transition-all disabled:opacity-30 hover:brightness-110 whitespace-nowrap"
-              style={{ background: "var(--accent)", color: "#fff", border: "none", height: 42 }}>
+              style={{ background: "var(--accent)", color: "#fff", border: "none", height: 46 }}>
               {loading ? "..." : "Submit RFQ"}
             </button>
           </div>
