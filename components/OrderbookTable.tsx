@@ -134,8 +134,6 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: string; text: string; color?: string }>>([]);
-  const [autoRunning, setAutoRunning] = useState(false);
-  const autoRef = useRef(false);
 
   const hasWallet = !!profile?.evmVerified && !isDemo;
   const hasSupraWallet = !!supraAddress && !isDemo;
@@ -149,6 +147,13 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
     setLogs(prev => [...prev, { time, text, color }]);
   };
 
+  // Chain display names
+  const chainName = (c: string) => {
+    if (c === "sepolia") return "Ethereum Sepolia";
+    if (c === "supra-testnet") return "Supra Testnet";
+    return c;
+  };
+
   const confirmTx = async (side: "taker" | "maker", hash: string): Promise<any> => {
     const res = await fetch("/api/confirm-tx", {
       method: "POST",
@@ -158,30 +163,98 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
     return res.json();
   };
 
-  // === MANUAL: Send on Sepolia ===
-  const manualSendSepolia = async () => {
+  // Determine which chain and wallet to use based on role
+  const myChain = isTaker ? trade.source_chain : trade.dest_chain;
+  const mySide: "taker" | "maker" = isTaker ? "taker" : "maker";
+  const recipient = isTaker ? trade.maker_address : trade.taker_address;
+  const isEvmChain = myChain === "sepolia" || myChain === "ethereum";
+  const isSupraChain = myChain === "supra-testnet" || myChain === "supra";
+  const canSettle = isEvmChain ? hasWallet : isSupraChain ? hasSupraWallet : false;
+
+  // Validate recipient address for the target chain
+  const isValidRecipient = (() => {
+    if (!recipient || recipient.startsWith("demo_")) return false;
+    if (isEvmChain) return recipient.startsWith("0x") && recipient.length === 42;
+    if (isSupraChain) return recipient.startsWith("0x") || /^[0-9a-fA-F]{64}$/.test(recipient);
+    return false;
+  })();
+
+  // Send tokens on the appropriate chain
+  const sendOnChain = async (): Promise<string> => {
+    if (isEvmChain) {
+      const toAddr = recipient.startsWith("0x") ? recipient : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e";
+      const valueWei = "0x" + BigInt(10000000000000).toString(16); // 0.00001 ETH
+      return await sendSepoliaEth(toAddr, valueWei);
+    } else if (isSupraChain) {
+      const hash = await sendSupraTokens(recipient, 0.001); // 0.001 SUPRA
+      return String(hash);
+    }
+    throw new Error("Unsupported chain: " + myChain);
+  };
+
+  // Block confirmation wait time per chain
+  const blockWaitMs = isEvmChain ? 12000 : 3000;
+  const blockWaitLabel = isEvmChain ? "Waiting for Ethereum block confirmation" : "Waiting for Supra block confirmation";
+
+  // === SETTLE: Single function for both taker and maker ===
+  const settle = async () => {
     setLoading(true);
+    setLogs([]);
+
+    if (!canSettle) {
+      addLog("No wallet connected for " + chainName(myChain), "var(--negative)");
+      setLoading(false);
+      return;
+    }
+
+    if (!isValidRecipient) {
+      addLog("Cannot settle: counterparty address is not valid for " + chainName(myChain), "var(--negative)");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const valueWei = "0x" + BigInt(10000000000000).toString(16);
-      const makerAddr = trade.maker_address.startsWith("0x")
-        ? trade.maker_address
-        : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e";
-
+      addLog("Settling on " + chainName(myChain) + "…");
       addLog("Requesting wallet signature…");
-      const hash = await sendSepoliaEth(makerAddr, valueWei);
-      addLog("TX broadcast: " + hash.slice(0, 18) + "…", "var(--accent-light)");
-      addLog("Submitting to committee for verification…");
 
-      const data = await confirmTx("taker", hash);
-      if (data.verified) {
-        addLog("Committee approved (5/5)", "var(--positive)");
-      } else {
-        addLog("Awaiting committee verification…", "var(--warn)");
+      const hash = await sendOnChain();
+      addLog("TX broadcast: " + hash.slice(0, 20) + "…", "var(--accent-light)");
+
+      addLog(blockWaitLabel + "…");
+      await new Promise(r => setTimeout(r, blockWaitMs));
+
+      addLog("Submitting to Settlement Council…");
+      const result = await confirmTx(mySide, hash);
+
+      if (result.status === "failed" || result.success === false) {
+        addLog("Settlement failed: " + (result.error || "unknown"), "var(--negative)");
+        onUpdate();
+        setLoading(false);
+        return;
       }
+
+      if (result.autoSettled) {
+        addLog("Council verified (5/5)", "var(--positive)");
+        addLog("Maker bot auto-settled", "var(--accent-light)");
+        if (result.makerTxHash) addLog("Maker TX: " + result.makerTxHash.slice(0, 24) + "…", "var(--accent-light)");
+        addLog("Trade settled in " + (result.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
+      } else if (result.status === "settled") {
+        addLog("Trade settled in " + (result.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
+      } else if (result.verified) {
+        addLog("Council verified (5/5)", "var(--positive)");
+        if (mySide === "taker") addLog("Waiting for maker to send…", "var(--t2)");
+      } else {
+        addLog("Council verifying…", "var(--warn)");
+      }
+
+      if (result.error && result.status !== "failed") {
+        addLog("Warning: " + result.error, "var(--warn)");
+      }
+
       onUpdate();
     } catch (e: any) {
       if (e.code === 4001 || e.message?.includes("rejected")) {
-        addLog("Transaction rejected by user", "var(--negative)");
+        addLog("Transaction rejected", "var(--negative)");
       } else {
         addLog("Error: " + (e.message || e), "var(--negative)");
       }
@@ -189,226 +262,19 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
     setLoading(false);
   };
 
-  // === MANUAL: Paste hash ===
-  const manualSubmitHash = async () => {
+  // === SUBMIT HASH: Paste a TX hash directly ===
+  const submitHash = async () => {
     if (!txHash.trim()) return;
     setLoading(true);
-    addLog("Submitting TX hash to committee…");
-    const data = await confirmTx("taker", txHash.trim());
+    addLog("Submitting TX hash to Settlement Council…");
+    const data = await confirmTx(mySide, txHash.trim());
     if (data.error) addLog("Error: " + data.error, "var(--negative)");
-    else if (data.verified) addLog("Committee approved (5/5)", "var(--positive)");
-    else addLog("Awaiting verification…", "var(--warn)");
+    else if (data.status === "settled") addLog("Trade settled!", "var(--positive)");
+    else if (data.verified) addLog("Council verified (5/5)", "var(--positive)");
+    else addLog("Council verifying…", "var(--warn)");
     setTxHash("");
     onUpdate();
     setLoading(false);
-  };
-
-  // === MANUAL: Demo TX ===
-  const manualDemoTx = async () => {
-    setLoading(true);
-    const hash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-    addLog("Demo TX generated: " + hash.slice(0, 18) + "…");
-    addLog("Submitting to committee…");
-    const data = await confirmTx("taker", hash);
-    if (data.verified) addLog("Committee approved (5/5)", "var(--positive)");
-    else addLog("Awaiting verification…", "var(--warn)");
-    onUpdate();
-    setLoading(false);
-  };
-
-  // === MANUAL: Maker Send on Supra ===
-  const manualMakerSend = async () => {
-    setLoading(true);
-
-    // Calculate the amount to send: for SUPRA leg, use 0.001 SUPRA (testnet cap)
-    const sendAmount = 0.001;
-    const takerAddr = trade.taker_address;
-    const isValidSupraAddr = takerAddr && !takerAddr.startsWith("demo_") && (takerAddr.startsWith("0x") || /^[0-9a-fA-F]{64}$/.test(takerAddr));
-
-    addLog("hasSupraWallet=" + hasSupraWallet + " isValidAddr=" + isValidSupraAddr);
-    if (hasSupraWallet && isValidSupraAddr) {
-      // Real Supra send to a real taker address
-      try {
-        addLog("Preparing to send " + sendAmount + " SUPRA to taker on testnet…");
-        addLog("Taker: " + takerAddr.slice(0, 16) + "…");
-        addLog("Requesting StarKey wallet signature…");
-        const hash = await sendSupraTokens(takerAddr, sendAmount);
-        addLog("Supra TX broadcast: " + String(hash).slice(0, 20) + "…", "var(--accent-light)");
-        addLog("Submitting to Settlement Council…");
-        const data = await confirmTx("maker", String(hash));
-        if (data.status === "settled") {
-          addLog("Trade settled in " + (data.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
-        } else {
-          addLog("Maker TX sent — Council verifying…", "var(--warn)");
-        }
-      } catch (e: any) {
-        if (e.code === 4001 || e.message?.includes("rejected")) {
-          addLog("Transaction rejected by user", "var(--negative)");
-        } else {
-          addLog("Supra send error: " + (e.message || e), "var(--negative)");
-          addLog("Falling back to simulated maker send…", "var(--warn)");
-          const hash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-          addLog("Simulated maker TX: " + hash.slice(0, 20) + "…");
-          const data = await confirmTx("maker", hash);
-          if (data.status === "settled") addLog("Trade settled!", "var(--positive)");
-          else addLog("Council verifying…", "var(--warn)");
-        }
-      }
-    } else {
-      // Simulated maker send
-      const hash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-      addLog("Simulated maker TX: " + hash.slice(0, 20) + "…");
-      const data = await confirmTx("maker", hash);
-      if (data.status === "settled") {
-        addLog("Trade settled in " + (data.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
-      } else {
-        addLog("Maker TX submitted — verifying…", "var(--warn)");
-      }
-    }
-
-    onUpdate();
-    setLoading(false);
-  };
-
-  // === AUTO MODE: Full end-to-end ===
-  const runAutoMode = async () => {
-    autoRef.current = true;
-    setAutoRunning(true);
-    setLogs([]);
-
-    try {
-      // Step 1: Send taker TX
-      addLog("Auto mode started — sending taker TX on " + trade.source_chain + "…");
-
-      let takerHash: string;
-      if (hasWallet) {
-        const valueWei = "0x" + BigInt(10000000000000).toString(16);
-        const makerAddr = trade.maker_address.startsWith("0x")
-          ? trade.maker_address
-          : "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e";
-        addLog("Requesting MetaMask signature…");
-        takerHash = await sendSepoliaEth(makerAddr, valueWei);
-      } else {
-        takerHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-        addLog("Demo taker TX generated");
-      }
-
-      addLog("Taker TX broadcast: " + takerHash.slice(0, 18) + "…", "var(--accent-light)");
-      if (!autoRef.current) return;
-
-      // Step 2: Wait 12 seconds for Ethereum block inclusion
-      addLog("Waiting 12s for Ethereum block inclusion…");
-      await new Promise(r => setTimeout(r, 12000));
-      if (!autoRef.current) return;
-
-      // Step 3: Committee verifies taker TX — bot may auto-settle the whole trade
-      addLog("Committee verifying taker TX…");
-      const takerResult = await confirmTx("taker", takerHash);
-      
-      // Check for failure
-      if (takerResult.status === 'failed' || takerResult.success === false) {
-        addLog("Settlement failed: " + (takerResult.error || "unknown error"), "var(--negative)");
-        onUpdate();
-        autoRef.current = false;
-        setAutoRunning(false);
-        return;
-      }
-
-      if (takerResult.autoSettled) {
-        addLog("Taker TX verified by committee (5/5)", "var(--positive)");
-        addLog("Maker bot sent SUPRA to taker on-chain", "var(--accent-light)");
-        if (takerResult.makerTxHash) {
-          addLog("Supra TX: " + takerResult.makerTxHash.slice(0, 24) + "…", "var(--accent-light)");
-        }
-        addLog("Committee verified maker TX (5/5)", "var(--positive)");
-        addLog("Trade settled in " + (takerResult.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
-        onUpdate();
-        autoRef.current = false;
-        setAutoRunning(false);
-        return;
-      }
-
-      // Show error message if present but not failed
-      if (takerResult.error) {
-        addLog("Warning: " + takerResult.error, "var(--warn)");
-      }
-
-      if (takerResult.verified) {
-        addLog("Taker TX verified by committee (5/5)", "var(--positive)");
-      } else {
-        addLog("Taker verification pending — retrying in 5s…", "var(--warn)");
-        await new Promise(r => setTimeout(r, 5000));
-        const retry = await confirmTx("taker", takerHash);
-        if (retry.status === 'failed') {
-          addLog("Settlement failed: " + (retry.error || "unknown error"), "var(--negative)");
-          onUpdate();
-          autoRef.current = false;
-          setAutoRunning(false);
-          return;
-        }
-        if (retry.autoSettled) {
-          addLog("Trade settled by maker bot!", "var(--positive)");
-          onUpdate();
-          autoRef.current = false;
-          setAutoRunning(false);
-          return;
-        }
-        addLog("Taker TX verified", "var(--positive)");
-      }
-      onUpdate();
-      if (!autoRef.current) return;
-
-      if (takerResult.status === 'maker_sent' || takerResult.status === 'settled') {
-        addLog("Maker bot already sent on Supra", "var(--positive)");
-        onUpdate();
-        autoRef.current = false;
-        setAutoRunning(false);
-        return;
-      }
-
-      // Step 4: Maker sends on Supra
-      addLog("Maker sending SUPRA on " + trade.dest_chain + "…");
-      await new Promise(r => setTimeout(r, 1000));
-
-      let makerHash: string;
-      if (hasSupraWallet) {
-        try {
-          const takerAddr = trade.taker_address;
-          makerHash = String(await sendSupraTokens(takerAddr, 0.01));
-          addLog("Supra TX broadcast: " + makerHash.slice(0, 20) + "…", "var(--accent-light)");
-        } catch (e: any) {
-          addLog("Supra send failed, using simulated TX: " + (e.message || ""), "var(--warn)");
-          makerHash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-        }
-      } else {
-        makerHash = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-        addLog("Simulated maker TX: " + makerHash.slice(0, 20) + "…");
-      }
-      if (!autoRef.current) return;
-
-      // Step 5: Committee verifies maker TX
-      addLog("Committee verifying maker TX…");
-      await new Promise(r => setTimeout(r, 2000));
-      const makerResult = await confirmTx("maker", makerHash);
-      if (makerResult.status === "settled") {
-        addLog("Trade settled in " + (makerResult.settleMs / 1000).toFixed(1) + "s", "var(--positive)");
-      } else {
-        addLog("Settlement complete", "var(--positive)");
-      }
-      onUpdate();
-
-    } catch (e: any) {
-      addLog("Auto mode error: " + (e.message || e), "var(--negative)");
-    }
-
-    autoRef.current = false;
-    setAutoRunning(false);
-  };
-
-  const cancelAuto = () => {
-    autoRef.current = false;
-    setAutoRunning(false);
-    addLog("Auto mode cancelled", "var(--warn)");
   };
 
   return (
@@ -527,73 +393,49 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
       <Progress status={trade.status} />
 
       {/* === OPEN: Taker sends first === */}
-      {trade.status === "open" && !autoRunning && (
+      {trade.status === "open" && (
         <div>
           {isTaker ? (
             <>
               <div className="flex items-center gap-2 mb-2">
-                <button onClick={runAutoMode}
-                  className="px-4 py-[7px] rounded text-[13px] font-semibold transition-all"
+                <button onClick={settle} disabled={loading || !canSettle}
+                  className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
                   style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
-                  Settle
+                  {loading ? "Settling…" : "Settle on " + chainName(myChain)}
                 </button>
-                {hasWallet && (
-                  <button onClick={manualSendSepolia} disabled={loading}
-                    className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
-                    style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                    {loading ? "Sending…" : "Send on " + trade.source_chain}
-                  </button>
-                )}
-                {isDemo && (
-                  <button onClick={manualDemoTx} disabled={loading}
-                    className="px-3 py-[7px] rounded text-[14px] font-mono disabled:opacity-30"
-                    style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
-                    Demo TX
-                  </button>
-                )}
               </div>
-              {isDemo && (
-                <div className="flex items-center gap-2">
-                  <input type="text" placeholder="or paste TX hash: 0x…" value={txHash}
-                    onChange={e => setTxHash(e.target.value)}
-                    className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
-                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-                  <button onClick={manualSubmitHash} disabled={loading || !txHash.trim()}
-                    className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
-                    style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
-                    Submit
-                  </button>
+              {!canSettle && (
+                <div className="text-[12px] mb-2" style={{ color: "var(--warn)" }}>
+                  {isEvmChain ? "Connect MetaMask or StarKey EVM to settle" : "Connect StarKey to settle"}
                 </div>
               )}
+              <div className="flex items-center gap-2">
+                <input type="text" placeholder={"or paste TX hash…"} value={txHash}
+                  onChange={e => setTxHash(e.target.value)}
+                  className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
+                  style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+                <button onClick={submitHash} disabled={loading || !txHash.trim()}
+                  className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
+                  style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
+                  Submit
+                </button>
+              </div>
             </>
           ) : isMaker ? (
             <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
               <Spinner color="var(--accent)" />
-              <span>Waiting for taker to send on {trade.source_chain}. You will be notified when it is your turn.</span>
+              <span>Waiting for taker to settle on {chainName(trade.source_chain)}. You will be notified when it is your turn.</span>
             </div>
           ) : (
-            <div className="text-[13px]" style={{ color: "var(--t3)" }}>Waiting for taker to send…</div>
+            <div className="text-[13px]" style={{ color: "var(--t3)" }}>Waiting for taker to settle…</div>
           )}
         </div>
       )}
 
-      {/* === AUTO RUNNING === */}
-      {autoRunning && (
-        <div className="mb-1">
-          <div className="flex items-center gap-2 mb-2">
-            <Spinner color="var(--positive)" />
-            <span className="text-[13px] font-medium" style={{ color: "var(--positive)" }}>Auto settlement in progress</span>
-            <button onClick={cancelAuto}
-              className="px-2 py-0.5 rounded text-[13px] font-mono ml-auto"
-              style={{ background: "var(--surface-3)", color: "var(--t3)", border: "none" }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+
 
       {/* === TAKER SENT (manual mode) === */}
-      {trade.status === "taker_sent" && !autoRunning && (
+      {trade.status === "taker_sent" && (
         <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
           <Spinner color="var(--accent)" /> Committee verifying taker TX…
           {trade.taker_tx_hash?.startsWith("0x") && (
@@ -603,8 +445,8 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
         </div>
       )}
 
-      {/* === TAKER VERIFIED (manual mode) === */}
-      {trade.status === "taker_verified" && !autoRunning && (
+      {/* === TAKER VERIFIED: Maker's turn === */}
+      {trade.status === "taker_verified" && (
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[13px]" style={{ color: "var(--positive)" }}>Taker TX verified by Council.</span>
@@ -613,32 +455,27 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
             <div>
               <div className="px-3 py-2 rounded mb-2" style={{ background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
                 <span className="text-[13px] font-semibold" style={{ color: "var(--accent-light)" }}>
-                  Your turn — send {trade.size} {trade.pair.split("/")[1]?.replace("fx","")} on {trade.dest_chain}
+                  Your turn — send {trade.size} {trade.pair.split("/")[1]?.replace("fx","")} on {chainName(trade.dest_chain)}
                 </span>
               </div>
               <div className="flex items-center gap-2 mb-2">
-                <button onClick={manualMakerSend} disabled={loading}
+                <button onClick={settle} disabled={loading || !canSettle}
                   className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
-                  style={{ background: hasSupraWallet ? "var(--positive)" : "var(--surface-3)", color: hasSupraWallet ? "#fff" : "var(--t0)", border: hasSupraWallet ? "none" : "1px solid var(--border-active)" }}>
-                  {loading ? "Sending…" : hasSupraWallet ? "Send on " + trade.dest_chain : "Simulate Maker Send"}
+                  style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
+                  {loading ? "Settling…" : "Settle on " + chainName(myChain)}
                 </button>
-                {isDemo && (
-                  <button onClick={() => { setLoading(true); const h = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join(""); confirmTx("maker", h).then(d => { if (d.status === "settled") addLog("Settled!", "var(--positive)"); onUpdate(); setLoading(false); }); }}
-                    disabled={loading}
-                    className="px-3 py-[7px] rounded text-[14px] font-mono disabled:opacity-30"
-                    style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
-                    Demo Maker TX
-                  </button>
-                )}
               </div>
-              {/* Manual maker hash input */}
+              {!canSettle && (
+                <div className="text-[12px] mb-2" style={{ color: "var(--warn)" }}>
+                  {isEvmChain ? "Connect MetaMask or StarKey EVM to settle" : "Connect StarKey to settle"}
+                </div>
+              )}
               <div className="flex items-center gap-2">
-                <input type="text" placeholder="or paste maker TX hash…" value={txHash}
+                <input type="text" placeholder={"or paste TX hash…"} value={txHash}
                   onChange={e => setTxHash(e.target.value)}
                   className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
                   style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-                <button onClick={() => { if (!txHash.trim()) return; setLoading(true); addLog("Submitting maker TX hash…"); confirmTx("maker", txHash.trim()).then(d => { if (d.error) addLog("Error: " + d.error, "var(--negative)"); else if (d.status === "settled") addLog("Settled!", "var(--positive)"); else addLog("Verifying…", "var(--warn)"); setTxHash(""); onUpdate(); setLoading(false); }); }}
-                  disabled={loading || !txHash.trim()}
+                <button onClick={submitHash} disabled={loading || !txHash.trim()}
                   className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
                   style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
                   Submit
@@ -648,12 +485,12 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
           ) : isTaker ? (
             <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
               <Spinner color="var(--positive)" />
-              <span>Waiting for maker to send on {trade.dest_chain}…</span>
+              <span>Waiting for maker to settle on {chainName(trade.dest_chain)}…</span>
             </div>
           ) : (
             <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
               <Spinner color="var(--positive)" />
-              <span>Waiting for maker to send…</span>
+              <span>Waiting for maker to settle…</span>
             </div>
           )}
         </div>
@@ -661,9 +498,9 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
       {/* === MAKER SENT (manual mode) === */}
       {/* === MAKER SENT (manual mode) === */}
-      {trade.status === "maker_sent" && !autoRunning && (
+      {trade.status === "maker_sent" && (
         <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
-          <Spinner color="var(--positive)" /> Verifying maker TX on {trade.dest_chain}…
+          <Spinner color="var(--positive)" /> Verifying maker TX on {chainName(trade.dest_chain)}…
         </div>
       )}
 
@@ -682,14 +519,14 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
               ? `https://sepolia.etherscan.io/tx/${trade.taker_tx_hash}`
               : `https://testnet.suprascan.io/tx/${trade.taker_tx_hash.replace(/^0x/, "")}`}
               target="_blank"
-              className="font-mono text-[14px]" style={{ color: "var(--accent-light)" }}>Taker TX ({trade.source_chain === "sepolia" ? "Sepolia" : "Supra"}) ↗</a>
+              className="font-mono text-[14px]" style={{ color: "var(--accent-light)" }}>Taker TX ({trade.source_chain.includes("sepolia") ? "Sepolia" : trade.source_chain.includes("supra") ? "Supra" : trade.source_chain}) ↗</a>
           )}
           {trade.maker_tx_hash && (
             <a href={trade.dest_chain === "supra-testnet"
               ? `https://testnet.suprascan.io/tx/${trade.maker_tx_hash.replace(/^0x/, "")}`
               : `https://sepolia.etherscan.io/tx/${trade.maker_tx_hash}`}
               target="_blank"
-              className="font-mono text-[14px]" style={{ color: "var(--accent-light)" }}>Maker TX ({trade.dest_chain === "supra-testnet" ? "Supra" : "Sepolia"}) ↗</a>
+              className="font-mono text-[14px]" style={{ color: "var(--accent-light)" }}>Maker TX ({trade.dest_chain.includes("supra") ? "Supra" : trade.dest_chain.includes("sepolia") ? "Sepolia" : trade.dest_chain}) ↗</a>
           )}
         </div>
       )}
