@@ -160,16 +160,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     } else {
       // Find the real MetaMask — not StarKey's ethereum provider
-      // MetaMask injects window.ethereum and also window.ethereum.providers[] when multiple wallets exist
+      // StarKey overrides window.ethereum and sets isMetaMask=true
+      // MetaMask can be found via: providers array, or by checking it's not StarKey
       const win = window as any;
+
+      // Method 1: Check providers array (standard EIP-6963 multi-wallet)
       if (win.ethereum?.providers?.length) {
-        // Multiple providers: find the one that is truly MetaMask
-        evm = win.ethereum.providers.find((p: any) => p.isMetaMask && !p.isStarKey) || null;
-      } else if (win.ethereum?.isMetaMask && !win.ethereum?.isStarKey) {
+        evm = win.ethereum.providers.find((p: any) =>
+          p.isMetaMask && !p.isStarKey && p !== win.starkey?.ethereum
+        ) || null;
+      }
+
+      // Method 2: If window.ethereum is MetaMask and NOT the same object as starkey.ethereum
+      if (!evm && win.ethereum?.isMetaMask && win.ethereum !== win.starkey?.ethereum) {
         evm = win.ethereum;
       }
+
+      // Method 3: Check for MetaMask's specific detection property
+      if (!evm && win.ethereum?.isMetaMask && win.ethereum?._metamask) {
+        evm = win.ethereum;
+      }
+
       if (!evm) {
-        alert("MetaMask not detected. If you have MetaMask installed, try disabling other wallet extensions temporarily.");
+        // MetaMask genuinely not installed or fully overridden by StarKey
+        alert("MetaMask not detected. If MetaMask is installed, try these steps:\n\n1. Open MetaMask extension and make sure it\'s unlocked\n2. In MetaMask Settings > Advanced, enable \'Set MetaMask as default wallet\'\n3. Refresh this page and try again\n\nAlternatively, use StarKey (EVM) which is already working.");
         return false;
       }
     }
