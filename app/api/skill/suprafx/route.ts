@@ -103,9 +103,11 @@ export async function POST(req: NextRequest) {
         return handleCancelRFQ(body);
       case 'withdraw_quote':
         return handleWithdrawQuote(body);
+      case 'place_quote':
+        return handlePlaceQuote(body);
       default:
         return NextResponse.json({
-          error: 'Unknown action. Available: get_pairs, submit_rfq, check_trade, list_trades',
+          error: 'Unknown action. Available: get_pairs, submit_rfq, place_quote, accept_quote, cancel_rfq, withdraw_quote, check_trade, list_trades',
         }, { status: 400 });
     }
   } catch (e: any) {
@@ -460,43 +462,100 @@ async function handleListTrades(body: any) {
 export async function GET() {
   return NextResponse.json({
     name: 'SupraFX OpenClaw Skill',
-    version: '1.0',
-    description: 'Cross-chain FX settlement between Ethereum (Sepolia) and Supra Testnet',
+    version: '2.0',
+    description: 'Cross-chain FX settlement marketplace between Ethereum (Sepolia) and Supra Testnet. Dual-role: any agent can be both taker and maker.',
+    endpoint: 'POST /api/skill/suprafx',
     actions: {
       get_pairs: {
-        method: 'POST',
         body: { action: 'get_pairs' },
-        description: 'Get available trading pairs and reference prices',
+        description: 'Get available trading pairs, reference prices, and supported chains',
       },
       submit_rfq: {
-        method: 'POST',
         body: {
           action: 'submit_rfq',
           agentAddress: 'your_supra_address',
-          pair: 'ETH/SUPRA or SUPRA/ETH',
-          size: 'number of tokens',
+          pair: 'ETH/SUPRA',
+          size: '0.001',
+          price: '2500 (optional, uses oracle if omitted)',
         },
-        description: 'Submit a request for quote — auto-matches with maker bot',
+        description: 'Submit a request for quote as a taker. Bot auto-places a quote. Other makers can also quote.',
+      },
+      place_quote: {
+        body: {
+          action: 'place_quote',
+          rfqId: 'uuid of the open RFQ',
+          makerAddress: 'your_supra_address',
+          rate: '2450.50',
+        },
+        description: 'Place a quote on an open RFQ as a maker. Cannot quote on your own RFQ. One pending quote per maker per RFQ.',
+      },
+      accept_quote: {
+        body: {
+          action: 'accept_quote',
+          quoteId: 'uuid of the pending quote',
+          agentAddress: 'taker_supra_address',
+        },
+        description: 'Accept a pending quote on your RFQ. Creates a trade and rejects all other quotes.',
+      },
+      cancel_rfq: {
+        body: {
+          action: 'cancel_rfq',
+          rfqId: 'uuid of the open RFQ',
+          agentAddress: 'taker_supra_address',
+        },
+        description: 'Cancel your open RFQ. All pending quotes are rejected.',
+      },
+      withdraw_quote: {
+        body: {
+          action: 'withdraw_quote',
+          quoteId: 'uuid of your pending quote',
+          agentAddress: 'maker_supra_address',
+        },
+        description: 'Withdraw your pending quote from an RFQ.',
       },
       check_trade: {
-        method: 'POST',
         body: { action: 'check_trade', tradeId: 'uuid' },
-        description: 'Check status of a specific trade',
+        description: 'Check full status of a trade including committee votes, TX hashes, and settlement time.',
       },
       list_trades: {
-        method: 'POST',
         body: { action: 'list_trades', agentAddress: 'your_supra_address' },
-        description: 'List all trades for an agent',
+        description: 'List all trades where you are taker or maker.',
       },
     },
-    settlementFlow: [
-      '1. Agent calls submit_rfq → gets matched trade',
-      '2. Agent sends tokens on source chain → POST /api/confirm-tx with TX hash',
-      '3. Committee verifies taker TX → maker bot auto-sends on dest chain',
-      '4. Committee verifies maker TX → trade settled',
-      '5. Reputation updated, attestation posted on-chain',
+    oracleEndpoint: {
+      method: 'GET',
+      url: '/api/oracle?pair=ETH/SUPRA',
+      description: 'Real-time price data from Supra DORA oracle. Returns base/quote prices, 24h high/low/change, and conversion rate.',
+    },
+    supportedPairs: [
+      'ETH/SUPRA', 'SUPRA/ETH',
+      'fxAAVE/SUPRA', 'fxLINK/SUPRA',
+      'fxUSDC/SUPRA', 'fxUSDT/SUPRA',
+      'ETH/fxAAVE', 'ETH/fxLINK', 'ETH/fxUSDC', 'ETH/fxUSDT',
+      'fxAAVE/fxLINK', 'fxAAVE/fxUSDC', 'fxAAVE/fxUSDT',
+      'fxLINK/fxUSDC', 'fxLINK/fxUSDT',
     ],
-    testnetCaps: {
+    chains: {
+      sepolia: { tokens: ['ETH', 'fxAAVE', 'fxLINK', 'fxUSDC', 'fxUSDT'] },
+      'supra-testnet': { tokens: ['SUPRA'] },
+    },
+    settlementFlow: [
+      '1. Taker calls submit_rfq → RFQ created, bot auto-quotes',
+      '2. Other makers call place_quote to compete on the RFQ',
+      '3. Taker calls accept_quote → trade created (status: open)',
+      '4. Taker sends tokens on source chain → confirms via /api/confirm-tx',
+      '5. Settlement Council (3-of-5 multisig) verifies taker TX',
+      '6. Maker sends tokens on dest chain (auto or manual)',
+      '7. Council verifies maker TX → trade settled',
+      '8. Reputation updated, attestation posted on-chain',
+    ],
+    agentIntegration: {
+      description: 'AI agents can operate as takers, makers, or both via this REST API.',
+      takerFlow: 'submit_rfq → wait for quotes → accept_quote → send tokens → settled',
+      makerFlow: 'poll for open RFQs (list_trades or Supabase realtime) → place_quote → if accepted, send tokens → settled',
+      authentication: 'Supra wallet address used as agent identity. No API key required for testnet.',
+    },
+    testnetLimits: {
       ethLeg: '0.00001 ETH per settlement',
       supraLeg: '0.001 SUPRA per settlement',
     },
