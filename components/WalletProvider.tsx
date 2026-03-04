@@ -203,14 +203,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Send SUPRA tokens via StarKey
   const sendSupraTokens = useCallback(async (to: string, amount: number): Promise<string> => {
     const supra = getSupraProvider();
-    if (!supra || !supraAddress) throw new Error("No Supra wallet connected");
+    if (!supra) throw new Error("StarKey wallet not found. Is the extension installed?");
+    if (!supraAddress) throw new Error("Supra wallet not connected");
 
-    try { await supra.changeNetwork({ chainId: SUPRA_TESTNET_CHAIN_ID }); } catch {}
+    console.log("[SupraFX] sendSupraTokens: to=" + to + " amount=" + amount);
+
+    // Ensure testnet
+    try {
+      await supra.changeNetwork({ chainId: SUPRA_TESTNET_CHAIN_ID });
+      console.log("[SupraFX] Network switched to testnet");
+    } catch (e) {
+      console.warn("[SupraFX] changeNetwork failed (may already be on testnet):", e);
+    }
 
     const recipientHex = to.startsWith("0x") ? to.slice(2) : to;
     const amountOctas = Math.floor(amount * 100000000);
-    const txExpiryTime = Math.ceil(Date.now() / 1000) + 30;
+    const txExpiryTime = Math.ceil(Date.now() / 1000) + 300; // 5 min expiry
 
+    console.log("[SupraFX] Recipient hex:", recipientHex.slice(0, 12) + "...");
+    console.log("[SupraFX] Amount octas:", amountOctas);
+
+    // Try the direct sendTransaction approach first (simpler, works on newer StarKey)
+    try {
+      console.log("[SupraFX] Attempting sendTransaction with transfer params...");
+      const txParams = {
+        from: supraAddress,
+        to: to,
+        value: amountOctas.toString(),
+      };
+      const txHash = await supra.sendTransaction(txParams);
+      if (txHash) {
+        console.log("[SupraFX] Direct send succeeded:", txHash);
+        return typeof txHash === "string" ? txHash : JSON.stringify(txHash);
+      }
+    } catch (e: any) {
+      console.log("[SupraFX] Direct send not supported, trying raw TX:", e?.message || e);
+    }
+
+    // Fallback: raw transaction payload approach
+    console.log("[SupraFX] Building raw transaction payload...");
     const rawTxPayload = [
       supraAddress, 0,
       "0000000000000000000000000000000000000000000000000000000000000001",
@@ -219,10 +250,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       { txExpiryTime: BigInt(txExpiryTime) },
     ];
 
+    console.log("[SupraFX] Calling createRawTransactionData...");
     const data = await supra.createRawTransactionData(rawTxPayload);
-    if (!data) throw new Error("Failed to create Supra transaction data");
+    if (!data) throw new Error("Failed to create Supra transaction data — wallet returned null");
+    
+    console.log("[SupraFX] Raw TX data created, calling sendTransaction...");
     const txHash = await supra.sendTransaction({ data });
-    if (!txHash) throw new Error("Supra transaction failed");
+    if (!txHash) throw new Error("Supra transaction rejected or failed");
+    
+    console.log("[SupraFX] TX hash:", txHash);
     return typeof txHash === "string" ? txHash : JSON.stringify(txHash);
   }, [supraAddress]);
 

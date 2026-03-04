@@ -225,11 +225,12 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
     const takerAddr = trade.taker_address;
     const isValidSupraAddr = takerAddr && !takerAddr.startsWith("demo_") && (takerAddr.startsWith("0x") || /^[0-9a-fA-F]{64}$/.test(takerAddr));
 
+    addLog("hasSupraWallet=" + hasSupraWallet + " isValidAddr=" + isValidSupraAddr);
     if (hasSupraWallet && isValidSupraAddr) {
       // Real Supra send to a real taker address
       try {
         addLog("Preparing to send " + sendAmount + " SUPRA to taker on testnet…");
-        addLog("Taker address: " + takerAddr.slice(0, 12) + "…");
+        addLog("Taker: " + takerAddr.slice(0, 16) + "…");
         addLog("Requesting StarKey wallet signature…");
         const hash = await sendSupraTokens(takerAddr, sendAmount);
         addLog("Supra TX broadcast: " + String(hash).slice(0, 20) + "…", "var(--accent-light)");
