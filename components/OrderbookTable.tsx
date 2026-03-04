@@ -129,25 +129,95 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
   );
 }
 
+function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: string }) {
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    fetch(`/api/signed-actions?tradeId=${tradeId}`)
+      .then(r => r.json())
+      .then(data => { setTimeline(data.actions || []); setLoaded(true); })
+      .catch(() => { setTimeline([]); setLoaded(true); });
+  }, [open, loaded, tradeId]);
+
+  const actionLabel: Record<string, string> = {
+    submit_rfq: "Submit RFQ", place_quote: "Place Quote", accept_quote: "Accept Quote",
+    confirm_taker_tx: "Taker TX Confirm", confirm_maker_tx: "Maker TX Confirm",
+  };
+  const actionColor: Record<string, string> = {
+    submit_rfq: "var(--accent-light)", place_quote: "var(--warn)", accept_quote: "var(--positive)",
+    confirm_taker_tx: "var(--accent-light)", confirm_maker_tx: "var(--positive)",
+  };
+
+  return (
+    <div className="mt-3">
+      <button onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 text-[12px] mono transition-colors"
+        style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+        <span style={{ fontSize: 8 }}>{open ? "▼" : "▶"}</span>
+        Audit Trail {loaded ? `(${timeline.length} action${timeline.length !== 1 ? "s" : ""})` : "(click to load)"}
+      </button>
+      {open && (
+        <div className="mt-2 rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          {!loaded ? (
+            <div className="px-3 py-2 flex items-center gap-2 text-[12px]" style={{ color: "var(--t3)" }}>
+              <Spinner color="var(--t3)" /> Loading...
+            </div>
+          ) : timeline.length === 0 ? (
+            <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>No signed actions recorded.</div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] mono uppercase" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
+                <span className="w-16">Time</span>
+                <span className="w-28">Action</span>
+                <span className="w-24">Signer</span>
+                <span className="w-20">Sig</span>
+                <span className="flex-1">Session Key</span>
+              </div>
+              {timeline.map((a: any, i: number) => {
+                const timeStr = new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                const signerShort = a.signer_address === "auto-maker-bot" ? "Bot" :
+                  a.signer_address === supraAddr ? "You" :
+                  a.signer_address.slice(0, 6) + "…" + a.signer_address.slice(-4);
+                const hasSig = a.signature && a.signature.length > 10;
+                const hasAuth = a.session_auth_signature && a.session_auth_signature.length > 10;
+                return (
+                  <div key={a.id || i} className="flex items-center gap-2 px-3 py-1.5 text-[11px]"
+                    style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none", background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
+                    <span className="mono w-16 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
+                    <span className="w-28 shrink-0 font-medium" style={{ color: actionColor[a.action_type] || "var(--t2)" }}>
+                      {actionLabel[a.action_type] || a.action_type}
+                    </span>
+                    <span className="mono w-24 shrink-0" style={{ color: a.signer_address === supraAddr ? "var(--positive)" : "var(--t2)" }}>{signerShort}</span>
+                    <span className="mono w-20 shrink-0" style={{ color: hasSig ? "var(--positive)" : "var(--t3)" }}>
+                      {hasSig ? a.signature.slice(0, 8) + "…" : "—"}
+                    </span>
+                    <span className="mono flex-1 truncate" style={{ color: hasAuth ? "var(--positive)" : a.session_public_key ? "var(--t2)" : "var(--t3)" }}>
+                      {a.session_public_key ? a.session_public_key.slice(0, 12) + "…" : "—"}
+                      {hasAuth && <span style={{ color: "var(--positive)", marginLeft: 4 }} title="Wallet-authorized session">✓</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: { trade: Trade; onUpdate: () => void; rfq?: RFQ; tradeQuotes?: Quote[]; agents?: Agent[]; supraAddr?: string }) {
   const { profile, isDemo, sendSepoliaEth, sendSupraTokens, supraAddress, signAction } = useWallet();
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: string; text: string; color?: string }>>([]);
-  const [timeline, setTimeline] = useState<any[]>([]);
-  const [timelineOpen, setTimelineOpen] = useState(false);
+
 
   const hasWallet = !!profile?.evmVerified && !isDemo;
   const hasSupraWallet = !!supraAddress && !isDemo;
-  // Fetch signed actions timeline for this trade
-  useEffect(() => {
-    if (!timelineOpen) return;
-    fetch(`/api/signed-actions?tradeId=${trade.id}`)
-      .then(r => r.json())
-      .then(data => setTimeline(data.actions || []))
-      .catch(() => setTimeline([]));
-  }, [timelineOpen, trade.id, trade.status]);
-
   const isTaker = trade.taker_address === supraAddr;
   const isMaker = trade.maker_address === supraAddr;
   const isBot = trade.maker_address === "auto-maker-bot";
@@ -625,75 +695,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
       )}
 
       {/* === Signed Actions Timeline === */}
-      <div className="mt-3">
-        <button onClick={() => setTimelineOpen(!timelineOpen)}
-          className="flex items-center gap-2 text-[12px] mono transition-colors"
-          style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
-          <span style={{ fontSize: 8 }}>{timelineOpen ? "▼" : "▶"}</span>
-          Audit Trail ({timeline.length > 0 ? timeline.length + " actions" : "click to load"})
-        </button>
-        {timelineOpen && (
-          <div className="mt-2 rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            {timeline.length === 0 ? (
-              <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>No signed actions recorded yet.</div>
-            ) : (
-              <div>
-                {/* Header */}
-                <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] mono uppercase" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
-                  <span className="w-16">Time</span>
-                  <span className="w-28">Action</span>
-                  <span className="w-24">Signer</span>
-                  <span className="w-20">Sig</span>
-                  <span className="flex-1">Session Key</span>
-                </div>
-                {timeline.map((a: any, i: number) => {
-                  const time = new Date(a.created_at);
-                  const timeStr = time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-                  const signerShort = a.signer_address === "auto-maker-bot" ? "Bot" :
-                    a.signer_address === supraAddr ? "You" :
-                    a.signer_address.slice(0, 6) + "…" + a.signer_address.slice(-4);
-                  const actionLabel: Record<string, string> = {
-                    submit_rfq: "Submit RFQ",
-                    place_quote: "Place Quote",
-                    accept_quote: "Accept Quote",
-                    confirm_taker_tx: "Taker TX Confirm",
-                    confirm_maker_tx: "Maker TX Confirm",
-                  };
-                  const actionColor: Record<string, string> = {
-                    submit_rfq: "var(--accent-light)",
-                    place_quote: "var(--warn)",
-                    accept_quote: "var(--positive)",
-                    confirm_taker_tx: "var(--accent-light)",
-                    confirm_maker_tx: "var(--positive)",
-                  };
-                  const hasSig = a.signature && a.signature.length > 10;
-                  const hasAuth = a.session_auth_signature && a.session_auth_signature.length > 10;
-
-                  return (
-                    <div key={a.id || i} className="flex items-center gap-2 px-3 py-1.5 text-[11px]"
-                      style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none", background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                      <span className="mono w-16 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
-                      <span className="w-28 shrink-0 font-medium" style={{ color: actionColor[a.action_type] || "var(--t2)" }}>
-                        {actionLabel[a.action_type] || a.action_type}
-                      </span>
-                      <span className="mono w-24 shrink-0" style={{ color: a.signer_address === supraAddr ? "var(--positive)" : "var(--t2)" }}>
-                        {signerShort}
-                      </span>
-                      <span className="mono w-20 shrink-0" style={{ color: hasSig ? "var(--positive)" : "var(--t3)" }}>
-                        {hasSig ? a.signature.slice(0, 8) + "…" : "—"}
-                      </span>
-                      <span className="mono flex-1 truncate" style={{ color: hasAuth ? "var(--positive)" : a.session_public_key ? "var(--t2)" : "var(--t3)" }}>
-                        {a.session_public_key ? a.session_public_key.slice(0, 12) + "…" : "—"}
-                        {hasAuth && <span style={{ color: "var(--positive)", marginLeft: 4 }} title="Session authorized by wallet signature">✓</span>}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <AuditTrail tradeId={trade.id} supraAddr={supraAddr} />
 
       {/* === Activity Log === */}
       {logs.length > 0 && (
@@ -1268,6 +1270,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                             </div>
                           </div>
                         )}
+
+                        {/* Audit Trail */}
+                        <AuditTrail tradeId={t.id} supraAddr={supraAddress || undefined} />
                       </div>
                     )}
                   </div>
