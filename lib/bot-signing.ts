@@ -1,37 +1,36 @@
 /**
  * Server-side signing for the auto-maker bot.
- * Same process as human users — constructs payloads, signs with HMAC,
- * stores in signed_actions. The bot has no privileges over humans.
+ * Same ECDSA P-256 key pair approach as human users.
+ * The bot generates its own key pair and self-authorizes (no wallet).
  */
 
 import { canonicalize } from './signing';
 
-// Bot session state (initialized once per cold start)
-let botSessionKey: CryptoKey | null = null;
-let botSessionNonce: string = '';
-let botSessionCreatedAt: number = 0;
 const BOT_ADDRESS = 'auto-maker-bot';
 
+let botKeyPair: CryptoKeyPair | null = null;
+let botPublicKeyHex: string = '';
+let botSessionNonce: string = '';
+let botSessionCreatedAt: number = 0;
+
 async function ensureBotSession(): Promise<void> {
-  // Re-init if no session or older than 24h
-  if (botSessionKey && Date.now() - botSessionCreatedAt < 24 * 60 * 60 * 1000) return;
+  if (botKeyPair && Date.now() - botSessionCreatedAt < 24 * 60 * 60 * 1000) return;
+
+  botKeyPair = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify']
+  );
+
+  const pubKeyBuffer = await crypto.subtle.exportKey('raw', botKeyPair.publicKey);
+  botPublicKeyHex = Array.from(new Uint8Array(pubKeyBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 
   botSessionNonce = crypto.randomUUID();
   botSessionCreatedAt = Date.now();
-
-  const encoder = new TextEncoder();
-  botSessionKey = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(BOT_ADDRESS + ':' + botSessionNonce + ':' + botSessionCreatedAt),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
 }
 
-/**
- * Sign a bot action. Same payload structure and signing process as human users.
- */
 export async function botSignAction(
   action: string,
   data: Record<string, any>,
@@ -39,6 +38,7 @@ export async function botSignAction(
   payload: any;
   signature: string;
   payloadHash: string;
+  sessionPublicKey: string;
   sessionNonce: string;
   sessionCreatedAt: number;
 }> {
@@ -50,14 +50,19 @@ export async function botSignAction(
     data,
     timestamp: new Date().toISOString(),
     nonce: crypto.randomUUID(),
-    sessionNonce: botSessionNonce,
+    sessionPublicKey: botPublicKeyHex,
   };
 
   const canonical = canonicalize(payload);
   const encoder = new TextEncoder();
   const encoded = encoder.encode(canonical);
 
-  const sigBuffer = await crypto.subtle.sign('HMAC', botSessionKey!, encoded);
+  const sigBuffer = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    botKeyPair!.privateKey,
+    encoded
+  );
+
   const signature = Array.from(new Uint8Array(sigBuffer))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
@@ -71,6 +76,7 @@ export async function botSignAction(
     payload,
     signature,
     payloadHash,
+    sessionPublicKey: botPublicKeyHex,
     sessionNonce: botSessionNonce,
     sessionCreatedAt: botSessionCreatedAt,
   };

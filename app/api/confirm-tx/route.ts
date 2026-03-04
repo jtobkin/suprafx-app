@@ -59,7 +59,7 @@ async function runCommittee(db: any, tradeId: string, verificationType: string, 
 
 export async function POST(req: NextRequest) {
   try {
-    const { tradeId, txHash, side, signedPayload, signature, payloadHash, sessionNonce, sessionCreatedAt } = await req.json();
+    const { tradeId, txHash, side, signedPayload, signature, payloadHash, sessionPublicKey, sessionAuthSignature, sessionNonce, sessionCreatedAt } = await req.json();
     if (!tradeId || !txHash || !side) {
       return NextResponse.json({ error: 'tradeId, txHash, and side required' }, { status: 400 });
     }
@@ -83,6 +83,8 @@ export async function POST(req: NextRequest) {
         payload: signedPayload || { action: 'confirm_taker_tx', tradeId, txHash },
         payloadHash: payloadHash || '',
         signature: signature || '',
+        sessionPublicKey,
+        sessionAuthSignature,
         sessionNonce,
         sessionCreatedAt,
         tradeId,
@@ -138,6 +140,7 @@ export async function POST(req: NextRequest) {
             payload: botMakerSig.payload,
             payloadHash: botMakerSig.payloadHash,
             signature: botMakerSig.signature,
+            sessionPublicKey: botMakerSig.sessionPublicKey,
             sessionNonce: botMakerSig.sessionNonce,
             sessionCreatedAt: botMakerSig.sessionCreatedAt,
             tradeId,
@@ -227,6 +230,8 @@ export async function POST(req: NextRequest) {
         payload: signedPayload || { action: 'confirm_maker_tx', tradeId, txHash },
         payloadHash: payloadHash || '',
         signature: signature || '',
+        sessionPublicKey,
+        sessionAuthSignature,
         sessionNonce,
         sessionCreatedAt,
         tradeId,

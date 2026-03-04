@@ -162,7 +162,10 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
       body.signature = signed.signature;
       body.payloadHash = signed.payloadHash;
       body.sessionNonce = signed.payload.sessionNonce;
-      body.sessionCreatedAt = Date.now();
+      body.sessionPublicKey = signed.sessionPublicKey;
+      body.sessionAuthSignature = signed.sessionAuthSignature;
+      body.sessionNonce = signed.sessionNonce;
+      body.sessionCreatedAt = signed.sessionCreatedAt;
       console.log("[SupraFX] TX confirm signed:", signed.payloadHash.slice(0, 16) + "...");
     } catch (e) { console.warn("[SupraFX] TX confirm signing failed:", e); }
     const res = await fetch("/api/confirm-tx", {
@@ -688,7 +691,10 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             body.signature = signed.signature;
             body.payloadHash = signed.payloadHash;
             body.sessionNonce = signed.payload.sessionNonce;
-            body.sessionCreatedAt = Date.now();
+            body.sessionPublicKey = signed.sessionPublicKey;
+            body.sessionAuthSignature = signed.sessionAuthSignature;
+            body.sessionNonce = signed.sessionNonce;
+            body.sessionCreatedAt = signed.sessionCreatedAt;
             console.log("[SupraFX] Action signed:", signed.payloadHash.slice(0, 16) + "...");
           } catch (e) { console.warn("[SupraFX] Signing failed:", e); }
           return JSON.stringify(body);
@@ -737,7 +743,10 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             body.signature = signed.signature;
             body.payloadHash = signed.payloadHash;
             body.sessionNonce = signed.payload.sessionNonce;
-            body.sessionCreatedAt = Date.now();
+            body.sessionPublicKey = signed.sessionPublicKey;
+            body.sessionAuthSignature = signed.sessionAuthSignature;
+            body.sessionNonce = signed.sessionNonce;
+            body.sessionCreatedAt = signed.sessionCreatedAt;
             console.log("[SupraFX] Action signed:", signed.payloadHash.slice(0, 16) + "...");
           } catch (e) { console.warn("[SupraFX] Signing failed:", e); }
           return JSON.stringify(body);

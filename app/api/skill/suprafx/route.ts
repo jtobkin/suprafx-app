@@ -174,7 +174,7 @@ function handleGetPairs() {
 }
 
 async function handleSubmitRFQ(body: any) {
-  const { agentAddress, pair, size, quotedPrice, signedPayload, signature, payloadHash, sessionNonce, sessionCreatedAt } = body;
+  const { agentAddress, pair, size, quotedPrice, signedPayload, signature, payloadHash, sessionPublicKey, sessionAuthSignature, sessionNonce, sessionCreatedAt } = body;
 
   if (!agentAddress) {
     return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
@@ -233,6 +233,8 @@ async function handleSubmitRFQ(body: any) {
     payload: signedPayload || { action: 'submit_rfq', pair: normalizedPair, size, quotedPrice },
     payloadHash: payloadHash || '',
     signature: signature || '',
+    sessionPublicKey,
+    sessionAuthSignature,
     sessionNonce,
     sessionCreatedAt,
     rfqId: rfq.id,
@@ -270,6 +272,7 @@ async function handleSubmitRFQ(body: any) {
     payload: botQuoteSig.payload,
     payloadHash: botQuoteSig.payloadHash,
     signature: botQuoteSig.signature,
+    sessionPublicKey: botQuoteSig.sessionPublicKey,
     sessionNonce: botQuoteSig.sessionNonce,
     sessionCreatedAt: botQuoteSig.sessionCreatedAt,
     rfqId: rfq.id,
@@ -293,7 +296,7 @@ async function handleSubmitRFQ(body: any) {
 
 
 async function handleAcceptQuote(body: any) {
-  const { quoteId, agentAddress, signedPayload: acceptPayload, signature: acceptSig, payloadHash: acceptHash, sessionNonce: acceptSessionNonce, sessionCreatedAt: acceptSessionCreatedAt } = body;
+  const { quoteId, agentAddress, signedPayload: acceptPayload, signature: acceptSig, payloadHash: acceptHash, sessionPublicKey: acceptSessionPubKey, sessionAuthSignature: acceptSessionAuthSig, sessionNonce: acceptSessionNonce, sessionCreatedAt: acceptSessionCreatedAt } = body;
   if (!quoteId) return NextResponse.json({ error: 'quoteId required' }, { status: 400 });
   if (!agentAddress) return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
 
@@ -354,6 +357,8 @@ async function handleAcceptQuote(body: any) {
     payload: acceptPayload || { action: 'accept_quote', quoteId, rate: quote.rate },
     payloadHash: acceptHash || '',
     signature: acceptSig || '',
+    sessionPublicKey: acceptSessionPubKey,
+    sessionAuthSignature: acceptSessionAuthSig,
     sessionNonce: acceptSessionNonce,
     sessionCreatedAt: acceptSessionCreatedAt,
     rfqId: rfq.id,

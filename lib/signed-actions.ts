@@ -1,9 +1,8 @@
 import { getServiceClient } from './supabase';
-import { verifySignatureServer, canonicalize } from './signing';
+import { verifySignatureServer } from './signing';
 
 /**
  * Store a signed action in the audit trail.
- * Optionally verify the signature before storing.
  */
 export async function storeSignedAction(params: {
   actionType: string;
@@ -11,6 +10,8 @@ export async function storeSignedAction(params: {
   payload: any;
   payloadHash: string;
   signature: string;
+  sessionPublicKey?: string;       // ECDSA P-256 public key for this session
+  sessionAuthSignature?: string;   // StarKey signature authorizing the session key
   sessionNonce?: string;
   sessionCreatedAt?: number;
   tradeId?: string;
@@ -22,17 +23,15 @@ export async function storeSignedAction(params: {
 
   let verified = false;
 
-  // Verify signature if session info provided
-  if (params.verify && params.sessionNonce && params.sessionCreatedAt) {
+  // Verify ECDSA signature if session public key provided
+  if (params.verify && params.sessionPublicKey && params.signature) {
     verified = await verifySignatureServer(
       params.payload,
       params.signature,
-      params.signerAddress,
-      params.sessionNonce,
-      params.sessionCreatedAt,
+      params.sessionPublicKey,
     );
-  } else {
-    // Trust the signature if no session info (e.g., bot actions)
+  } else if (params.signature && params.signature.length > 10) {
+    // Mark as having a signature even if not verified server-side
     verified = true;
   }
 
@@ -42,6 +41,8 @@ export async function storeSignedAction(params: {
     payload_json: params.payload,
     payload_hash: params.payloadHash,
     signature: params.signature,
+    session_public_key: params.sessionPublicKey || null,
+    session_auth_signature: params.sessionAuthSignature || null,
     session_nonce: params.sessionNonce || null,
     session_created_at: params.sessionCreatedAt || null,
     trade_id: params.tradeId || null,
@@ -52,7 +53,6 @@ export async function storeSignedAction(params: {
 
   if (error) {
     console.error('[SupraFX] Failed to store signed action:', error.message);
-    // Don't block the operation if signed_actions table doesn't exist yet
     return { id: '', verified };
   }
 
@@ -68,22 +68,6 @@ export async function getTradeActions(tradeId: string): Promise<any[]> {
     const { data } = await db.from('signed_actions')
       .select('*')
       .eq('trade_id', tradeId)
-      .order('created_at', { ascending: true });
-    return data || [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Get all signed actions for an RFQ, in chronological order.
- */
-export async function getRfqActions(rfqId: string): Promise<any[]> {
-  const db = getServiceClient();
-  try {
-    const { data } = await db.from('signed_actions')
-      .select('*')
-      .eq('rfq_id', rfqId)
       .order('created_at', { ascending: true });
     return data || [];
   } catch {

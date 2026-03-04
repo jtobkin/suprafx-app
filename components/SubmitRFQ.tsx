@@ -187,8 +187,10 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
             baseBody.signedPayload = signed.payload;
             baseBody.signature = signed.signature;
             baseBody.payloadHash = signed.payloadHash;
-            baseBody.sessionNonce = signed.payload.sessionNonce;
-            baseBody.sessionCreatedAt = Date.now();
+            baseBody.sessionPublicKey = signed.sessionPublicKey;
+            baseBody.sessionAuthSignature = signed.sessionAuthSignature;
+            baseBody.sessionNonce = signed.sessionNonce;
+            baseBody.sessionCreatedAt = signed.sessionCreatedAt;
             console.log("[SupraFX] RFQ signed:", signed.payloadHash.slice(0, 16) + "...");
           } catch (e) { console.warn("[SupraFX] RFQ signing failed:", e); }
           return JSON.stringify(baseBody);
