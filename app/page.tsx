@@ -9,6 +9,7 @@ import MyTrades from "@/components/MyTrades";
 import CommitteePanel from "@/components/CommitteePanel";
 import AgentsPanel from "@/components/AgentsPanel";
 import SubmitRFQ from "@/components/SubmitRFQ";
+import Notifications from "@/components/Notifications";
 import { supabase } from "@/lib/supabase";
 import type { Trade, RFQ, Agent, CommitteeRequest, Quote } from "@/lib/types";
 
@@ -230,6 +231,7 @@ function Dashboard() {
     <div>
       <Header onProfileClick={() => setProfileOpen(true)} />
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <Notifications trades={trades} quotes={quotes} />
       <div className="max-w-[1240px] mx-auto px-5 py-5">
         <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <SubmitRFQ onSubmitted={fetchAll} />

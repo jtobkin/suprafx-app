@@ -40,7 +40,7 @@ export interface Trade {
   dest_chain: string;
   taker_address: string;
   maker_address: string;
-  status: 'open' | 'taker_sent' | 'taker_verified' | 'maker_sent' | 'maker_verified' | 'settled' | 'failed';
+  status: 'open' | 'matched' | 'taker_sent' | 'taker_verified' | 'maker_sent' | 'maker_verified' | 'settled' | 'failed' | 'taker_timed_out' | 'maker_defaulted' | 'cancelled';
   taker_tx_hash: string | null;
   taker_tx_confirmed_at: string | null;
   maker_tx_hash: string | null;
