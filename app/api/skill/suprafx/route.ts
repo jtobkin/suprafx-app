@@ -315,6 +315,69 @@ async function handleWithdrawQuote(body: any) {
   return NextResponse.json({ success: true, message: 'Quote withdrawn.' });
 }
 
+async function handlePlaceQuote(body: any) {
+  const db = getServiceClient();
+  const { rfqId, makerAddress, rate } = body;
+  if (!rfqId || !makerAddress || !rate) {
+    return NextResponse.json({ error: 'rfqId, makerAddress, rate required' }, { status: 400 });
+  }
+
+  const parsedRate = parseFloat(rate);
+  if (isNaN(parsedRate) || parsedRate <= 0) {
+    return NextResponse.json({ error: 'rate must be a positive number' }, { status: 400 });
+  }
+
+  // Fetch the RFQ
+  const { data: rfq, error: rfqErr } = await db.from('rfqs').select('*').eq('id', rfqId).single();
+  if (rfqErr || !rfq) {
+    return NextResponse.json({ error: 'RFQ not found' }, { status: 404 });
+  }
+  if (rfq.status !== 'open') {
+    return NextResponse.json({ error: `RFQ is ${rfq.status}, cannot quote` }, { status: 400 });
+  }
+  if (rfq.taker_address === makerAddress) {
+    return NextResponse.json({ error: 'Cannot quote on your own RFQ' }, { status: 400 });
+  }
+
+  // Check for existing pending quote from this maker
+  const { data: existing } = await db.from('quotes').select('id').eq('rfq_id', rfqId).eq('maker_address', makerAddress).eq('status', 'pending');
+  if (existing && existing.length > 0) {
+    return NextResponse.json({ error: 'You already have a pending quote on this RFQ' }, { status: 400 });
+  }
+
+  // Upsert agent as maker
+  await db.from('agents').upsert({
+    wallet_address: makerAddress,
+    role: 'maker',
+    chains: ['sepolia', 'supra-testnet'],
+    rep_deposit_base: 5.0,
+    rep_total: 5.0,
+  }, { onConflict: 'wallet_address' });
+
+  // Insert the quote
+  const { data: quote, error: quoteErr } = await db.from('quotes').insert({
+    rfq_id: rfqId,
+    maker_address: makerAddress,
+    rate: parsedRate,
+    status: 'pending',
+  }).select('*').single();
+
+  if (quoteErr) {
+    return NextResponse.json({ error: quoteErr.message }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    quote: {
+      id: quote.id,
+      rfqId: quote.rfq_id,
+      makerAddress: quote.maker_address,
+      rate: quote.rate,
+      status: quote.status,
+    },
+  });
+}
+
 async function handleCheckTrade(body: any) {
   const { tradeId } = body;
   if (!tradeId) return NextResponse.json({ error: 'tradeId required' }, { status: 400 });

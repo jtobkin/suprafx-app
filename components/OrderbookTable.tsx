@@ -646,6 +646,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const [accepting, setAccepting] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const [quotingRfq, setQuotingRfq] = useState<string | null>(null);
+  const [quotePrice, setQuotePrice] = useState("");
+  const [quotingLoading, setQuotingLoading] = useState(false);
   const [attestations, setAttestations] = useState<Record<string, string>>({});
 
   const openRfqs = rfqs.filter(r => r.status === "open")
@@ -710,6 +713,23 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       else onAcceptQuote?.();
     } catch (e: any) { alert(e.message); }
     setCancelling(null);
+  };
+
+
+  const placeQuote = async (rfqId: string) => {
+    if (!supraAddress || !quotePrice) return;
+    setQuotingLoading(true);
+    try {
+      await fetch("/api/skill/suprafx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "place_quote", rfqId, makerAddress: supraAddress, rate: quotePrice }),
+      });
+      setQuotePrice("");
+      setQuotingRfq(null);
+      if (onUpdate) onUpdate();
+    } catch (e) { console.error(e); }
+    setQuotingLoading(false);
   };
 
   const withdrawQuote = async (quoteId: string) => {
@@ -860,6 +880,46 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+
+                    {/* Place Quote form — for non-owners */}
+                    {!isMine && supraAddress && (
+                      <div className="px-8 py-3" style={{ borderTop: "1px solid var(--border)" }}>
+                        {quotingRfq === r.id ? (
+                          <div className="flex items-center gap-3">
+                            <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Your Price</span>
+                            <input type="number" step="any" min="0" placeholder={fmtRate(r.reference_price)}
+                              value={quotePrice} onChange={e => setQuotePrice(e.target.value)}
+                              className="px-3 py-1.5 rounded mono text-[13px] outline-none"
+                              style={{ background: "var(--bg)", color: "var(--t0)", border: "1px solid var(--border)", width: 160 }}
+                              autoFocus />
+                            <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{quoteClean}/{baseClean}</span>
+                            <button onClick={() => placeQuote(r.id)} disabled={quotingLoading || !quotePrice}
+                              className="px-3 py-1.5 rounded text-[12px] font-semibold transition-all hover:brightness-110 disabled:opacity-30"
+                              style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
+                              {quotingLoading ? "..." : "Submit Quote"}
+                            </button>
+                            <button onClick={() => { setQuotingRfq(null); setQuotePrice(""); }}
+                              className="text-[11px] hover:underline"
+                              style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+                              cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setQuotingRfq(r.id); setQuotePrice(fmtRate(r.reference_price)); }}
+                            className="px-4 py-1.5 rounded text-[12px] font-semibold transition-all hover:brightness-110"
+                            style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                            Place Quote
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Already have a pending quote */}
+                    {!isMine && supraAddress && rfqQuotes.some(q => q.maker_address === supraAddress && q.status === "pending") && quotingRfq !== r.id && (
+                      <div className="px-8 py-2" style={{ borderTop: "1px solid var(--border)" }}>
+                        <span className="text-[12px]" style={{ color: "var(--t3)" }}>You have a pending quote on this RFQ</span>
                       </div>
                     )}
                   </div>
