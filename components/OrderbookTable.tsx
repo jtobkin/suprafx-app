@@ -74,31 +74,41 @@ function AddrWithRep({ addr, chain, agents, isMine }: { addr: string; chain: str
 
 
 // --- Settlement Components (from TradeFlow) ---
-const STEPS = ["open", "taker_sent", "taker_verified", "maker_sent", "settled"];
-const LABELS = ["Matched", "Taker Sent", "Verified", "Maker Sent", "Settled"];
-function stepIdx(s: string) { const i = STEPS.indexOf(s); return i >= 0 ? i : 0; }
+const STEPS = ["open", "taker_sent", "taker_verified", "maker_sent", "maker_verified", "settled"];
+const LABELS = ["Matched", "Taker Sending", "Taker Verified", "Maker Sending", "Maker Verified", "Settled"];
+const TIMEOUT_STATUSES = ["taker_timed_out", "maker_defaulted"];
+function stepIdx(s: string) {
+  if (s === "taker_timed_out") return 1;
+  if (s === "maker_defaulted") return 3;
+  const i = STEPS.indexOf(s);
+  return i >= 0 ? i : 0;
+}
 
 function Progress({ status }: { status: string }) {
   const cur = stepIdx(status);
+  const isTimeout = TIMEOUT_STATUSES.includes(status);
+  const isFailed = status === "failed";
   return (
     <div className="flex items-center gap-1 my-3">
       {STEPS.map((s, i) => (
         <div key={s} className="flex flex-col items-center flex-1">
           <div className="w-full h-[3px] rounded-full transition-all duration-700"
             style={{
-              background: status === "failed" ? "var(--negative)"
+              background: (isFailed || isTimeout) && i === cur ? "var(--negative)"
                 : i < cur ? "var(--positive)"
                 : i === cur ? "var(--accent)"
                 : "var(--surface-3)",
             }} />
           <span className="font-mono text-[8px] uppercase tracking-wider mt-1"
             style={{
-              color: status === "failed" ? "var(--negative)"
+              color: (isFailed || isTimeout) && i === cur ? "var(--negative)"
                 : i < cur ? "var(--positive)"
                 : i === cur ? "var(--accent-light)"
                 : "var(--t3)",
             }}>
-            {LABELS[i]}
+            {isTimeout && i === cur
+              ? (status === "taker_timed_out" ? "Taker Timeout" : "Maker Default")
+              : LABELS[i]}
           </span>
         </div>
       ))}
@@ -129,6 +139,9 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
   const hasWallet = !!profile?.evmVerified && !isDemo;
   const hasSupraWallet = !!supraAddress && !isDemo;
+  const isTaker = trade.taker_address === supraAddr;
+  const isMaker = trade.maker_address === supraAddr;
+  const isBot = trade.maker_address === "auto-maker-bot";
 
   const addLog = (text: string, color?: string) => {
     const now = new Date();
@@ -502,43 +515,53 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
       <Progress status={trade.status} />
 
-      {/* === OPEN: Show mode selection === */}
+      {/* === OPEN: Taker sends first === */}
       {trade.status === "open" && !autoRunning && (
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <button onClick={runAutoMode}
-              className="px-4 py-[7px] rounded text-[13px] font-semibold transition-all"
-              style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
-              Settle
-            </button>
-            {hasWallet && (
-              <button onClick={manualSendSepolia} disabled={loading}
-                className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
-                style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                {loading ? "Sending…" : "Manual: Send on Sepolia"}
-              </button>
-            )}
-            {isDemo && (
-              <button onClick={manualDemoTx} disabled={loading}
-                className="px-3 py-[7px] rounded text-[14px] font-mono disabled:opacity-30"
-                style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
-                Demo TX
-              </button>
-            )}
-          </div>
-          {/* Manual hash input — demo only */}
-          {isDemo && (
-            <div className="flex items-center gap-2">
-              <input type="text" placeholder="or paste TX hash: 0x…" value={txHash}
-                onChange={e => setTxHash(e.target.value)}
-                className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
-                style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-              <button onClick={manualSubmitHash} disabled={loading || !txHash.trim()}
-                className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
-                style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
-                Submit
-              </button>
+          {isTaker ? (
+            <>
+              <div className="flex items-center gap-2 mb-2">
+                <button onClick={runAutoMode}
+                  className="px-4 py-[7px] rounded text-[13px] font-semibold transition-all"
+                  style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
+                  Settle
+                </button>
+                {hasWallet && (
+                  <button onClick={manualSendSepolia} disabled={loading}
+                    className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
+                    style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                    {loading ? "Sending…" : "Send on " + trade.source_chain}
+                  </button>
+                )}
+                {isDemo && (
+                  <button onClick={manualDemoTx} disabled={loading}
+                    className="px-3 py-[7px] rounded text-[14px] font-mono disabled:opacity-30"
+                    style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
+                    Demo TX
+                  </button>
+                )}
+              </div>
+              {isDemo && (
+                <div className="flex items-center gap-2">
+                  <input type="text" placeholder="or paste TX hash: 0x…" value={txHash}
+                    onChange={e => setTxHash(e.target.value)}
+                    className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
+                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+                  <button onClick={manualSubmitHash} disabled={loading || !txHash.trim()}
+                    className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
+                    style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
+                    Submit
+                  </button>
+                </div>
+              )}
+            </>
+          ) : isMaker ? (
+            <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
+              <Spinner color="var(--accent)" />
+              <span>Waiting for taker to send on {trade.source_chain}. You will be notified when it is your turn.</span>
             </div>
+          ) : (
+            <div className="text-[13px]" style={{ color: "var(--t3)" }}>Waiting for taker to send…</div>
           )}
         </div>
       )}
@@ -571,13 +594,57 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
       {/* === TAKER VERIFIED (manual mode) === */}
       {trade.status === "taker_verified" && !autoRunning && (
-        <div className="flex items-center gap-2">
-          <span className="text-[13px]" style={{ color: "var(--positive)" }}>Taker verified (5/5).</span>
-          <button onClick={manualMakerSend} disabled={loading}
-            className="px-3 py-[6px] rounded text-[14px] font-semibold disabled:opacity-30"
-            style={{ background: hasSupraWallet ? "var(--positive)" : "var(--surface-3)", color: hasSupraWallet ? "#fff" : "var(--t0)", border: hasSupraWallet ? "none" : "1px solid var(--border-active)" }}>
-            {loading ? "Sending…" : hasSupraWallet ? "Send on Supra Testnet" : "Simulate Maker Send"}
-          </button>
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[13px]" style={{ color: "var(--positive)" }}>Taker TX verified by Council.</span>
+          </div>
+          {(isMaker || isBot) ? (
+            <div>
+              <div className="px-3 py-2 rounded mb-2" style={{ background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
+                <span className="text-[13px] font-semibold" style={{ color: "var(--accent-light)" }}>
+                  Your turn — send {trade.size} {trade.pair.split("/")[1]?.replace("fx","")} on {trade.dest_chain}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <button onClick={manualMakerSend} disabled={loading}
+                  className="px-4 py-[7px] rounded text-[13px] font-semibold disabled:opacity-30 transition-all"
+                  style={{ background: hasSupraWallet ? "var(--positive)" : "var(--surface-3)", color: hasSupraWallet ? "#fff" : "var(--t0)", border: hasSupraWallet ? "none" : "1px solid var(--border-active)" }}>
+                  {loading ? "Sending…" : hasSupraWallet ? "Send on " + trade.dest_chain : "Simulate Maker Send"}
+                </button>
+                {isDemo && (
+                  <button onClick={() => { setLoading(true); const h = "supra_" + Array.from({ length: 60 }, () => Math.floor(Math.random() * 16).toString(16)).join(""); confirmTx("maker", h).then(d => { if (d.status === "settled") addLog("Settled!", "var(--positive)"); onUpdate(); setLoading(false); }); }}
+                    disabled={loading}
+                    className="px-3 py-[7px] rounded text-[14px] font-mono disabled:opacity-30"
+                    style={{ background: "var(--surface-3)", color: "var(--t2)", border: "none" }}>
+                    Demo Maker TX
+                  </button>
+                )}
+              </div>
+              {/* Manual maker hash input */}
+              <div className="flex items-center gap-2">
+                <input type="text" placeholder="or paste maker TX hash…" value={txHash}
+                  onChange={e => setTxHash(e.target.value)}
+                  className="flex-1 px-2.5 py-[5px] rounded border text-[14px] font-mono outline-none"
+                  style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+                <button onClick={() => { if (!txHash.trim()) return; setLoading(true); addLog("Submitting maker TX hash…"); confirmTx("maker", txHash.trim()).then(d => { if (d.error) addLog("Error: " + d.error, "var(--negative)"); else if (d.status === "settled") addLog("Settled!", "var(--positive)"); else addLog("Verifying…", "var(--warn)"); setTxHash(""); onUpdate(); setLoading(false); }); }}
+                  disabled={loading || !txHash.trim()}
+                  className="px-2.5 py-[5px] rounded text-[13px] font-medium disabled:opacity-30"
+                  style={{ background: "var(--surface-3)", color: "var(--t1)", border: "none" }}>
+                  Submit
+                </button>
+              </div>
+            </div>
+          ) : isTaker ? (
+            <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
+              <Spinner color="var(--positive)" />
+              <span>Waiting for maker to send on {trade.dest_chain}…</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
+              <Spinner color="var(--positive)" />
+              <span>Waiting for maker to send…</span>
+            </div>
+          )}
         </div>
       )}
 
