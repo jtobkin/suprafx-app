@@ -44,6 +44,48 @@ export function useWallet() { return useContext(Ctx); }
 const SEPOLIA_CHAIN_ID = "0xaa36a7";
 const SUPRA_TESTNET_CHAIN_ID = "6";
 
+// EIP-6963: Multi-wallet discovery
+// Wallets announce themselves via events, bypassing window.ethereum conflicts
+const discoveredProviders: Map<string, any> = new Map();
+
+if (typeof window !== "undefined") {
+  window.addEventListener("eip6963:announceProvider", (event: any) => {
+    const info = event.detail?.info;
+    const provider = event.detail?.provider;
+    if (info && provider) {
+      discoveredProviders.set(info.rdns || info.name, { info, provider });
+      console.log("[SupraFX] Discovered wallet:", info.name, info.rdns);
+    }
+  });
+  // Request announcements from all installed wallets
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+}
+
+function getMetaMaskProvider(): any {
+  // Method 1: EIP-6963 discovery (most reliable)
+  const mmEntry = discoveredProviders.get("io.metamask") 
+    || Array.from(discoveredProviders.values()).find(e => 
+      e.info?.rdns?.includes("metamask") || e.info?.name?.toLowerCase().includes("metamask")
+    );
+  if (mmEntry?.provider) return mmEntry.provider;
+
+  // Method 2: providers array
+  const win = window as any;
+  if (win.ethereum?.providers?.length) {
+    const found = win.ethereum.providers.find((p: any) =>
+      p.isMetaMask && p !== win.starkey?.ethereum && !p.isStarKey
+    );
+    if (found) return found;
+  }
+
+  // Method 3: window.ethereum if it's genuinely MetaMask
+  if (win.ethereum?.isMetaMask && win.ethereum !== win.starkey?.ethereum && win.ethereum?._metamask) {
+    return win.ethereum;
+  }
+
+  return null;
+}
+
 function getSupraProvider(): any {
   if (typeof window === "undefined") return null;
   return (window as any)?.starkey?.supra || null;
@@ -51,9 +93,11 @@ function getSupraProvider(): any {
 
 function getEvmProvider(): any {
   if (typeof window === "undefined") return null;
-  const eth = (window as any)?.ethereum;
-  if (eth?.isMetaMask) return eth;
-  return (window as any)?.starkey?.ethereum || eth || null;
+  // Prefer MetaMask via EIP-6963 for actual transactions
+  const mm = getMetaMaskProvider();
+  if (mm) return mm;
+  // Fall back to StarKey EVM or whatever is available
+  return (window as any)?.starkey?.ethereum || (window as any)?.ethereum || null;
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -159,33 +203,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return false;
       }
     } else {
-      // Find the real MetaMask — not StarKey's ethereum provider
-      // StarKey overrides window.ethereum and sets isMetaMask=true
-      // MetaMask can be found via: providers array, or by checking it's not StarKey
-      const win = window as any;
-
-      // Method 1: Check providers array (standard EIP-6963 multi-wallet)
-      if (win.ethereum?.providers?.length) {
-        evm = win.ethereum.providers.find((p: any) =>
-          p.isMetaMask && !p.isStarKey && p !== win.starkey?.ethereum
-        ) || null;
-      }
-
-      // Method 2: If window.ethereum is MetaMask and NOT the same object as starkey.ethereum
-      if (!evm && win.ethereum?.isMetaMask && win.ethereum !== win.starkey?.ethereum) {
-        evm = win.ethereum;
-      }
-
-      // Method 3: Check for MetaMask's specific detection property
-      if (!evm && win.ethereum?.isMetaMask && win.ethereum?._metamask) {
-        evm = win.ethereum;
-      }
-
+      // Find the real MetaMask using EIP-6963 discovery + fallbacks
+      evm = getMetaMaskProvider();
       if (!evm) {
-        // MetaMask genuinely not installed or fully overridden by StarKey
-        alert("MetaMask not detected. If MetaMask is installed, try these steps:\n\n1. Open MetaMask extension and make sure it\'s unlocked\n2. In MetaMask Settings > Advanced, enable \'Set MetaMask as default wallet\'\n3. Refresh this page and try again\n\nAlternatively, use StarKey (EVM) which is already working.");
+        alert("MetaMask not detected. Please make sure MetaMask is installed, unlocked, and try refreshing the page.");
         return false;
       }
+      console.log("[SupraFX] Using MetaMask provider:", evm);
     }
 
     try {
