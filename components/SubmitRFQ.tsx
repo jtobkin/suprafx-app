@@ -195,7 +195,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
   };
 
   return (
-    <div className="mb-5 animate-in relative" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", zIndex: 30 }}>
+    <div className="mb-5 animate-in relative" style={{ background: "var(--surface)", border: "1px solid rgba(37,99,235,0.4)", borderRadius: "var(--radius)", zIndex: 30, boxShadow: "0 0 20px rgba(37,99,235,0.15), 0 0 40px rgba(37,99,235,0.05)" }}>
       <div className="card-header">
         <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>New RFQ</span>
         <div className="flex items-center gap-3">
@@ -218,8 +218,8 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "var(--t3)" }}>Amount</label>
             <input type="number" step="0.01" min="0" placeholder="0.00" value={amount}
               onChange={e => setAmount(e.target.value)}
-              className="w-full px-3 py-2 rounded-md mono text-[14px] outline-none"
-              style={{ background: "var(--bg-raised)", color: "var(--t0)", border: "1px solid var(--border)" }} />
+              className="w-full px-3 rounded-md mono text-[14px] outline-none"
+              style={{ background: "var(--bg-raised)", color: "var(--t0)", border: "1px solid var(--border)", height: 42 }} />
           </div>
 
           {/* Arrow */}
@@ -246,11 +246,11 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
                 </button>
               )}
             </div>
-            <div className="flex items-center rounded-md overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+            <div className="flex items-center rounded-md overflow-hidden" style={{ border: "1px solid var(--border)", height: 42 }}>
               <input type="number" step="any" min="0" placeholder="0.00" value={price}
                 onChange={e => { setPrice(e.target.value); setPriceEdited(true); }}
-                className="flex-1 px-3 py-2 mono text-[14px] outline-none" style={{ minWidth: 0, background: "var(--bg-raised)", color: "var(--t0)", border: "none" }} />
-              <div className="px-2 py-2" style={{ background: "var(--surface-2)", borderLeft: "1px solid var(--border)" }}>
+                className="flex-1 px-3 mono text-[14px] outline-none h-full" style={{ minWidth: 0, background: "var(--bg-raised)", color: "var(--t0)", border: "none" }} />
+              <div className="px-2 flex items-center" style={{ background: "var(--surface-2)", borderLeft: "1px solid var(--border)", height: "100%" }}>
                 <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>/{sellToken}</span>
               </div>
             </div>
@@ -259,7 +259,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
           {/* You Receive */}
           <div style={{ width: 180 }}>
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "var(--t3)" }}>You Receive</label>
-            <div className="flex items-center rounded-md px-3 py-2" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+            <div className="flex items-center rounded-md px-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", height: 42 }}>
               <span className="mono text-[14px] font-semibold flex-1" style={{ color: receiveAmount > 0 ? "var(--positive)" : "var(--t3)" }}>
                 {receiveAmount > 0 ? (receiveAmount >= 1000 ? receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receiveAmount.toFixed(4)) : "—"}
               </span>
@@ -274,8 +274,8 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
           <div>
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "transparent" }}>.</label>
             <button onClick={submit} disabled={loading || parsedAmount <= 0 || parsedPrice <= 0}
-              className="px-5 py-2 rounded-md text-[13px] font-semibold transition-all disabled:opacity-30 hover:brightness-110 whitespace-nowrap"
-              style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+              className="px-5 rounded-md text-[13px] font-semibold transition-all disabled:opacity-30 hover:brightness-110 whitespace-nowrap"
+              style={{ background: "var(--accent)", color: "#fff", border: "none", height: 42 }}>
               {loading ? "..." : "Submit RFQ"}
             </button>
           </div>

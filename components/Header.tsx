@@ -5,7 +5,7 @@ export default function Header({ onProfileClick }: { onProfileClick: () => void 
   const { supraShort, isDemo, isVerified } = useWallet();
 
   return (
-    <header className="h-12 flex items-center justify-between px-5 border-b sticky top-0 z-40 glass-strong">
+    <header className="h-12 flex items-center justify-between px-5 sticky top-0 z-40 glass-strong">
       {/* Left: spacer to balance */}
       <div style={{ width: "140px" }} />
 
