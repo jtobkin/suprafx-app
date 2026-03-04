@@ -110,7 +110,16 @@ function Login() {
 function VerificationGate() {
   const { linkEvmAddress, supraShort, disconnect } = useWallet();
   const [linking, setLinking] = useState(false);
-  const handleLink = async () => { setLinking(true); await linkEvmAddress(); setLinking(false); };
+  const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
+  const [showChoice, setShowChoice] = useState(false);
+  const handleLink = async (provider: "metamask" | "starkey") => {
+    setLinking(true);
+    setLinkingProvider(provider);
+    setShowChoice(false);
+    await linkEvmAddress(provider);
+    setLinking(false);
+    setLinkingProvider(null);
+  };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-48px)] text-center px-5">
@@ -133,15 +142,43 @@ function VerificationGate() {
             style={{ background: "var(--warn)", color: "#fff" }}>2</div>
           <div className="text-left flex-1">
             <div className="text-[13px] font-medium" style={{ color: "var(--warn)" }}>Link EVM Address</div>
-            <div className="text-[12px]" style={{ color: "var(--t3)" }}>Sign with MetaMask to verify ownership</div>
+            <div className="text-[12px]" style={{ color: "var(--t3)" }}>Sign a message to verify address ownership</div>
           </div>
         </div>
 
-        <button onClick={handleLink} disabled={linking}
-          className="w-full py-3 rounded-md text-[14px] font-semibold transition-all disabled:opacity-50 glow-accent"
-          style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-          {linking ? "Waiting for MetaMask…" : "Link EVM Address via MetaMask"}
-        </button>
+        {linking ? (
+          <div className="flex items-center justify-center gap-2 py-3">
+            <div className="w-3 h-3 rounded-full border-[1.5px] animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+            <span className="text-[13px]" style={{ color: "var(--t2)" }}>
+              Waiting for {linkingProvider === "starkey" ? "StarKey" : "MetaMask"} signature...
+            </span>
+          </div>
+        ) : showChoice ? (
+          <div className="space-y-2">
+            <div className="text-[12px] mb-2" style={{ color: "var(--t3)" }}>Choose wallet to sign with:</div>
+            <button onClick={() => handleLink("starkey")}
+              className="w-full py-3 rounded-md text-[14px] font-semibold transition-all hover:brightness-110"
+              style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+              StarKey (EVM)
+            </button>
+            <button onClick={() => handleLink("metamask")}
+              className="w-full py-3 rounded-md text-[14px] font-semibold transition-all hover:brightness-110"
+              style={{ background: "var(--surface-3)", color: "var(--t1)", border: "1px solid var(--border)" }}>
+              MetaMask
+            </button>
+            <button onClick={() => setShowChoice(false)}
+              className="w-full py-1.5 text-[12px]"
+              style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+              cancel
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setShowChoice(true)}
+            className="w-full py-3 rounded-md text-[14px] font-semibold transition-all disabled:opacity-50 glow-accent"
+            style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+            Link EVM Address
+          </button>
+        )}
         <button onClick={disconnect}
           className="w-full mt-3 py-2 rounded-md text-[12px] mono"
           style={{ color: "var(--t3)", background: "none", border: "1px solid var(--border)" }}>
