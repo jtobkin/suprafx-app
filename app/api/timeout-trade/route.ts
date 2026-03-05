@@ -2,161 +2,226 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
+import { councilVerifyAndSign } from '@/lib/council-sign';
+import { applyTimeoutPenalty } from '@/lib/reputation';
+import { releaseEarmark, liquidateForDefault, recordTimeout } from '@/lib/vault';
+import { storeSignedAction, getTradeActions } from '@/lib/signed-actions';
 
 export async function POST(req: NextRequest) {
-  const start = Date.now();
-  const log: string[] = [];
-  
   try {
     const { tradeId } = await req.json();
     if (!tradeId) return NextResponse.json({ error: 'tradeId required' }, { status: 400 });
-    log.push(`tradeId: ${tradeId}`);
 
     const db = getServiceClient();
     const now = new Date();
 
-    const { data: trade, error: fetchErr } = await db.from('trades').select('*').eq('id', tradeId).single();
-    if (fetchErr) { log.push(`fetch error: ${fetchErr.message}`); return NextResponse.json({ error: fetchErr.message, log }, { status: 500 }); }
-    if (!trade) return NextResponse.json({ error: 'Trade not found', log }, { status: 404 });
-    
-    log.push(`status: ${trade.status}, taker_deadline: ${trade.taker_deadline}, maker_deadline: ${trade.maker_deadline}`);
+    const { data: trade } = await db.from('trades').select('*').eq('id', tradeId).single();
+    if (!trade) return NextResponse.json({ error: 'Trade not found' }, { status: 404 });
 
-    // === TAKER TIMEOUT ===
+    // === Taker timeout ===
     if (trade.status === 'open' && trade.taker_deadline && new Date(trade.taker_deadline) < now) {
-      log.push('Processing taker timeout...');
-      
-      // Step 1: Atomic claim
+      // Atomic claim — only one process can flip this
       const { data: claimed, error: claimErr } = await db.from('trades')
         .update({ status: 'taker_timed_out' })
         .eq('id', tradeId)
         .eq('status', 'open')
         .select('id');
-      
-      if (claimErr) { log.push(`claim error: ${claimErr.message}`); return NextResponse.json({ error: 'Claim failed', log }, { status: 500 }); }
-      if (!claimed?.length) { log.push('Already claimed by another process'); return NextResponse.json({ processed: false, reason: 'Already processed', log }); }
-      log.push('Claimed successfully');
 
-      // Step 2: Council signature
+      if (claimErr || !claimed?.length) {
+        return NextResponse.json({ processed: false, reason: 'Could not claim trade (already processed or error)', claimErr: claimErr?.message });
+      }
+
+      // Council signs the timeout
+      let councilHash = '';
       try {
-        const { councilVerifyAndSign } = await import('@/lib/council-sign');
         const councilResult = await councilVerifyAndSign(
           'taker_timeout',
-          { tradeId, takerAddress: trade.taker_address },
-          [{ name: 'timeout', fn: async () => ({ passed: true }) }],
+          { tradeId, takerAddress: trade.taker_address, deadline: trade.taker_deadline },
+          [{ name: 'deadline_passed', fn: async () => ({ passed: true }) }],
           { tradeId, db },
         );
-        log.push(`Council: ${councilResult.decision}, hash: ${councilResult.aggregateHash.slice(0, 16)}...`);
-      } catch (e: any) { log.push(`Council error: ${e.message}`); }
+        councilHash = councilResult.aggregateHash;
+      } catch (e: any) {
+        console.error('[Timeout] Council sign failed:', e.message);
+      }
 
-      // Step 3: Reputation penalty
+      // Apply penalty
+      let penalty = { oldScore: 0, newScore: 0, penaltyAmount: 0 };
       try {
-        const { applyTimeoutPenalty } = await import('@/lib/reputation');
-        const penalty = await applyTimeoutPenalty(trade.taker_address, 'taker_timeout');
-        log.push(`Penalty: ${penalty.oldScore.toFixed(2)} → ${penalty.newScore.toFixed(2)} (-33%)`);
-      } catch (e: any) { log.push(`Penalty error: ${e.message}`); }
+        penalty = await applyTimeoutPenalty(trade.taker_address, 'taker_timeout');
+      } catch (e: any) {
+        console.error('[Timeout] Penalty failed:', e.message);
+      }
 
-      // Step 4: Release earmark
+      // Release earmark
       try {
-        const { releaseEarmark } = await import('@/lib/vault');
-        const { data: q } = await db.from('quotes').select('id').eq('rfq_id', trade.rfq_id).eq('status', 'accepted').single();
-        if (q) { await releaseEarmark(q.id, 'taker_timed_out'); log.push('Earmark released'); }
-      } catch (e: any) { log.push(`Earmark error: ${e.message}`); }
+        const { data: acceptedQuote } = await db.from('quotes')
+          .select('id').eq('rfq_id', trade.rfq_id).eq('status', 'accepted').single();
+        if (acceptedQuote) await releaseEarmark(acceptedQuote.id, 'taker_timed_out');
+      } catch (e: any) {
+        console.error('[Timeout] Earmark release failed:', e.message);
+      }
 
-      // Step 5: Record timeout
+      // Record timeout count
+      let timeoutCount = 0;
+      let banned = false;
       try {
-        const { recordTimeout } = await import('@/lib/vault');
         const result = await recordTimeout(trade.taker_address);
-        log.push(`Timeouts: ${result.timeoutCount}/3, banned: ${result.banned}`);
-      } catch (e: any) { log.push(`Timeout record error: ${e.message}`); }
+        timeoutCount = result.timeoutCount;
+        banned = result.banned;
+      } catch (e: any) {
+        console.error('[Timeout] Record timeout failed:', e.message);
+      }
 
-      // Step 6: Audit trail
+      // Audit trail
       try {
-        const { storeSignedAction } = await import('@/lib/signed-actions');
         await storeSignedAction({
           actionType: 'taker_timeout_penalty',
           signerAddress: 'council-approved',
-          payload: { tradeId, type: 'taker_timeout', takerAddress: trade.taker_address },
-          payloadHash: 'timeout-' + tradeId,
-          signature: 'timeout-' + tradeId,
+          payload: {
+            tradeId, takerAddress: trade.taker_address,
+            oldScore: penalty.oldScore, newScore: penalty.newScore,
+            penaltyPercent: '33%', timeoutCount, banned,
+          },
+          payloadHash: councilHash,
+          signature: councilHash,
           tradeId,
         });
-        log.push('Audit trail stored');
-      } catch (e: any) { log.push(`Audit error: ${e.message}`); }
+      } catch (e: any) {
+        console.error('[Timeout] Audit trail failed:', e.message);
+      }
 
-      log.push(`Done in ${Date.now() - start}ms`);
-      return NextResponse.json({ processed: true, type: 'taker_timeout', log });
+      // On-chain attestation
+      try {
+        if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+          const { submitCommitteeAttestation, buildAttestationBundle } = await import('@/lib/bot-wallets');
+          const tradeActions = await getTradeActions(tradeId);
+          const bundle = await buildAttestationBundle(
+            tradeId, councilHash, undefined,
+            { displayId: trade.display_id, pair: trade.pair, size: trade.size, rate: trade.rate,
+              sourceChain: trade.source_chain, destChain: trade.dest_chain,
+              takerAddress: trade.taker_address, makerAddress: trade.maker_address },
+            { taker: { address: trade.taker_address, oldScore: penalty.oldScore, newScore: penalty.newScore, speedBonus: 0 } },
+            tradeActions,
+          );
+          bundle.type = 'taker_timeout_attestation';
+          bundle.timeout = { party: 'taker', penaltyPercent: '33%', oldScore: penalty.oldScore, newScore: penalty.newScore, timeoutCount, banned };
+          await submitCommitteeAttestation(tradeId, councilHash, undefined, undefined, bundle);
+        }
+      } catch (e: any) {
+        console.error('[Timeout] Attestation failed:', e.message);
+      }
+
+      return NextResponse.json({
+        processed: true, type: 'taker_timeout',
+        penalty: { oldScore: penalty.oldScore, newScore: penalty.newScore, percent: '33%' },
+        timeoutCount, banned,
+      });
     }
 
-    // === MAKER DEFAULT ===
+    // === Maker default ===
     if (trade.status === 'taker_verified' && trade.maker_deadline && new Date(trade.maker_deadline) < now) {
-      log.push('Processing maker default...');
-      
       const { data: claimed, error: claimErr } = await db.from('trades')
         .update({ status: 'maker_defaulted' })
         .eq('id', tradeId)
         .eq('status', 'taker_verified')
         .select('id');
-      
-      if (claimErr) { log.push(`claim error: ${claimErr.message}`); return NextResponse.json({ error: 'Claim failed', log }, { status: 500 }); }
-      if (!claimed?.length) { log.push('Already claimed'); return NextResponse.json({ processed: false, reason: 'Already processed', log }); }
-      log.push('Claimed successfully');
 
-      // Council
+      if (claimErr || !claimed?.length) {
+        return NextResponse.json({ processed: false, reason: 'Could not claim trade', claimErr: claimErr?.message });
+      }
+
+      let councilHash = '';
       try {
-        const { councilVerifyAndSign } = await import('@/lib/council-sign');
-        await councilVerifyAndSign(
+        const councilResult = await councilVerifyAndSign(
           'maker_default',
-          { tradeId, makerAddress: trade.maker_address },
-          [{ name: 'timeout', fn: async () => ({ passed: true }) }],
+          { tradeId, makerAddress: trade.maker_address, deadline: trade.maker_deadline },
+          [{ name: 'deadline_passed', fn: async () => ({ passed: true }) }],
           { tradeId, db },
         );
-        log.push('Council signed');
-      } catch (e: any) { log.push(`Council error: ${e.message}`); }
+        councilHash = councilResult.aggregateHash;
+      } catch (e: any) {
+        console.error('[Timeout] Council sign failed:', e.message);
+      }
 
-      // Penalty
+      let penalty = { oldScore: 0, newScore: 0, penaltyAmount: 0 };
       try {
-        const { applyTimeoutPenalty } = await import('@/lib/reputation');
-        const penalty = await applyTimeoutPenalty(trade.maker_address, 'maker_default');
-        log.push(`Penalty: ${penalty.oldScore.toFixed(2)} → ${penalty.newScore.toFixed(2)} (-67%)`);
-      } catch (e: any) { log.push(`Penalty error: ${e.message}`); }
+        penalty = await applyTimeoutPenalty(trade.maker_address, 'maker_default');
+      } catch (e: any) {
+        console.error('[Timeout] Penalty failed:', e.message);
+      }
 
-      // Liquidate and repay taker
+      const tradeValue = trade.size * trade.rate;
+      let liquidation = { liquidatedAmount: 0, takerRepaid: 0, councilSurcharge: 0 };
       try {
-        const { liquidateForDefault } = await import('@/lib/vault');
-        const tradeValue = trade.size * trade.rate;
         const result = await liquidateForDefault(tradeId, tradeValue, trade.maker_address, trade.taker_address);
-        log.push(`Liquidated: ${result.liquidatedAmount}, taker repaid: ${result.takerRepaid}`);
-      } catch (e: any) { log.push(`Liquidation error: ${e.message}`); }
+        liquidation = { liquidatedAmount: result.liquidatedAmount || 0, takerRepaid: result.takerRepaid || tradeValue, councilSurcharge: result.councilSurcharge || tradeValue * 0.10 };
+      } catch (e: any) {
+        console.error('[Timeout] Liquidation failed:', e.message);
+      }
 
-      // Record timeout
+      let timeoutCount = 0;
+      let banned = false;
       try {
-        const { recordTimeout } = await import('@/lib/vault');
         const result = await recordTimeout(trade.maker_address);
-        log.push(`Timeouts: ${result.timeoutCount}/3, banned: ${result.banned}`);
-      } catch (e: any) { log.push(`Timeout record error: ${e.message}`); }
+        timeoutCount = result.timeoutCount;
+        banned = result.banned;
+      } catch (e: any) {
+        console.error('[Timeout] Record timeout failed:', e.message);
+      }
 
-      // Audit trail
       try {
-        const { storeSignedAction } = await import('@/lib/signed-actions');
         await storeSignedAction({
           actionType: 'maker_default_penalty',
           signerAddress: 'council-approved',
-          payload: { tradeId, type: 'maker_default', makerAddress: trade.maker_address, takerAddress: trade.taker_address },
-          payloadHash: 'default-' + tradeId,
-          signature: 'default-' + tradeId,
+          payload: {
+            tradeId, makerAddress: trade.maker_address, takerAddress: trade.taker_address,
+            oldScore: penalty.oldScore, newScore: penalty.newScore, penaltyPercent: '67%',
+            tradeValue, liquidatedAmount: liquidation.liquidatedAmount,
+            takerRepaid: liquidation.takerRepaid, takerCredited: true, timeoutCount, banned,
+          },
+          payloadHash: councilHash,
+          signature: councilHash,
           tradeId,
         });
-        log.push('Audit trail stored');
-      } catch (e: any) { log.push(`Audit error: ${e.message}`); }
+      } catch (e: any) {
+        console.error('[Timeout] Audit trail failed:', e.message);
+      }
 
-      log.push(`Done in ${Date.now() - start}ms`);
-      return NextResponse.json({ processed: true, type: 'maker_default', log });
+      // On-chain attestation
+      try {
+        if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+          const { submitCommitteeAttestation, buildAttestationBundle } = await import('@/lib/bot-wallets');
+          const tradeActions = await getTradeActions(tradeId);
+          const bundle = await buildAttestationBundle(
+            tradeId, councilHash, undefined,
+            { displayId: trade.display_id, pair: trade.pair, size: trade.size, rate: trade.rate,
+              sourceChain: trade.source_chain, destChain: trade.dest_chain,
+              takerAddress: trade.taker_address, makerAddress: trade.maker_address,
+              takerTxHash: trade.taker_tx_hash },
+            { maker: { address: trade.maker_address, oldScore: penalty.oldScore, newScore: penalty.newScore, speedBonus: 0 } },
+            tradeActions,
+          );
+          bundle.type = 'maker_default_attestation';
+          bundle.default = { party: 'maker', penaltyPercent: '67%', oldScore: penalty.oldScore, newScore: penalty.newScore,
+            liquidatedAmount: liquidation.liquidatedAmount, takerRepaid: liquidation.takerRepaid, timeoutCount, banned };
+          await submitCommitteeAttestation(tradeId, councilHash, undefined, undefined, bundle);
+        }
+      } catch (e: any) {
+        console.error('[Timeout] Attestation failed:', e.message);
+      }
+
+      return NextResponse.json({
+        processed: true, type: 'maker_default',
+        penalty: { oldScore: penalty.oldScore, newScore: penalty.newScore, percent: '67%' },
+        liquidated: liquidation.liquidatedAmount, takerRepaid: liquidation.takerRepaid,
+        timeoutCount, banned,
+      });
     }
 
-    log.push('No expired deadline found for this trade');
-    return NextResponse.json({ processed: false, log });
+    return NextResponse.json({ processed: false, reason: 'Deadline not expired or wrong status', status: trade.status, taker_deadline: trade.taker_deadline, maker_deadline: trade.maker_deadline });
   } catch (e: any) {
-    log.push(`TOP LEVEL ERROR: ${e.message}`);
-    return NextResponse.json({ error: e.message, log }, { status: 500 });
+    console.error('[Timeout] Top-level error:', e.message);
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
