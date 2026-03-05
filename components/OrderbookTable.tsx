@@ -139,26 +139,22 @@ function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }:
     const update = () => {
       const ms = new Date(deadline).getTime() - Date.now();
       setRemaining(ms > 0 ? ms : 0);
-      // When timer hits zero, trigger timeout for this specific trade
+      // When timer hits zero, trigger timeout immediately
       if (ms <= 0 && !expiredTriggered.current) {
         expiredTriggered.current = true;
-        setTimeout(() => {
-          if (tradeId) {
-            fetch("/api/timeout-trade", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ tradeId }),
-            }).then(r => r.json()).then(data => {
-              console.log("[SupraFX] Timeout processed:", data);
-              if (onExpired) onExpired();
-            }).catch(() => {
-              // Fallback to generic cron
-              fetch("/api/cron/timeouts").then(() => { if (onExpired) onExpired(); });
-            });
-          } else {
-            fetch("/api/cron/timeouts").then(() => { if (onExpired) onExpired(); });
-          }
-        }, 2000);
+        if (tradeId) {
+          // Fire immediately — don't wait, don't depend on component staying mounted
+          fetch("/api/timeout-trade", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tradeId }),
+          }).then(r => r.json()).then(data => {
+            console.log("[SupraFX] Timeout processed:", data);
+            if (onExpired) onExpired();
+          }).catch(err => {
+            console.warn("[SupraFX] Timeout-trade failed:", err);
+          });
+        }
       }
     };
     update();
