@@ -194,50 +194,70 @@ function CountdownTimer({ deadline, label, penaltyWarning }: { deadline: string 
 }
 
 function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: string }) {
-  const [timeline, setTimeline] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [votes, setVotes] = useState<any[]>([]);
+  const [signedActions, setSignedActions] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [expandedAction, setExpandedAction] = useState<string | null>(null);
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || loaded) return;
-    fetch(`/api/signed-actions?tradeId=${tradeId}`)
+    fetch(`/api/council-events?tradeId=${tradeId}`)
       .then(r => r.json())
-      .then(data => { setTimeline(data.actions || []); setLoaded(true); })
-      .catch(() => { setTimeline([]); setLoaded(true); });
+      .then(data => {
+        setEvents(data.events || []);
+        setVotes(data.votes || []);
+        setSignedActions(data.signedActions || []);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
   }, [open, loaded, tradeId]);
 
-  const actionLabel: Record<string, string> = {
-    submit_rfq: "Submit RFQ",
-    place_quote: "Place Quote",
-    accept_quote: "Accept Quote",
-    confirm_taker_tx: "Taker TX Confirm",
-    confirm_maker_tx: "Maker TX Confirm",
-    council_cosign_quote: "Council Co-Sign Quote",
-    council_confirm_match: "Council Confirm Match",
-    council_verify_taker_tx: "Council Verify Taker TX",
-    council_verify_maker_tx: "Council Verify Maker TX",
-    council_approve_reputation: "Council Approve Settlement",
-  };
-  const actionColor: Record<string, string> = {
-    submit_rfq: "var(--accent-light)",
-    place_quote: "var(--warn)",
-    accept_quote: "var(--positive)",
-    confirm_taker_tx: "var(--accent-light)",
-    confirm_maker_tx: "var(--positive)",
-    council_cosign_quote: "#8b5cf6",
-    council_confirm_match: "#8b5cf6",
-    council_verify_taker_tx: "#8b5cf6",
-    council_verify_maker_tx: "#8b5cf6",
-    council_approve_reputation: "#8b5cf6",
+  const eventLabel: Record<string, string> = {
+    rfq_registered: "RFQ Registered",
+    quote_registered: "Quote Registered",
+    quote_withdrawn: "Quote Withdrawn",
+    rfq_cancelled: "RFQ Cancelled",
+    match_confirmed: "Match Confirmed",
+    taker_tx_verified: "Taker TX Verified",
+    maker_tx_verified: "Maker TX Verified",
+    taker_timed_out: "Taker Timed Out",
+    maker_defaulted: "Maker Defaulted",
+    settlement_attested: "Settlement Attested",
   };
 
-  const roleLabel = (addr: string) => {
-    if (addr === supraAddr) return "You";
-    if (addr === "auto-maker-bot") return "Bot";
-    if (addr.startsWith("N-") || addr.startsWith("council-")) return "Council";
-    return addr.slice(0, 6) + "…" + addr.slice(-4);
+  const eventColor: Record<string, string> = {
+    rfq_registered: "var(--accent-light)",
+    quote_registered: "var(--warn)",
+    quote_withdrawn: "var(--t3)",
+    rfq_cancelled: "var(--negative)",
+    match_confirmed: "var(--positive)",
+    taker_tx_verified: "#8b5cf6",
+    maker_tx_verified: "#8b5cf6",
+    taker_timed_out: "var(--negative)",
+    maker_defaulted: "var(--negative)",
+    settlement_attested: "var(--positive)",
   };
+
+  const getVotesForEvent = (eventId: string) =>
+    votes.filter((v: any) => v.event_id === eventId);
+
+  // Find related signed action (user signature) for an event
+  const getSignedAction = (eventType: string) => {
+    const mapping: Record<string, string> = {
+      rfq_registered: "submit_rfq",
+      quote_registered: "place_quote",
+      match_confirmed: "accept_quote",
+      taker_tx_verified: "confirm_taker_tx",
+      maker_tx_verified: "confirm_maker_tx",
+    };
+    const actionType = mapping[eventType];
+    if (!actionType) return null;
+    return signedActions.find((a: any) => a.action_type === actionType);
+  };
+
+  const totalEvents = events.length;
 
   return (
     <div className="mt-3">
@@ -245,104 +265,153 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
         className="flex items-center gap-2 text-[12px] mono transition-colors"
         style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
         <span style={{ fontSize: 8 }}>{open ? "▼" : "▶"}</span>
-        Audit Trail {loaded ? `(${timeline.length} action${timeline.length !== 1 ? "s" : ""})` : "(click to load)"}
+        Event Chain {loaded ? `(${totalEvents} event${totalEvents !== 1 ? "s" : ""})` : "(click to load)"}
       </button>
       {open && (
         <div className="mt-2 rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
           {!loaded ? (
             <div className="px-3 py-2 flex items-center gap-2 text-[12px]" style={{ color: "var(--t3)" }}>
-              <Spinner color="var(--t3)" /> Loading...
+              Loading...
             </div>
-          ) : timeline.length === 0 ? (
-            <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>No signed actions recorded.</div>
+          ) : events.length === 0 ? (
+            <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>No council events recorded.</div>
           ) : (
             <div>
-              {timeline.map((a: any, i: number) => {
-                const timeStr = new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-                const hasSig = a.signature && a.signature.length > 10;
-                const hasAuth = a.session_auth_signature && a.session_auth_signature.length > 10;
-                const isExpanded = expandedAction === a.id;
+              {events.map((evt: any, i: number) => {
+                const timeStr = new Date(evt.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                const evtVotes = getVotesForEvent(evt.id);
+                const approvals = evtVotes.filter((v: any) => v.decision === "approve").length;
+                const isExpanded = expandedEvent === evt.id;
+                const userAction = getSignedAction(evt.event_type);
+                const isTerminal = ["taker_timed_out", "maker_defaulted", "settlement_attested"].includes(evt.event_type);
 
                 return (
-                  <div key={a.id || i} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
+                  <div key={evt.id} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
                     {/* Summary row */}
-                    <div className="flex items-center gap-4 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors"
-                      onClick={() => setExpandedAction(isExpanded ? null : a.id)}
-                      style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
+                    <div className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                      onClick={() => setExpandedEvent(isExpanded ? null : evt.id)}
+                      style={{ background: isTerminal ? "rgba(239,68,68,0.03)" : i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
+                      <span className="mono text-[10px] w-6 shrink-0 text-center font-bold" style={{ color: "var(--t3)" }}>#{evt.sequence_number}</span>
                       <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
-                      <span className="text-[12px] w-40 shrink-0 font-semibold" style={{ color: actionColor[a.action_type] || "var(--t2)" }}>
-                        {actionLabel[a.action_type] || a.action_type.replace(/_/g, " ")}
+                      <span className="text-[12px] w-40 shrink-0 font-semibold" style={{ color: eventColor[evt.event_type] || "var(--t2)" }}>
+                        {eventLabel[evt.event_type] || evt.event_type.replace(/_/g, " ")}
                       </span>
-                      <span className="text-[11px] w-20 shrink-0 font-medium" style={{ color: a.signer_address === supraAddr ? "var(--positive)" : "var(--t2)" }}>
-                        {roleLabel(a.signer_address)}
-                      </span>
-                      <div className="flex items-center gap-1 flex-1 justify-end">
-                        {hasSig && <span className="text-[10px]" style={{ color: "var(--positive)" }}>signed</span>}
-                        {hasAuth && <span className="text-[10px]" style={{ color: "var(--positive)" }}>✓ authorized</span>}
-                        <span className="text-[10px] ml-1" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
+                      <div className="flex items-center gap-2 flex-1 justify-end">
+                        {evt.consensus_reached ? (
+                          <span className="mono text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ background: "rgba(34,197,94,0.1)", color: "var(--positive)" }}>
+                            {approvals}/5 ✓
+                          </span>
+                        ) : (
+                          <span className="mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(234,179,8,0.1)", color: "var(--warn)" }}>
+                            {approvals}/5 pending
+                          </span>
+                        )}
+                        {evt.deadline_type && (
+                          <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
+                            {evt.deadline_type === "taker_send" ? "taker timer" : "maker timer"}
+                          </span>
+                        )}
+                        <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
                       </div>
                     </div>
 
                     {/* Expanded detail */}
                     {isExpanded && (
-                      <div className="px-4 py-3 space-y-2" style={{ background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
-                        {/* Signer Address */}
+                      <div className="px-4 py-3 space-y-3" style={{ background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
+                        {/* Chain linkage */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <span className="mono text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Event Hash:</span>
+                            <span className="mono text-[10px] select-all" style={{ color: "var(--t2)" }}>{evt.event_hash.slice(0, 24)}…</span>
+                          </div>
+                          {evt.previous_event_hash && (
+                            <div className="flex items-center gap-1">
+                              <span className="mono text-[9px]" style={{ color: "var(--t3)" }}>← prev:</span>
+                              <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{evt.previous_event_hash.slice(0, 16)}…</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Payload summary */}
+                        {evt.payload && (
+                          <div>
+                            <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Payload</span>
+                            <div className="text-[11px] mono px-2 py-1.5 rounded break-all" style={{ background: "var(--surface-2)", color: "var(--t2)" }}>
+                              {Object.entries(evt.payload).filter(([k]) => !k.includes('signature') && !k.includes('SessionKey')).map(([k, v]) => (
+                                <div key={k}><span style={{ color: "var(--t3)" }}>{k}:</span> {typeof v === 'string' && (v as string).length > 40 ? (v as string).slice(0, 20) + '…' + (v as string).slice(-8) : String(v)}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Deadline info */}
+                        {evt.deadline && (
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span style={{ color: "var(--t3)" }}>Deadline set:</span>
+                            <span className="mono" style={{ color: "var(--warn)" }}>{new Date(evt.deadline).toLocaleTimeString()}</span>
+                            <span style={{ color: "var(--t3)" }}>({evt.deadline_type})</span>
+                          </div>
+                        )}
+
+                        {/* Node votes */}
                         <div>
-                          <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>Signer Address</span>
-                          <span className="mono text-[11px] break-all select-all" style={{ color: "var(--t1)" }}>{a.signer_address}</span>
-                        </div>
-
-                        {/* Action Signature (ECDSA) */}
-                        {hasSig && (
-                          <div>
-                            <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>Action Signature (ECDSA P-256)</span>
-                            <span className="mono text-[10px] break-all select-all" style={{ color: "var(--positive)" }}>{a.signature}</span>
-                          </div>
-                        )}
-
-                        {/* Payload Hash */}
-                        {a.payload_hash && (
-                          <div>
-                            <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>Payload Hash (SHA-256)</span>
-                            <span className="mono text-[10px] break-all select-all" style={{ color: "var(--t2)" }}>{a.payload_hash}</span>
-                          </div>
-                        )}
-
-                        {/* Session Public Key */}
-                        {a.session_public_key && (
-                          <div>
-                            <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>Session Public Key</span>
-                            <span className="mono text-[10px] break-all select-all" style={{ color: "var(--t2)" }}>{a.session_public_key}</span>
-                          </div>
-                        )}
-
-                        {/* Session Authorization Signature (StarKey) */}
-                        {hasAuth && (
-                          <div>
-                            <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>
-                              Session Authorization (StarKey Wallet Signature)
-                            </span>
-                            <span className="mono text-[10px] break-all select-all" style={{ color: "var(--positive)" }}>{a.session_auth_signature}</span>
-                          </div>
-                        )}
-
-                        {/* Chain of Trust */}
-                        <div className="mt-1 pt-2" style={{ borderTop: "1px solid var(--border)" }}>
-                          <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Chain of Trust</span>
-                          <div className="flex items-center gap-1.5 flex-wrap text-[10px] mono">
-                            <span className="px-1.5 py-0.5 rounded" style={{ background: hasAuth ? "rgba(34,197,94,0.1)" : "var(--surface-2)", color: hasAuth ? "var(--positive)" : "var(--t3)" }}>
-                              Wallet Signature {hasAuth ? "✓" : "—"}
-                            </span>
-                            <span style={{ color: "var(--t3)" }}>→</span>
-                            <span className="px-1.5 py-0.5 rounded" style={{ background: a.session_public_key ? "rgba(34,197,94,0.1)" : "var(--surface-2)", color: a.session_public_key ? "var(--positive)" : "var(--t3)" }}>
-                              Session Key {a.session_public_key ? "✓" : "—"}
-                            </span>
-                            <span style={{ color: "var(--t3)" }}>→</span>
-                            <span className="px-1.5 py-0.5 rounded" style={{ background: hasSig ? "rgba(34,197,94,0.1)" : "var(--surface-2)", color: hasSig ? "var(--positive)" : "var(--t3)" }}>
-                              Action Signed {hasSig ? "✓" : "—"}
-                            </span>
+                          <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Council Node Votes</span>
+                          <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+                            {["N-1", "N-2", "N-3", "N-4", "N-5"].map((nodeId, ni) => {
+                              const vote = evtVotes.find((v: any) => v.node_id === nodeId);
+                              return (
+                                <div key={nodeId} className="flex items-center gap-3 px-3 py-1.5 text-[11px]"
+                                  style={{ borderBottom: ni < 4 ? "1px solid var(--border)" : "none",
+                                    background: vote?.decision === "approve" ? "rgba(16,185,129,0.03)" : "transparent" }}>
+                                  <div className="flex items-center gap-1.5 w-10 shrink-0">
+                                    <div className="w-1.5 h-1.5 rounded-full"
+                                      style={{ background: vote ? (vote.decision === "approve" ? "var(--positive)" : "var(--negative)") : "var(--t3)", opacity: vote ? 1 : 0.3 }} />
+                                    <span className="mono font-medium" style={{ color: "var(--t2)" }}>{nodeId}</span>
+                                  </div>
+                                  {vote ? (
+                                    <>
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold"
+                                        style={{ background: vote.decision === "approve" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+                                          color: vote.decision === "approve" ? "var(--positive)" : "var(--negative)" }}>
+                                        {vote.decision.toUpperCase()}
+                                      </span>
+                                      <span className="mono text-[10px] truncate flex-1" style={{ color: "var(--t3)" }}>
+                                        sig: {vote.signature.slice(0, 20)}…
+                                      </span>
+                                      <span className="mono text-[10px] shrink-0" style={{ color: "var(--t3)" }}>
+                                        {new Date(vote.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>pending</span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
+
+                        {/* User signature (if this event has an associated signed action) */}
+                        {userAction && (
+                          <div>
+                            <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>User Signature</span>
+                            <div className="space-y-1 text-[10px]">
+                              <div><span style={{ color: "var(--t3)" }}>Signer:</span> <span className="mono select-all" style={{ color: "var(--t1)" }}>{userAction.signer_address}</span></div>
+                              {userAction.signature && userAction.signature.length > 10 && (
+                                <div><span style={{ color: "var(--t3)" }}>Action Sig (ECDSA):</span> <span className="mono select-all break-all" style={{ color: "var(--positive)" }}>{userAction.signature}</span></div>
+                              )}
+                              {userAction.payload_hash && (
+                                <div><span style={{ color: "var(--t3)" }}>Payload Hash:</span> <span className="mono select-all" style={{ color: "var(--t2)" }}>{userAction.payload_hash}</span></div>
+                              )}
+                              {userAction.session_public_key && (
+                                <div><span style={{ color: "var(--t3)" }}>Session Key:</span> <span className="mono select-all break-all" style={{ color: "var(--t2)" }}>{userAction.session_public_key}</span></div>
+                              )}
+                              {userAction.session_auth_signature && userAction.session_auth_signature.length > 10 && (
+                                <div><span style={{ color: "var(--t3)" }}>StarKey Auth:</span> <span className="mono select-all break-all" style={{ color: "var(--positive)" }}>{userAction.session_auth_signature}</span></div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
