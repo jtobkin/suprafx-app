@@ -65,12 +65,11 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
   }, [supraAddress, isDemo]);
 
   useEffect(() => { if (open && supraAddress) loadData(); }, [open, supraAddress, loadData]);
-  // Refresh data every 5 seconds while panel is open (catches rep changes from timeouts)
+  // Refresh when trades change (via Supabase realtime — page.tsx triggers re-renders)
+  // Also refresh when the panel becomes visible (tab switch)
   useEffect(() => {
-    if (!open || !supraAddress) return;
-    const iv = setInterval(loadData, 5000);
-    return () => clearInterval(iv);
-  }, [open, supraAddress, loadData]);
+    if (open && supraAddress && activeTab === "vault") loadData();
+  }, [activeTab]);
 
   const handleLink = async (provider: "metamask" | "starkey") => {
     setLinking(true); setLinkingProvider(provider); setShowWalletChoice(false);
@@ -303,7 +302,15 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
           {/* =============================== */}
           {activeTab === "vault" && (
             <>
-              {vaultLoading ? (
+              {/* Refresh button */}
+              <div className="flex justify-end mb-2">
+                <button onClick={loadData} disabled={vaultLoading}
+                  className="text-[11px] px-2 py-1 rounded transition-all disabled:opacity-30"
+                  style={{ color: "var(--t3)", background: "var(--surface-2)", border: "none", cursor: "pointer" }}>
+                  {vaultLoading ? "Refreshing..." : "↻ Refresh"}
+                </button>
+              </div>
+              {vaultLoading && !vault ? (
                 <div className="flex items-center gap-2 py-6 justify-center">
                   <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
                   <span className="text-[13px]" style={{ color: "var(--t3)" }}>Loading vault...</span>

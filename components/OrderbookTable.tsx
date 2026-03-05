@@ -129,6 +129,46 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
   );
 }
 
+function InlineTimer({ deadline, tradeId, onExpired }: { deadline: string; tradeId: string; onExpired?: () => void }) {
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const triggered = useRef(false);
+
+  useEffect(() => {
+    const update = () => {
+      const ms = new Date(deadline).getTime() - Date.now();
+      setRemaining(ms > 0 ? ms : 0);
+      if (ms <= 0 && !triggered.current) {
+        triggered.current = true;
+        fetch("/api/timeout-trade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tradeId }),
+        }).then(r => r.json()).then(data => {
+          console.log("[SupraFX] Inline timeout:", data);
+          if (onExpired) onExpired();
+        }).catch(() => {});
+      }
+    };
+    update();
+    const iv = setInterval(update, 1000);
+    return () => clearInterval(iv);
+  }, [deadline, tradeId, onExpired]);
+
+  if (remaining === null) return null;
+  const totalSec = Math.floor(remaining / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  const isExpired = remaining <= 0;
+  const isWarn = remaining < 5 * 60 * 1000 && remaining > 0;
+  const color = isExpired ? "var(--negative)" : isWarn ? "var(--warn)" : "var(--t3)";
+
+  return (
+    <span className="mono text-[10px] font-bold tabular-nums" style={{ color }}>
+      {isExpired ? "EXPIRED" : `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`}
+    </span>
+  );
+}
+
 function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }: { deadline: string | null; label: string; penaltyWarning?: string; onExpired?: () => void; tradeId?: string }) {
   const [remaining, setRemaining] = useState<number | null>(null);
   const expiredTriggered = useRef(false);
@@ -1298,6 +1338,13 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
+                        {/* Inline deadline display on collapsed row */}
+                        {t.status === "open" && t.taker_deadline && (
+                          <InlineTimer deadline={t.taker_deadline} tradeId={t.id} onExpired={onUpdate} />
+                        )}
+                        {t.status === "taker_verified" && t.maker_deadline && (
+                          <InlineTimer deadline={t.maker_deadline} tradeId={t.id} onExpired={onUpdate} />
+                        )}
                         <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "▲" : "▼"}</span>
                       </div>
                     </div>

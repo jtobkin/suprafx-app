@@ -25,11 +25,10 @@ async function verifyOnChain(chain: string, txHash: string): Promise<boolean> {
 }
 
 async function runCommittee(db: any, tradeId: string, verificationType: string, chain: string, txHash: string, tradeData?: any) {
-  // Build checks based on verification type
+  // Each council node independently verifies — they run in parallel via councilVerifyAndSign
   const checks: Array<{ name: string; fn: () => Promise<{ passed: boolean; reason?: string }> }> = [];
 
   if (verificationType === 'verify_taker_tx' || verificationType === 'verify_maker_tx') {
-    // Check 1: Verify TX on-chain
     checks.push({
       name: 'on_chain_verification',
       fn: async () => {
@@ -37,23 +36,14 @@ async function runCommittee(db: any, tradeId: string, verificationType: string, 
         return { passed: verified, reason: verified ? undefined : 'TX not verified on chain' };
       },
     });
-
-    // Check 2: TX hash is valid format
     checks.push({
       name: 'tx_hash_format',
-      fn: async () => {
-        const valid = txHash && txHash.length > 10;
-        return { passed: !!valid, reason: valid ? undefined : 'Invalid TX hash format' };
-      },
+      fn: async () => ({ passed: !!(txHash && txHash.length > 10) }),
     });
   }
 
   if (verificationType === 'approve_reputation') {
-    // Always approve reputation updates after settlement
-    checks.push({
-      name: 'settlement_confirmed',
-      fn: async () => ({ passed: true }),
-    });
+    checks.push({ name: 'settlement_confirmed', fn: async () => ({ passed: true }) });
   }
 
   const result = await councilVerifyAndSign(

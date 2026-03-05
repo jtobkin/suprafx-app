@@ -117,65 +117,70 @@ export async function councilVerifyAndSign(
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
-  const votes: CouncilNodeVote[] = [];
   let approvals = 0;
   let rejections = 0;
 
-  // Each node independently runs checks and signs
-  for (const nodeId of COUNCIL_NODES) {
-    const kp = await getNodeKeyPair(nodeId);
-    const checkResults: { name: string; passed: boolean; reason?: string }[] = [];
-    let allPassed = true;
+  // All 5 nodes run checks and sign IN PARALLEL (not sequentially)
+  const votes: CouncilNodeVote[] = await Promise.all(
+    COUNCIL_NODES.map(async (nodeId) => {
+      const kp = await getNodeKeyPair(nodeId);
+      const checkResults: { name: string; passed: boolean; reason?: string }[] = [];
+      let allPassed = true;
 
-    // Run each check
-    for (const check of checks) {
-      try {
-        const result = await check.fn();
-        checkResults.push({ name: check.name, passed: result.passed, reason: result.reason });
-        if (!result.passed) allPassed = false;
-      } catch (e: any) {
-        checkResults.push({ name: check.name, passed: false, reason: e.message });
-        allPassed = false;
+      // Each node independently runs every check
+      const checkPromises = checks.map(async (check) => {
+        try {
+          const result = await check.fn();
+          return { name: check.name, passed: result.passed, reason: result.reason };
+        } catch (e: any) {
+          return { name: check.name, passed: false, reason: e.message };
+        }
+      });
+
+      const results = await Promise.all(checkPromises);
+      for (const r of results) {
+        checkResults.push(r);
+        if (!r.passed) allPassed = false;
       }
-    }
 
-    const decision = allPassed ? 'approve' as const : 'reject' as const;
-    const timestamp = new Date().toISOString();
+      const decision = allPassed ? 'approve' as const : 'reject' as const;
+      const timestamp = new Date().toISOString();
 
-    // Construct the message this node signs
-    const voteMessage = canonicalize({
-      protocol: 'SupraFX',
-      version: '2.0',
-      nodeId,
-      actionType,
-      decision,
-      payloadHash,
-      timestamp,
-    });
+      const voteMessage = canonicalize({
+        protocol: 'SupraFX',
+        version: '2.0',
+        nodeId,
+        actionType,
+        decision,
+        payloadHash,
+        timestamp,
+      });
 
-    // Sign with the node's ECDSA private key
-    const sigBuffer = await crypto.subtle.sign(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      kp.privateKey,
-      encoder.encode(voteMessage),
-    );
+      const sigBuffer = await crypto.subtle.sign(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        kp.privateKey,
+        encoder.encode(voteMessage),
+      );
 
-    const signature = Array.from(new Uint8Array(sigBuffer))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+      const signature = Array.from(new Uint8Array(sigBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 
-    if (decision === 'approve') approvals++;
+      return {
+        nodeId,
+        decision,
+        signature,
+        publicKey: kp.publicKeyHex,
+        message: voteMessage,
+        timestamp,
+        checks: checkResults,
+      } as CouncilNodeVote;
+    })
+  );
+
+  for (const v of votes) {
+    if (v.decision === 'approve') approvals++;
     else rejections++;
-
-    votes.push({
-      nodeId,
-      decision,
-      signature,
-      publicKey: kp.publicKeyHex,
-      message: voteMessage,
-      timestamp,
-      checks: checkResults,
-    });
   }
 
   const overallDecision = approvals >= THRESHOLD ? 'approved' : 'rejected';
