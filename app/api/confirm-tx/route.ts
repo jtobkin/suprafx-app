@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { verifySepoliaTx } from '@/lib/chains';
 import { updateReputation } from '@/lib/reputation';
-import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation } from '@/lib/bot-wallets';
+import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation, buildAttestationBundle } from '@/lib/bot-wallets';
+import { getTradeActions } from '@/lib/signed-actions';
 import { generateMultisig, councilVerifyAndSign } from '@/lib/council-sign';
 import { storeSignedAction } from '@/lib/signed-actions';
 import { botSignAction } from '@/lib/bot-signing';
@@ -191,11 +192,32 @@ export async function POST(req: NextRequest) {
             // Attestation on-chain
             let attestationTxHash = '';
             try {
+              // Build full attestation bundle with audit trail
+              const tradeActions = await getTradeActions(tradeId);
+              const bundle = await buildAttestationBundle(
+                tradeId,
+                repResult.multisig.aggregateHash,
+                settleMs,
+                {
+                  displayId: trade.display_id,
+                  pair: trade.pair, size: trade.size, rate: trade.rate,
+                  sourceChain: trade.source_chain, destChain: trade.dest_chain,
+                  takerAddress: trade.taker_address, makerAddress: trade.maker_address,
+                  takerSettlementAddress: trade.taker_settlement_address,
+                  makerSettlementAddress: trade.maker_settlement_address,
+                  takerTxHash: trade.taker_tx_hash || txHash, makerTxHash: makerTxHash,
+                },
+                {
+                  taker: takerAgent ? { address: trade.taker_address, oldScore: Number(takerAgent.rep_total), newScore: Number(takerAgent.rep_total), speedBonus: 0 } : undefined,
+                },
+                tradeActions,
+              );
               attestationTxHash = await submitCommitteeAttestation(
                 tradeId,
                 repResult.multisig.aggregateHash,
                 settleMs,
                 takerAgent ? { address: trade.taker_address, newScore: takerAgent.rep_total } : undefined,
+                bundle,
               );
               await db.from('committee_requests').update({
                 attestation_tx: attestationTxHash,
@@ -286,11 +308,31 @@ export async function POST(req: NextRequest) {
           // Always submit attestation to Supra L1 — every trade gets an on-chain record
           // regardless of which chains the trade settled on
           if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+            const tradeActions = await getTradeActions(tradeId);
+            const bundle = await buildAttestationBundle(
+              tradeId,
+              repResult.multisig.aggregateHash,
+              settleMs,
+              {
+                displayId: trade.display_id,
+                pair: trade.pair, size: trade.size, rate: trade.rate,
+                sourceChain: trade.source_chain, destChain: trade.dest_chain,
+                takerAddress: trade.taker_address, makerAddress: trade.maker_address,
+                takerSettlementAddress: trade.taker_settlement_address,
+                makerSettlementAddress: trade.maker_settlement_address,
+                takerTxHash: trade.taker_tx_hash, makerTxHash: txHash,
+              },
+              {
+                taker: takerAgent ? { address: trade.taker_address, oldScore: Number(takerAgent.rep_total), newScore: Number(takerAgent.rep_total), speedBonus: 0 } : undefined,
+              },
+              tradeActions,
+            );
             attestationTxHash = await submitCommitteeAttestation(
               tradeId,
               repResult.multisig.aggregateHash,
               settleMs,
               takerAgent ? { address: trade.taker_address, newScore: takerAgent.rep_total } : undefined,
+              bundle,
             );
             await db.from('committee_requests').update({
               attestation_tx: attestationTxHash,
