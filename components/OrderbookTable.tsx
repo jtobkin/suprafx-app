@@ -170,52 +170,79 @@ function InlineTimer({ deadline, tradeId, onExpired }: { deadline: string; trade
 }
 
 function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }: { deadline: string | null; label: string; penaltyWarning?: string; onExpired?: () => void; tradeId?: string }) {
-  const [remaining, setRemaining] = useState<number | null>(null);
-  const expiredTriggered = useRef(false);
+  const [remaining, setRemaining] = useState<number>(deadline ? Math.max(0, new Date(deadline).getTime() - Date.now()) : -1);
+  const firedRef = useRef(false);
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     if (!deadline) return;
-    expiredTriggered.current = false;
-    const update = () => {
-      const ms = new Date(deadline).getTime() - Date.now();
-      setRemaining(ms > 0 ? ms : 0);
-      // When timer hits zero, trigger timeout immediately
-      if (ms <= 0 && !expiredTriggered.current) {
-        expiredTriggered.current = true;
-        console.log("[SupraFX] Timer expired for trade:", tradeId, "— triggering timeout...");
-        if (tradeId) {
+    firedRef.current = false;
+    setStatus("");
+    const calc = () => Math.max(0, new Date(deadline).getTime() - Date.now());
+    setRemaining(calc());
+    const iv = setInterval(() => setRemaining(calc()), 1000);
+    return () => clearInterval(iv);
+  }, [deadline]);
+
+  // Fire timeout when remaining hits 0
+  useEffect(() => {
+    if (remaining > 0 || remaining === -1 || firedRef.current || !tradeId) return;
+    firedRef.current = true;
+    setStatus("Triggering Settlement Council...");
+    console.log("[SupraFX] CountdownTimer expired, calling /api/timeout-trade for:", tradeId);
+
+    fetch("/api/timeout-trade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tradeId }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        console.log("[SupraFX] Timeout result:", JSON.stringify(data));
+        if (data.processed) {
+          setStatus("Council ruled: " + (data.type || "timeout"));
+        } else {
+          setStatus(data.reason || "Retrying...");
+          // One retry after 3 seconds
+          setTimeout(() => {
+            fetch("/api/timeout-trade", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tradeId }),
+            }).then(r => r.json()).then(d => {
+              console.log("[SupraFX] Retry result:", JSON.stringify(d));
+              if (d.processed) setStatus("Council ruled: " + (d.type || "timeout"));
+              else setStatus(d.reason || d.error || "Council processing...");
+              if (onExpired) onExpired();
+            }).catch(() => {});
+          }, 3000);
+        }
+        if (onExpired) onExpired();
+      })
+      .catch(err => {
+        console.error("[SupraFX] timeout-trade error:", err);
+        setStatus("Error — retrying...");
+        setTimeout(() => {
           fetch("/api/timeout-trade", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tradeId }),
-          }).then(r => {
-            console.log("[SupraFX] Timeout response status:", r.status);
-            return r.json();
-          }).then(data => {
-            console.log("[SupraFX] Timeout result:", JSON.stringify(data));
+          }).then(r => r.json()).then(d => {
+            if (d.processed) setStatus("Council ruled: " + (d.type || "timeout"));
             if (onExpired) onExpired();
-          }).catch(err => {
-            console.error("[SupraFX] Timeout-trade FAILED:", err);
-          });
-        } else {
-          console.warn("[SupraFX] No tradeId passed to CountdownTimer");
-        }
-      }
-    };
-    update();
-    const iv = setInterval(update, 1000);
-    return () => clearInterval(iv);
-  }, [deadline, onExpired]);
+          }).catch(() => {});
+        }, 3000);
+      });
+  }, [remaining, tradeId, onExpired]);
 
-  if (!deadline || remaining === null) return null;
+  if (!deadline || remaining === -1) return null;
 
   const totalSec = Math.floor(remaining / 1000);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
-  const isWarning = remaining < 5 * 60 * 1000 && remaining > 0; // under 5 min
-  const isCritical = remaining < 60 * 1000 && remaining > 0;     // under 1 min
+  const isWarning = remaining < 5 * 60 * 1000 && remaining > 0;
+  const isCritical = remaining < 60 * 1000 && remaining > 0;
   const isExpired = remaining <= 0;
-
   const color = isExpired ? "var(--negative)" : isCritical ? "var(--negative)" : isWarning ? "var(--warn)" : "var(--t2)";
   const bgColor = isExpired ? "rgba(239,68,68,0.08)" : isCritical ? "rgba(239,68,68,0.06)" : isWarning ? "rgba(234,179,8,0.06)" : "var(--surface-2)";
 
@@ -231,7 +258,9 @@ function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }:
         <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: `${color}15`, color }}>{penaltyWarning}</span>
       )}
       {isExpired && (
-        <span className="text-[10px]" style={{ color: "var(--negative)" }}>Awaiting Council timeout ruling</span>
+        <span className="text-[11px]" style={{ color: status.includes("ruled") ? "var(--positive)" : "var(--negative)" }}>
+          {status || "Processing..."}
+        </span>
       )}
     </div>
   );
@@ -1340,10 +1369,10 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
                         {/* Inline deadline display on collapsed row */}
-                        {t.status === "open" && t.taker_deadline && (
+                        {!isTradeExpanded && t.status === "open" && t.taker_deadline && (
                           <InlineTimer deadline={t.taker_deadline} tradeId={t.id} onExpired={onUpdate} />
                         )}
-                        {t.status === "taker_verified" && t.maker_deadline && (
+                        {!isTradeExpanded && t.status === "taker_verified" && t.maker_deadline && (
                           <InlineTimer deadline={t.maker_deadline} tradeId={t.id} onExpired={onUpdate} />
                         )}
                         <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "▲" : "▼"}</span>
