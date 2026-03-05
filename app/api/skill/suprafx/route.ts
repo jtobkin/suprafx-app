@@ -422,7 +422,7 @@ async function handleWithdrawQuote(body: any) {
 
 async function handlePlaceQuote(body: any) {
   const db = getServiceClient();
-  const { rfqId, makerAddress, rate } = body;
+  const { rfqId, makerAddress, rate, signedPayload, signature, payloadHash, sessionPublicKey, sessionAuthSignature, sessionNonce, sessionCreatedAt } = body;
   if (!rfqId || !makerAddress || !rate) {
     return NextResponse.json({ error: 'rfqId, makerAddress, rate required' }, { status: 400 });
   }
@@ -465,11 +465,28 @@ async function handlePlaceQuote(body: any) {
     maker_address: makerAddress,
     rate: parsedRate,
     status: 'pending',
+    maker_signature: signature || null,
+    maker_payload_hash: payloadHash || null,
   }).select('*').single();
 
   if (quoteErr) {
     return NextResponse.json({ error: quoteErr.message }, { status: 500 });
   }
+
+  // Store signed action in audit trail
+  await storeSignedAction({
+    actionType: 'place_quote',
+    signerAddress: makerAddress,
+    payload: signedPayload || { action: 'place_quote', rfqId, rate: parsedRate },
+    payloadHash: payloadHash || '',
+    signature: signature || '',
+    sessionPublicKey,
+    sessionAuthSignature,
+    sessionNonce,
+    sessionCreatedAt,
+    rfqId,
+    quoteId: quote.id,
+  });
 
   return NextResponse.json({
     success: true,
