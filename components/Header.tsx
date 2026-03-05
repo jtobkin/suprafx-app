@@ -30,7 +30,7 @@ export default function Header({ onProfileClick }: { onProfileClick: () => void 
       </div>
 
       {/* Right: profile */}
-      <button onClick={onProfileClick}
+      <button onClick={onProfileClick} data-profile-trigger
         className="flex items-center gap-2 px-3 py-1.5 rounded-md transition-all hover:brightness-110"
         style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
         <div className="flex items-center gap-1">

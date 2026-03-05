@@ -136,6 +136,13 @@ export async function POST(req: NextRequest) {
         return handleSubmitRFQ(body);
       case 'check_trade':
         return handleCheckTrade(body);
+      case 'check_agent': {
+        const { agentAddress } = body;
+        if (!agentAddress) return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
+        const db = getServiceClient();
+        const { data: agent } = await db.from('agents').select('*').eq('wallet_address', agentAddress).single();
+        return NextResponse.json({ agent });
+      }
       case 'list_trades':
         return handleListTrades(body);
       case 'accept_quote':

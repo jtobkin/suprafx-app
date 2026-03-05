@@ -813,6 +813,17 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const [quotingRfq, setQuotingRfq] = useState<string | null>(null);
   const [quotePrice, setQuotePrice] = useState("");
   const [quotingLoading, setQuotingLoading] = useState(false);
+  const [makerVault, setMakerVault] = useState<any>(null);
+  const [showDepositPrompt, setShowDepositPrompt] = useState(false);
+
+  // Load maker vault balance
+  useEffect(() => {
+    if (!supraAddress) return;
+    fetch(`/api/vault?address=${encodeURIComponent(supraAddress)}`)
+      .then(r => r.json())
+      .then(d => setMakerVault(d.balance))
+      .catch(() => {});
+  }, [supraAddress]);
   const [attestations, setAttestations] = useState<Record<string, string>>({});
 
   const openRfqs = rfqs.filter(r => r.status === "open")
@@ -1089,6 +1100,11 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                               style={{ background: "var(--bg)", color: "var(--t0)", border: "1px solid var(--border)", width: 160 }}
                               autoFocus />
                             <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{quoteClean}/{baseClean}</span>
+                            {makerVault && (
+                              <span className="mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
+                                Limit: {makerVault.matchingLimit.toLocaleString(undefined, { maximumFractionDigits: 2 })} {makerVault.currency}
+                              </span>
+                            )}
                             <button onClick={() => placeQuote(r.id)} disabled={quotingLoading || !quotePrice}
                               className="px-3 py-1.5 rounded text-[12px] font-semibold transition-all hover:brightness-110 disabled:opacity-30"
                               style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
@@ -1101,11 +1117,39 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                             </button>
                           </div>
                         ) : (
-                          <button onClick={() => { setQuotingRfq(r.id); setQuotePrice(fmtRate(r.reference_price)); }}
+                          <>
+                          <button onClick={() => {
+                              if (!makerVault || makerVault.matchingLimit <= 0) {
+                                setShowDepositPrompt(true);
+                                return;
+                              }
+                              setQuotingRfq(r.id);
+                              setQuotePrice(fmtRate(r.reference_price));
+                              setShowDepositPrompt(false);
+                            }}
                             className="px-4 py-1.5 rounded text-[12px] font-semibold transition-all hover:brightness-110"
                             style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
                             Place Quote
                           </button>
+                          {showDepositPrompt && quotingRfq !== r.id && (
+                            <div className="mt-2 px-3 py-2.5 rounded" style={{ background: "var(--warn-dim)", border: "1px solid rgba(234,179,8,0.15)" }}>
+                              <div className="text-[12px] font-medium mb-1" style={{ color: "var(--warn)" }}>Security Deposit Required</div>
+                              <div className="text-[12px] mb-2" style={{ color: "var(--t2)" }}>
+                                To place quotes, you need a security deposit in the vault. This protects takers and backs your quotes. Your quoting capacity is 90% of your deposit.
+                              </div>
+                              <button onClick={() => {
+                                // Find and click the profile button to open sidebar
+                                const profileBtn = document.querySelector("[data-profile-trigger]") as HTMLElement;
+                                if (profileBtn) profileBtn.click();
+                                setShowDepositPrompt(false);
+                              }}
+                                className="px-3 py-1.5 rounded text-[12px] font-semibold transition-all hover:brightness-110"
+                                style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                                Make Security Deposit
+                              </button>
+                            </div>
+                          )}
+                          </>
                         )}
                       </div>
                     )}
