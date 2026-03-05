@@ -237,40 +237,26 @@ function Dashboard() {
   }, [fetchAll]);
   useEffect(() => { const iv = setInterval(fetchAll, 2000); return () => clearInterval(iv); }, [fetchAll]);
 
-  // === TIMEOUT ENFORCEMENT: check for expired deadlines every poll ===
-  const processedTimeoutsRef = useRef(new Set<string>());
+  // === COUNCIL DEADLINE ENFORCEMENT ===
+  // Periodically ask the council to check for expired deadlines (server-side)
+  const lastDeadlineCheck = useRef(0);
   useEffect(() => {
     if (!trades?.length) return;
-    const now = new Date();
-    for (const t of trades) {
-      // Taker timeout: status open + taker_deadline expired
-      if (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline) < now) {
-        const key = `taker:${t.id}`;
-        if (processedTimeoutsRef.current.has(key)) continue;
-        processedTimeoutsRef.current.add(key);
-        console.log('[SupraFX] Taker timeout detected:', t.id);
-        fetch('/api/timeout-trade', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tradeId: t.id }),
-        }).then(r => r.json()).then(d => {
-          console.log('[SupraFX] Taker timeout result:', JSON.stringify(d));
-          fetchAll();
-        }).catch(e => console.error('[SupraFX] Taker timeout FETCH ERROR:', e));
-      }
-      // Maker default: status taker_verified + maker_deadline expired
-      if (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline) < now) {
-        const key = `maker:${t.id}`;
-        if (processedTimeoutsRef.current.has(key)) continue;
-        processedTimeoutsRef.current.add(key);
-        console.log('[SupraFX] Maker default detected:', t.id);
-        fetch('/api/timeout-trade', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tradeId: t.id }),
-        }).then(r => r.json()).then(d => {
-          console.log('[SupraFX] Maker default result:', JSON.stringify(d));
-          fetchAll();
-        }).catch(e => console.error('[SupraFX] Maker default FETCH ERROR:', e));
-      }
+    const now = Date.now();
+    // Only check every 5 seconds to avoid hammering the server
+    if (now - lastDeadlineCheck.current < 5000) return;
+    // Check if any trade has an expired deadline
+    const hasExpired = trades.some(t =>
+      (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline).getTime() < now) ||
+      (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline).getTime() < now)
+    );
+    if (hasExpired) {
+      lastDeadlineCheck.current = now;
+      console.log('[SupraFX] Expired deadlines detected, calling council-process');
+      fetch('/api/council-process').then(r => r.json()).then(d => {
+        console.log('[SupraFX] Council process result:', JSON.stringify(d));
+        if (d.processed?.length > 0) fetchAll();
+      }).catch(e => console.error('[SupraFX] Council process error:', e));
     }
   }, [trades, fetchAll]);
 

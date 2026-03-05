@@ -5,6 +5,7 @@ import { getServiceClient } from '@/lib/supabase';
 import { getBotAddresses } from '@/lib/bot-wallets';
 import { storeSignedAction } from '@/lib/signed-actions';
 import { councilVerifyAndSign } from '@/lib/council-sign';
+import { processEvent } from '@/lib/council-node';
 import { earmarkBalance, releaseEarmark } from '@/lib/vault';
 import { botSignAction } from '@/lib/bot-signing';
 
@@ -244,6 +245,15 @@ async function handleSubmitRFQ(body: any) {
   if (rfqErr) return NextResponse.json({ error: rfqErr.message }, { status: 500 });
 
   // Store signed action in audit trail
+  // Council event: rfq_registered
+  try {
+    await processEvent('rfq_registered', {
+      rfqId: rfq.id, takerAddress: body.takerAddress,
+      pair: normalizedPair, size: rfq.size,
+      sourceChain: rfq.source_chain, destChain: rfq.dest_chain,
+    }, rfq.id);
+  } catch (e: any) { console.error('[Council] rfq_registered error:', e.message); }
+
   await storeSignedAction({
     actionType: 'submit_rfq',
     signerAddress: agentAddress,
@@ -295,6 +305,16 @@ async function handleSubmitRFQ(body: any) {
     rfqId: rfq.id,
     quoteId: botQuote?.id,
   });
+
+  // Council event: quote_registered (bot)
+  if (botQuote?.id) {
+    try {
+      await processEvent('quote_registered', {
+        quoteId: botQuote.id, rfqId: rfq.id, makerAddress: makerAddress,
+        rate: botRate, pair: normalizedPair,
+      }, rfq.id);
+    } catch (e: any) { console.error('[Council] quote_registered error:', e.message); }
+  }
 
   // Council co-signs the bot quote
   if (botQuote?.id) {
@@ -427,6 +447,16 @@ async function handleAcceptQuote(body: any) {
 
   if (tradeErr) return NextResponse.json({ error: tradeErr.message }, { status: 500 });
 
+  // Council event: match_confirmed
+  try {
+    await processEvent('match_confirmed', {
+      tradeId: trade.id, rfqId: rfq.id, quoteId,
+      takerAddress: rfq.taker_address, makerAddress: quote.maker_address,
+      pair: rfq.pair, size: rfq.size, rate: quote.rate,
+      takerSettlementAddress, makerSettlementAddress,
+    }, rfq.id, trade.id);
+  } catch (e: any) { console.error('[Council] match_confirmed error:', e.message); }
+
   return NextResponse.json({
     success: true,
     trade: {
@@ -548,6 +578,13 @@ async function handlePlaceQuote(body: any) {
     rfqId,
     quoteId: quote.id,
   });
+
+  // Council event: quote_registered (human)
+  try {
+    await processEvent('quote_registered', {
+      quoteId: quote.id, rfqId, makerAddress, rate: parsedRate, pair: rfq.pair,
+    }, rfqId);
+  } catch (e: any) { console.error('[Council] quote_registered error:', e.message); }
 
   // Council co-signs the quote
   const councilResult = await councilVerifyAndSign(

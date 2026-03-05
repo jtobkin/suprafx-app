@@ -5,7 +5,7 @@
       "schedule": "*/1 * * * *"
     },
     {
-      "path": "/api/cron/timeouts",
+      "path": "/api/council-process",
       "schedule": "*/1 * * * *"
     }
   ]

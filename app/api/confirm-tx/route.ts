@@ -7,6 +7,7 @@ import { updateReputation } from '@/lib/reputation';
 import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation, buildAttestationBundle } from '@/lib/bot-wallets';
 import { getTradeActions } from '@/lib/signed-actions';
 import { generateMultisig, councilVerifyAndSign } from '@/lib/council-sign';
+import { processEvent } from '@/lib/council-node';
 import { storeSignedAction } from '@/lib/signed-actions';
 import { botSignAction } from '@/lib/bot-signing';
 import { releaseEarmark } from '@/lib/vault';
@@ -103,6 +104,14 @@ export async function POST(req: NextRequest) {
         }).eq('id', tradeId);
         console.log('[SupraFX] Taker verified + maker deadline set:', makerDeadline);
 
+        // Council event: taker_tx_verified
+        try {
+          await processEvent('taker_tx_verified', {
+            tradeId, txHash, chain: trade.source_chain,
+            makerDeadline,
+          }, trade.rfq_id, tradeId);
+        } catch (e: any) { console.error('[Council] taker_tx_verified error:', e.message); }
+
         // === AUTO MAKER BOT: Send SUPRA to taker ===
         if (trade.maker_address === 'auto-maker-bot') {
           if (!process.env.BOT_SUPRA_PRIVATE_KEY) {
@@ -159,6 +168,11 @@ export async function POST(req: NextRequest) {
 
           if (makerVerified) {
             const settleMs = Date.now() - new Date(trade.created_at).getTime();
+            // Council event: maker_tx_verified (bot)
+            try {
+              await processEvent('maker_tx_verified', { tradeId, chain: trade.dest_chain }, trade.rfq_id, tradeId);
+            } catch (e: any) { console.error('[Council] maker_tx_verified:', e.message); }
+
             await db.from('trades').update({
               status: 'settled',
               maker_tx_confirmed_at: new Date().toISOString(),
@@ -282,6 +296,11 @@ export async function POST(req: NextRequest) {
 
       if (verified) {
         const settleMs = Date.now() - new Date(trade.created_at).getTime();
+        // Council event: maker_tx_verified (human)
+        try {
+          await processEvent('maker_tx_verified', { tradeId, txHash, chain: trade.dest_chain }, trade.rfq_id, tradeId);
+        } catch (e: any) { console.error('[Council] maker_tx_verified:', e.message); }
+
         await db.from('trades').update({
           status: 'settled',
           maker_tx_confirmed_at: new Date().toISOString(),
