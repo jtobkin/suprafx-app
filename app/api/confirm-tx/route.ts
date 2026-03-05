@@ -252,8 +252,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, status: 'taker_sent', verified: false });
 
     } else if (side === 'maker') {
-      if (trade.status !== 'taker_verified') {
-        return NextResponse.json({ error: 'Trade not in taker_verified state' }, { status: 400 });
+      // Re-fetch trade to get latest status (might have been defaulted by timeout)
+      const { data: freshTrade } = await db.from('trades').select('status, maker_deadline').eq('id', tradeId).single();
+      const currentStatus = freshTrade?.status || trade.status;
+      
+      if (currentStatus !== 'taker_verified') {
+        return NextResponse.json({ error: `Cannot settle: trade is ${currentStatus}`, status: currentStatus }, { status: 400 });
+      }
+      
+      // Check if maker deadline has expired — if so, reject (timeout will process it)
+      if (freshTrade?.maker_deadline && new Date(freshTrade.maker_deadline) < new Date()) {
+        return NextResponse.json({ error: 'Maker deadline has expired. Settlement Council is processing the default.', status: 'maker_defaulted' }, { status: 400 });
       }
 
       await db.from('trades').update({ maker_tx_hash: txHash, status: 'maker_sent' }).eq('id', tradeId);

@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
         timeoutType,
         { tradeId, party: partyAddress, pair: trade.pair, size: trade.size, rate: trade.rate },
         [{ name: 'deadline_expired', fn: async () => ({ passed: true }) }],
+        { tradeId, db },
       );
       councilHash = councilResult.aggregateHash;
       councilApproved = councilResult.decision === 'approved';
@@ -114,26 +115,8 @@ export async function POST(req: NextRequest) {
       timeoutCount = result.timeoutCount; banned = result.banned;
     } catch {}
 
-    // ============================================
-    // STEP 6: STORE COUNCIL VOTES
-    // ============================================
-    try {
-      await db.from('committee_requests').upsert({
-        trade_id: tradeId, verification_type: timeoutType, status: 'approved',
-        approvals: councilVotes.filter(v => v.decision === 'approve').length,
-        rejections: councilVotes.filter(v => v.decision === 'reject').length,
-        resolved_at: now.toISOString(),
-      }, { onConflict: 'trade_id,verification_type' });
-      for (const vote of councilVotes) {
-        try {
-          await db.from('committee_votes').insert({
-            trade_id: tradeId, node_id: vote.nodeId, verification_type: timeoutType,
-            decision: vote.decision, chain: '', tx_hash: '', signature: vote.signature,
-          });
-        } catch {}
-      }
-      log.push('Votes stored');
-    } catch (e: any) { log.push(`Votes err: ${e.message}`); }
+    // Council votes already stored by councilVerifyAndSign (same path as confirm-tx)
+    log.push('Votes stored via councilVerifyAndSign');
 
     // ============================================
     // STEP 7: AUDIT TRAIL
