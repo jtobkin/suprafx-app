@@ -176,6 +176,46 @@ export async function releaseEarmark(
  * Trade value + 10% surcharge deducted.
  * Taker repaid the trade value.
  */
+/**
+ * Lightweight liquidation — uses an existing council authorization hash.
+ * No second council vote. Called by timeout-trade which already has council approval.
+ */
+export async function liquidateForDefaultWithAuth(
+  tradeId: string,
+  tradeValue: number,
+  makerAddress: string,
+  takerAddress: string,
+  councilHash: string,
+  currency: string = 'USDC',
+): Promise<{ success: boolean; liquidatedAmount?: number; takerRepaid?: number; councilSurcharge?: number; error?: string }> {
+  const db = getServiceClient();
+  const surcharge = tradeValue * DEFAULT_SURCHARGE;
+  const totalDeducted = tradeValue + surcharge;
+
+  // Liquidate the earmark
+  const { data: earmark } = await db.from('earmarks')
+    .select('*').eq('trade_id', tradeId).eq('status', 'active').single();
+  if (earmark) {
+    await db.from('earmarks').update({ status: 'liquidated', release_reason: 'maker_defaulted', released_at: new Date().toISOString() }).eq('id', earmark.id);
+  }
+
+  // Deduct from maker
+  const txHash = 'sim_liquidation_' + crypto.randomUUID().slice(0, 12);
+  await db.from('vault_deposits').insert({ maker_address: makerAddress, amount: totalDeducted, currency, direction: 'withdrawal', tx_hash: txHash, council_signature: councilHash, status: 'completed' });
+
+  // Credit taker
+  const repayTxHash = 'sim_repayment_' + crypto.randomUUID().slice(0, 12);
+  await db.from('vault_deposits').insert({ maker_address: takerAddress, amount: tradeValue, currency, direction: 'deposit', tx_hash: repayTxHash, council_signature: councilHash, status: 'completed' });
+  await recalculateBalance(takerAddress);
+
+  // Council surcharge
+  const surchargeTxHash = 'sim_surcharge_' + crypto.randomUUID().slice(0, 12);
+  await db.from('vault_deposits').insert({ maker_address: 'council-treasury', amount: surcharge, currency, direction: 'deposit', tx_hash: surchargeTxHash, council_signature: councilHash, status: 'completed' });
+
+  await recalculateBalance(makerAddress);
+  return { success: true, liquidatedAmount: totalDeducted, takerRepaid: tradeValue, councilSurcharge: surcharge };
+}
+
 export async function liquidateForDefault(
   tradeId: string,
   tradeValue: number,
