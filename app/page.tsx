@@ -255,7 +255,7 @@ function Dashboard() {
         }).then(r => r.json()).then(d => {
           console.log('[SupraFX] Taker timeout result:', JSON.stringify(d));
           fetchAll();
-        }).catch(() => {});
+        }).catch(e => console.error('[SupraFX] Taker timeout FETCH ERROR:', e));
       }
       // Maker default: status taker_verified + maker_deadline expired
       if (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline) < now) {
@@ -269,7 +269,7 @@ function Dashboard() {
         }).then(r => r.json()).then(d => {
           console.log('[SupraFX] Maker default result:', JSON.stringify(d));
           fetchAll();
-        }).catch(() => {});
+        }).catch(e => console.error('[SupraFX] Maker default FETCH ERROR:', e));
       }
     }
   }, [trades, fetchAll]);

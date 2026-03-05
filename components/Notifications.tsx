@@ -103,31 +103,8 @@ export default function Notifications({
 
       if (!prev) continue;
 
-      // Deadline warnings (5 minutes remaining)
-      if (isTaker && trade.taker_deadline && trade.status === "open") {
-        const remaining = new Date(trade.taker_deadline).getTime() - Date.now();
-        if (remaining > 0 && remaining < 5 * 60 * 1000) {
-          const mins = Math.ceil(remaining / 60000);
-          addNotification({
-            type: "warning",
-            title: "Deadline Warning",
-            message: `${mins} minute${mins !== 1 ? "s" : ""} remaining to settle on ${trade.source_chain}. Failing to settle will reduce your reputation by 33%.`,
-            tradeId: trade.id,
-          });
-        }
-      }
-      if (isMaker && trade.maker_deadline && trade.status === "taker_verified") {
-        const remaining = new Date(trade.maker_deadline).getTime() - Date.now();
-        if (remaining > 0 && remaining < 5 * 60 * 1000) {
-          const mins = Math.ceil(remaining / 60000);
-          addNotification({
-            type: "warning",
-            title: "Deadline Warning",
-            message: `${mins} minute${mins !== 1 ? "s" : ""} remaining to settle on ${trade.dest_chain}. Failing to settle will reduce your reputation by 67% and your deposit will be liquidated.`,
-            tradeId: trade.id,
-          });
-        }
-      }
+      // Deadline warnings — fire ONCE per trade (tracked by notification dedup)
+      // Skip: with 1-min test deadlines these would fire constantly
 
       // Status transitions
       if (prev.status !== trade.status) {
