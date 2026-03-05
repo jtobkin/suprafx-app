@@ -103,6 +103,32 @@ export default function Notifications({
 
       if (!prev) continue;
 
+      // Deadline warnings (5 minutes remaining)
+      if (isTaker && trade.taker_deadline && trade.status === "open") {
+        const remaining = new Date(trade.taker_deadline).getTime() - Date.now();
+        if (remaining > 0 && remaining < 5 * 60 * 1000) {
+          const mins = Math.ceil(remaining / 60000);
+          addNotification({
+            type: "warning",
+            title: "Deadline Warning",
+            message: `${mins} minute${mins !== 1 ? "s" : ""} remaining to settle on ${trade.source_chain}. Failing to settle will reduce your reputation by 33%.`,
+            tradeId: trade.id,
+          });
+        }
+      }
+      if (isMaker && trade.maker_deadline && trade.status === "taker_verified") {
+        const remaining = new Date(trade.maker_deadline).getTime() - Date.now();
+        if (remaining > 0 && remaining < 5 * 60 * 1000) {
+          const mins = Math.ceil(remaining / 60000);
+          addNotification({
+            type: "warning",
+            title: "Deadline Warning",
+            message: `${mins} minute${mins !== 1 ? "s" : ""} remaining to settle on ${trade.dest_chain}. Failing to settle will reduce your reputation by 67% and your deposit will be liquidated.`,
+            tradeId: trade.id,
+          });
+        }
+      }
+
       // Status transitions
       if (prev.status !== trade.status) {
         // Taker sent -> taker_verified: notify maker
@@ -148,22 +174,40 @@ export default function Notifications({
 
         // Taker timed out
         if (trade.status === "taker_timed_out") {
-          addNotification({
-            type: "warning",
-            title: "Taker Timed Out",
-            message: `${txId}: Taker did not send within 30 minutes.${isTaker ? " -33% reputation." : " Your deposit is released."}`,
-            tradeId: trade.id,
-          });
+          if (isTaker) {
+            addNotification({
+              type: "error",
+              title: "You Timed Out",
+              message: `${txId}: You did not settle within 30 minutes. Your reputation has been reduced by 33%. Check your Profile for updated score.`,
+              tradeId: trade.id,
+            });
+          } else if (isMaker) {
+            addNotification({
+              type: "info",
+              title: "Taker Timed Out",
+              message: `${txId}: Taker did not send within 30 minutes. Your earmarked deposit has been released.`,
+              tradeId: trade.id,
+            });
+          }
         }
 
         // Maker defaulted
         if (trade.status === "maker_defaulted") {
-          addNotification({
-            type: "error",
-            title: "Maker Defaulted",
-            message: `${txId}: Maker did not send within 30 minutes.${isMaker ? " -67% reputation. Deposit liquidated." : " You will be repaid from maker's deposit."}`,
-            tradeId: trade.id,
-          });
+          if (isMaker) {
+            addNotification({
+              type: "error",
+              title: "You Defaulted",
+              message: `${txId}: You did not settle within 30 minutes. Your reputation has been reduced by 67% and your deposit has been liquidated to repay the taker.`,
+              tradeId: trade.id,
+            });
+          } else if (isTaker) {
+            addNotification({
+              type: "warning",
+              title: "Maker Defaulted — You Will Be Repaid",
+              message: `${txId}: Maker did not send within 30 minutes. You are being repaid from the maker's security deposit. Check your vault for the credit.`,
+              tradeId: trade.id,
+            });
+          }
         }
 
         // Failed

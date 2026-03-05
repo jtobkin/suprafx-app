@@ -129,6 +129,50 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
   );
 }
 
+function CountdownTimer({ deadline, label, penaltyWarning }: { deadline: string | null; label: string; penaltyWarning?: string }) {
+  const [remaining, setRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!deadline) return;
+    const update = () => {
+      const ms = new Date(deadline).getTime() - Date.now();
+      setRemaining(ms > 0 ? ms : 0);
+    };
+    update();
+    const iv = setInterval(update, 1000);
+    return () => clearInterval(iv);
+  }, [deadline]);
+
+  if (!deadline || remaining === null) return null;
+
+  const totalSec = Math.floor(remaining / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  const isWarning = remaining < 5 * 60 * 1000 && remaining > 0; // under 5 min
+  const isCritical = remaining < 60 * 1000 && remaining > 0;     // under 1 min
+  const isExpired = remaining <= 0;
+
+  const color = isExpired ? "var(--negative)" : isCritical ? "var(--negative)" : isWarning ? "var(--warn)" : "var(--t2)";
+  const bgColor = isExpired ? "rgba(239,68,68,0.08)" : isCritical ? "rgba(239,68,68,0.06)" : isWarning ? "rgba(234,179,8,0.06)" : "var(--surface-2)";
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 rounded-md mb-2" style={{ background: bgColor, border: isWarning || isCritical || isExpired ? `1px solid ${color}20` : "none" }}>
+      <div className="flex items-center gap-2 flex-1">
+        <span className="text-[12px]" style={{ color: "var(--t3)" }}>{label}</span>
+        <span className="mono text-[15px] font-bold tabular-nums" style={{ color }}>
+          {isExpired ? "EXPIRED" : `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`}
+        </span>
+      </div>
+      {penaltyWarning && (isWarning || isCritical) && !isExpired && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: `${color}15`, color }}>{penaltyWarning}</span>
+      )}
+      {isExpired && (
+        <span className="text-[10px]" style={{ color: "var(--negative)" }}>Awaiting Council timeout ruling</span>
+      )}
+    </div>
+  );
+}
+
 function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: string }) {
   const [timeline, setTimeline] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
@@ -621,6 +665,14 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
       {/* === OPEN: Taker sends first === */}
       {trade.status === "open" && (
         <div>
+          {/* Countdown timer */}
+          {trade.taker_deadline && (
+            <CountdownTimer
+              deadline={trade.taker_deadline}
+              label={isTaker ? "Your deadline:" : "Taker deadline:"}
+              penaltyWarning={isTaker ? "-33% reputation" : undefined}
+            />
+          )}
           {isTaker ? (
             <>
               <div className="flex items-center gap-2 mb-2">
@@ -681,6 +733,12 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
 
       {/* === TAKER SENT (manual mode) === */}
+      {trade.status === "taker_sent" && trade.taker_deadline && (
+        <CountdownTimer
+          deadline={trade.taker_deadline}
+          label="Verification deadline:"
+        />
+      )}
       {trade.status === "taker_sent" && (
         <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
           <Spinner color="var(--accent)" /> Committee verifying taker TX…
@@ -697,6 +755,14 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[13px]" style={{ color: "var(--positive)" }}>Taker TX verified by Council.</span>
           </div>
+          {/* Countdown timer */}
+          {trade.maker_deadline && (
+            <CountdownTimer
+              deadline={trade.maker_deadline}
+              label={isMaker ? "Your deadline:" : "Maker deadline:"}
+              penaltyWarning={isMaker ? "-67% rep + deposit liquidated" : undefined}
+            />
+          )}
           {(isMaker || isBot) ? (
             <div>
               <div className="px-3 py-2 rounded mb-2" style={{ background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
@@ -744,6 +810,12 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
       {/* === MAKER SENT (manual mode) === */}
       {/* === MAKER SENT (manual mode) === */}
+      {trade.status === "maker_sent" && trade.maker_deadline && (
+        <CountdownTimer
+          deadline={trade.maker_deadline}
+          label="Verification deadline:"
+        />
+      )}
       {trade.status === "maker_sent" && (
         <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--t2)" }}>
           <Spinner color="var(--positive)" /> Verifying maker TX on {chainName(trade.dest_chain)}…

@@ -50,6 +50,9 @@ export interface Trade {
   settle_ms: number | null;
   created_at: string;
   settled_at: string | null;
+  match_confirmed_at: string | null;
+  taker_deadline: string | null;
+  maker_deadline: string | null;
 }
 
 export interface CommitteeVote {
