@@ -182,7 +182,7 @@ export async function liquidateForDefault(
   makerAddress: string,
   takerAddress: string,
   currency: string = 'USDC',
-): Promise<{ success: boolean; liquidatedAmount?: number; error?: string }> {
+): Promise<{ success: boolean; liquidatedAmount?: number; takerRepaid?: number; councilSurcharge?: number; error?: string }> {
   const db = getServiceClient();
 
   const surcharge = tradeValue * DEFAULT_SURCHARGE;
@@ -221,7 +221,7 @@ export async function liquidateForDefault(
     }).eq('id', earmark.id);
   }
 
-  // Record the withdrawal (liquidation)
+  // Record the withdrawal (liquidation from maker)
   const txHash = 'sim_liquidation_' + crypto.randomUUID().slice(0, 12);
   await db.from('vault_deposits').insert({
     maker_address: makerAddress,
@@ -233,8 +233,35 @@ export async function liquidateForDefault(
     status: 'completed',
   });
 
+  // Credit the taker with the trade value (repayment)
+  const repayTxHash = 'sim_repayment_' + crypto.randomUUID().slice(0, 12);
+  await db.from('vault_deposits').insert({
+    maker_address: takerAddress,  // taker receives into their vault
+    amount: tradeValue,
+    currency,
+    direction: 'deposit',
+    tx_hash: repayTxHash,
+    council_signature: councilResult.aggregateHash,
+    status: 'completed',
+  });
+
+  // Ensure taker has a vault balance record
+  await recalculateBalance(takerAddress);
+
+  // Credit the Council with the surcharge
+  const surchargeTxHash = 'sim_surcharge_' + crypto.randomUUID().slice(0, 12);
+  await db.from('vault_deposits').insert({
+    maker_address: 'council-treasury',
+    amount: surcharge,
+    currency,
+    direction: 'deposit',
+    tx_hash: surchargeTxHash,
+    council_signature: councilResult.aggregateHash,
+    status: 'completed',
+  });
+
   await recalculateBalance(makerAddress);
-  return { success: true, liquidatedAmount: totalDeducted };
+  return { success: true, liquidatedAmount: totalDeducted, takerRepaid: tradeValue, councilSurcharge: surcharge };
 }
 
 /**

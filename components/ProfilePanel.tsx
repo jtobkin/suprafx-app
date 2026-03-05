@@ -14,6 +14,8 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
 
   // Vault state
   const [vault, setVault] = useState<any>(null);
+  const [vaultTransactions, setVaultTransactions] = useState<any[]>([]);
+  const [vaultEarmarks, setVaultEarmarks] = useState<any[]>([]);
   const [vaultLoading, setVaultLoading] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
   const [depositCurrency, setDepositCurrency] = useState<"USDC" | "USDT">("USDC");
@@ -55,6 +57,8 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
         }).then(r => r.json()).catch(() => null),
       ]);
       setVault(vRes.balance);
+      setVaultTransactions(vRes.transactions || []);
+      setVaultEarmarks(vRes.earmarks || []);
       if (aRes?.agent) setAgent(aRes.agent);
     } catch {}
     setVaultLoading(false);
@@ -113,6 +117,7 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
   const hasAnyEvm = linkedAddresses.length > 0 || profile?.evmVerified;
   const shortAddr = (a: string) => a.slice(0, 6) + "\u2026" + a.slice(-4);
   const hasVault = vault && vault.totalDeposited > 0;
+  const hasCredit = vault && vault.totalDeposited > 0 && vaultTransactions.some((t: any) => t.tx_hash?.startsWith("sim_repayment"));
   const repScore = agent ? Number(agent.rep_total).toFixed(2) : "5.00";
   const tradeCount = agent?.trade_count || 0;
 
@@ -422,9 +427,56 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
                     )}
                   </div>
 
+                  {/* Active earmarks */}
+                  {vaultEarmarks.length > 0 && (
+                    <div>
+                      <div className="mono text-[10px] uppercase tracking-wider mb-2 font-medium" style={{ color: "var(--t3)" }}>Active Earmarks</div>
+                      <div className="space-y-1">
+                        {vaultEarmarks.map((e: any) => (
+                          <div key={e.id} className="flex items-center justify-between px-3 py-1.5 rounded text-[11px]" style={{ background: "var(--surface-2)" }}>
+                            <span style={{ color: "var(--t3)" }}>Quote {e.quote_id?.slice(0, 8)}…</span>
+                            <span className="mono font-medium" style={{ color: "var(--warn)" }}>{Number(e.amount).toFixed(2)} {e.currency}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Transaction history */}
+                  {vaultTransactions.length > 0 && (
+                    <div>
+                      <div className="mono text-[10px] uppercase tracking-wider mb-2 font-medium" style={{ color: "var(--t3)" }}>Recent Transactions</div>
+                      <div className="space-y-1">
+                        {vaultTransactions.slice(0, 8).map((t: any) => {
+                          const isRepayment = t.direction === 'deposit' && t.tx_hash?.startsWith('sim_repayment');
+                          const isLiquidation = t.direction === 'withdrawal' && t.tx_hash?.startsWith('sim_liquidation');
+                          const isDeposit = t.direction === 'deposit' && !isRepayment;
+                          const label = isRepayment ? 'Repayment (maker default)' :
+                            isLiquidation ? 'Liquidated (you defaulted)' :
+                            isDeposit ? 'Deposit' : 'Withdrawal';
+                          const color = isRepayment ? 'var(--positive)' :
+                            isLiquidation ? 'var(--negative)' :
+                            isDeposit ? 'var(--positive)' : 'var(--t2)';
+                          return (
+                            <div key={t.id} className="flex items-center justify-between px-3 py-1.5 rounded text-[11px]" style={{ background: "var(--surface-2)" }}>
+                              <div className="flex items-center gap-2">
+                                <span style={{ color }}>{t.direction === 'deposit' ? '+' : '-'}</span>
+                                <span style={{ color: "var(--t2)" }}>{label}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="mono font-medium" style={{ color }}>{Number(t.amount).toFixed(2)} {t.currency}</span>
+                                <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{new Date(t.created_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Risk notice */}
                   <div className="text-[11px] px-3 py-2 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
-                    If you default on a trade (fail to send within 30 min after taker sends), your deposit covers the taker's loss plus a 10% surcharge.
+                    If you default on a trade (fail to send within 30 min after taker sends), your deposit covers the taker’s loss plus a 10% surcharge.
                   </div>
                 </div>
               )}

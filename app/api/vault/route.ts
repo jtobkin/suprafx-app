@@ -2,13 +2,42 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { processDeposit, getVaultBalance, requestWithdrawal, processWithdrawal } from '@/lib/vault';
+import { getServiceClient } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get('address');
   if (!address) return NextResponse.json({ error: 'address required' }, { status: 400 });
 
   const balance = await getVaultBalance(address);
-  return NextResponse.json({ balance });
+
+  // Get transaction history
+  const db = getServiceClient();
+  const { data: transactions } = await db.from('vault_deposits')
+    .select('*')
+    .eq('maker_address', address)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  // Get pending withdrawals
+  const { data: withdrawals } = await db.from('withdrawal_requests')
+    .select('*')
+    .eq('maker_address', address)
+    .in('status', ['pending', 'queued', 'processing'])
+    .order('requested_at', { ascending: false });
+
+  // Get active earmarks
+  const { data: earmarks } = await db.from('earmarks')
+    .select('*')
+    .eq('maker_address', address)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  return NextResponse.json({
+    balance,
+    transactions: transactions || [],
+    withdrawals: withdrawals || [],
+    earmarks: earmarks || [],
+  });
 }
 
 export async function POST(req: NextRequest) {
