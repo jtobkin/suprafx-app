@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useWallet, LinkedAddress } from "./WalletProvider";
 
-export default function ProfilePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function ProfilePanel({ open, onClose, initialTab = "profile" }: { open: boolean; onClose: () => void; initialTab?: "profile" | "vault" }) {
   const { supraAddress, profile, isVerified, isDemo, linkEvmAddress, disconnect, supraShort } = useWallet();
   const [linking, setLinking] = useState(false);
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
@@ -10,6 +10,7 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
   const [mounted, setMounted] = useState(false);
   const [showWalletChoice, setShowWalletChoice] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"profile" | "vault">(initialTab);
 
   // Vault state
   const [vault, setVault] = useState<any>(null);
@@ -24,14 +25,14 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
 
   // Agent stats
   const [agent, setAgent] = useState<any>(null);
-  const [timeoutInfo, setTimeoutInfo] = useState<any>(null);
+
+  // Sync initialTab when panel opens
+  useEffect(() => { if (open) setActiveTab(initialTab); }, [open, initialTab]);
 
   useEffect(() => {
     if (open) {
       setMounted(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setVisible(true));
-      });
+      requestAnimationFrame(() => { requestAnimationFrame(() => setVisible(true)); });
     } else {
       setVisible(false);
       setShowWalletChoice(false);
@@ -42,16 +43,14 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
     }
   }, [open]);
 
-  // Load vault balance and agent info when panel opens
-  const loadVaultAndAgent = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!supraAddress || isDemo) return;
     setVaultLoading(true);
     try {
       const [vRes, aRes] = await Promise.all([
         fetch(`/api/vault?address=${encodeURIComponent(supraAddress)}`).then(r => r.json()),
         fetch(`/api/skill/suprafx`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "check_agent", agentAddress: supraAddress }),
         }).then(r => r.json()).catch(() => null),
       ]);
@@ -61,29 +60,20 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
     setVaultLoading(false);
   }, [supraAddress, isDemo]);
 
-  useEffect(() => {
-    if (open && supraAddress) loadVaultAndAgent();
-  }, [open, supraAddress, loadVaultAndAgent]);
+  useEffect(() => { if (open && supraAddress) loadData(); }, [open, supraAddress, loadData]);
 
   const handleLink = async (provider: "metamask" | "starkey") => {
-    setLinking(true);
-    setLinkingProvider(provider);
-    setShowWalletChoice(false);
-    const success = await linkEvmAddress(provider);
-    setLinking(false);
-    setLinkingProvider(null);
-    if (success) loadVaultAndAgent();
+    setLinking(true); setLinkingProvider(provider); setShowWalletChoice(false);
+    await linkEvmAddress(provider);
+    setLinking(false); setLinkingProvider(null);
   };
 
   const handleRemove = async (addr: LinkedAddress) => {
     if (!supraAddress) return;
     setRemoving(addr.address);
     try {
-      await fetch("/api/link-address", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supraAddress, linkedAddress: addr.address, chain: addr.chain }),
-      });
+      await fetch("/api/link-address", { method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supraAddress, linkedAddress: addr.address, chain: addr.chain }) });
       window.location.reload();
     } catch {}
     setRemoving(null);
@@ -91,51 +81,29 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
 
   const handleDeposit = async () => {
     if (!supraAddress || !depositAmount || parseFloat(depositAmount) <= 0) return;
-    setDepositing(true);
-    setVaultMessage(null);
+    setDepositing(true); setVaultMessage(null);
     try {
-      const res = await fetch("/api/vault", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "deposit", makerAddress: supraAddress, amount: depositAmount, currency: depositCurrency }),
-      });
+      const res = await fetch("/api/vault", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deposit", makerAddress: supraAddress, amount: depositAmount, currency: depositCurrency }) });
       const data = await res.json();
-      if (data.success) {
-        setVaultMessage({ text: `Deposited ${depositAmount} ${depositCurrency}`, ok: true });
-        setDepositAmount("");
-        await loadVaultAndAgent();
-      } else {
-        setVaultMessage({ text: data.error || "Deposit failed", ok: false });
-      }
-    } catch (e: any) {
-      setVaultMessage({ text: e.message, ok: false });
-    }
+      if (data.success) { setVaultMessage({ text: `Deposited ${depositAmount} ${depositCurrency}`, ok: true }); setDepositAmount(""); await loadData(); }
+      else setVaultMessage({ text: data.error || "Deposit failed", ok: false });
+    } catch (e: any) { setVaultMessage({ text: e.message, ok: false }); }
     setDepositing(false);
   };
 
   const handleWithdrawRequest = async () => {
     if (!supraAddress || !withdrawAmount || parseFloat(withdrawAmount) <= 0) return;
-    setWithdrawing(true);
-    setVaultMessage(null);
+    setWithdrawing(true); setVaultMessage(null);
     try {
-      const res = await fetch("/api/vault", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "request_withdrawal", makerAddress: supraAddress, amount: withdrawAmount, currency: depositCurrency }),
-      });
+      const res = await fetch("/api/vault", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request_withdrawal", makerAddress: supraAddress, amount: withdrawAmount, currency: depositCurrency }) });
       const data = await res.json();
       if (data.success) {
-        const eligibleTime = new Date(data.eligibleAt).toLocaleTimeString();
-        setVaultMessage({ text: `Withdrawal requested. Eligible after ${eligibleTime} (12-hour cooling)`, ok: true });
-        setWithdrawAmount("");
-        setShowWithdraw(false);
-        await loadVaultAndAgent();
-      } else {
-        setVaultMessage({ text: data.error || "Withdrawal failed", ok: false });
-      }
-    } catch (e: any) {
-      setVaultMessage({ text: e.message, ok: false });
-    }
+        setVaultMessage({ text: `Withdrawal requested. 12-hour cooling period.`, ok: true });
+        setWithdrawAmount(""); setShowWithdraw(false); await loadData();
+      } else setVaultMessage({ text: data.error || "Withdrawal failed", ok: false });
+    } catch (e: any) { setVaultMessage({ text: e.message, ok: false }); }
     setWithdrawing(false);
   };
 
@@ -144,304 +112,330 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
   const linkedAddresses = profile?.linkedAddresses || [];
   const hasAnyEvm = linkedAddresses.length > 0 || profile?.evmVerified;
   const shortAddr = (a: string) => a.slice(0, 6) + "\u2026" + a.slice(-4);
-
   const hasVault = vault && vault.totalDeposited > 0;
   const repScore = agent ? Number(agent.rep_total).toFixed(2) : "5.00";
   const tradeCount = agent?.trade_count || 0;
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-50 transition-opacity duration-250 ease-out"
+      <div className="fixed inset-0 z-50 transition-opacity duration-250 ease-out"
         style={{ background: "rgba(0,0,0,0.5)", opacity: visible ? 1 : 0, pointerEvents: visible ? "auto" : "none" }}
-        onClick={onClose}
-      />
+        onClick={onClose} />
 
-      {/* Panel */}
-      <div
-        className="fixed top-0 right-0 h-full w-[400px] z-50 border-l flex flex-col transition-transform duration-280 ease-out"
+      <div className="fixed top-0 right-0 h-full w-[400px] z-50 border-l flex flex-col transition-transform duration-280 ease-out"
         style={{ background: "var(--bg)", borderColor: "var(--border)", transform: visible ? "translateX(0)" : "translateX(100%)" }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
-          <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Profile</span>
-          <button onClick={onClose} className="text-[13px] px-2 py-1 rounded transition-colors hover:bg-white/[0.04]"
-            style={{ color: "var(--t3)", background: "var(--surface-2)" }}>✕</button>
+        <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Account</span>
+            <button onClick={onClose} className="text-[13px] px-2 py-1 rounded transition-colors hover:bg-white/[0.04]"
+              style={{ color: "var(--t3)", background: "var(--surface-2)" }}>✕</button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 rounded-md p-0.5" style={{ background: "var(--surface-2)" }}>
+            <button onClick={() => setActiveTab("profile")}
+              className="flex-1 py-1.5 rounded text-[12px] font-semibold transition-all"
+              style={{ background: activeTab === "profile" ? "var(--bg)" : "transparent",
+                color: activeTab === "profile" ? "var(--t0)" : "var(--t3)",
+                boxShadow: activeTab === "profile" ? "0 1px 3px rgba(0,0,0,0.15)" : "none" }}>
+              Profile
+            </button>
+            <button onClick={() => setActiveTab("vault")}
+              className="flex-1 py-1.5 rounded text-[12px] font-semibold transition-all"
+              style={{ background: activeTab === "vault" ? "var(--bg)" : "transparent",
+                color: activeTab === "vault" ? "var(--t0)" : "var(--t3)",
+                boxShadow: activeTab === "vault" ? "0 1px 3px rgba(0,0,0,0.15)" : "none" }}>
+              Security Deposit
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
 
-          {/* Identity */}
-          <div>
-            <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>Identity</div>
-            <div className="text-[14px]" style={{ color: "var(--t2)" }}>{isDemo ? "Demo Mode" : "Authenticated via StarKey"}</div>
-          </div>
-
-          {/* Supra Address */}
-          <div className="card p-3.5">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Supra (MoveVM)</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] mono uppercase" style={{ background: "rgba(34,197,94,0.1)", color: "var(--positive)" }}>Primary</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
-                <span className="mono text-[12px]" style={{ color: "var(--positive)" }}>verified</span>
-              </div>
-            </div>
-            <div className="mono text-[13px] break-all" style={{ color: "var(--t0)" }}>{supraAddress}</div>
-            <div className="text-[12px] mt-1.5" style={{ color: "var(--t3)" }}>Reputation accumulates on this address</div>
-          </div>
-
-          {/* Linked EVM Addresses */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Linked EVM Addresses</span>
-              <span className="text-[11px] mono" style={{ color: "var(--t3)" }}>{linkedAddresses.length} linked</span>
-            </div>
-            <div className="space-y-2">
-              {linkedAddresses.map((la) => (
-                <div key={la.address} className="card p-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="mono text-[10px] uppercase" style={{ color: "var(--t3)" }}>{la.chain}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] mono" style={{ background: "var(--surface-3)", color: "var(--t3)" }}>{la.walletProvider}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
-                      <span className="mono text-[11px]" style={{ color: "var(--positive)" }}>verified</span>
-                    </div>
-                  </div>
-                  <div className="mono text-[12px] break-all" style={{ color: "var(--t0)" }}>{la.address}</div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-[11px]" style={{ color: "var(--t3)" }}>{new Date(la.verifiedAt).toLocaleDateString()}</span>
-                    <button onClick={() => handleRemove(la)} disabled={removing === la.address}
-                      className="text-[11px] px-2 py-0.5 rounded transition-all disabled:opacity-50"
-                      style={{ color: "var(--negative)", background: "var(--surface-3)", border: "none", cursor: "pointer" }}>
-                      {removing === la.address ? "Removing\u2026" : "Remove"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {linkedAddresses.length === 0 && !profile?.evmVerified && (
-                <div className="text-[13px] py-2" style={{ color: "var(--t3)" }}>No EVM addresses linked yet.</div>
-              )}
-              <div className="card p-3" style={{ borderColor: "var(--border)", borderStyle: "dashed" }}>
-                {linking ? (
-                  <div className="flex items-center gap-2 py-1">
-                    <div className="w-3 h-3 rounded-full border-[1.5px] animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
-                    <span className="text-[13px]" style={{ color: "var(--t2)" }}>Waiting for {linkingProvider === "starkey" ? "StarKey" : "MetaMask"} signature...</span>
-                  </div>
-                ) : showWalletChoice ? (
-                  <div className="space-y-2">
-                    <div className="text-[12px] mb-1" style={{ color: "var(--t3)" }}>Choose wallet to sign with:</div>
-                    <button onClick={() => handleLink("starkey")} className="w-full py-2 rounded-md text-[13px] font-semibold transition-all hover:brightness-110" style={{ background: "var(--accent)", color: "#fff", border: "none" }}>StarKey (EVM)</button>
-                    <button onClick={() => handleLink("metamask")} className="w-full py-2 rounded-md text-[13px] font-semibold transition-all hover:brightness-110" style={{ background: "var(--surface-3)", color: "var(--t1)", border: "1px solid var(--border)" }}>MetaMask</button>
-                    <button onClick={() => setShowWalletChoice(false)} className="w-full py-1 text-[12px]" style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>cancel</button>
-                  </div>
-                ) : (
-                  <button onClick={() => setShowWalletChoice(true)} className="w-full py-1.5 text-[13px] font-medium transition-all" style={{ color: "var(--accent-light)", background: "none", border: "none", cursor: "pointer" }}>+ Add EVM Address</button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Verification Status */}
-          <div className="rounded-md p-3.5" style={{ background: isVerified ? "var(--positive-dim)" : "var(--warn-dim)" }}>
-            <div className="text-[14px] font-medium" style={{ color: isVerified ? "var(--positive)" : "var(--warn)" }}>
-              {isVerified ? "Ready to Trade" : "Complete Setup to Trade"}
-            </div>
-            <div className="text-[13px] mt-1" style={{ color: "var(--t3)" }}>
-              {isVerified
-                ? `${linkedAddresses.length} EVM address${linkedAddresses.length !== 1 ? "es" : ""} linked. Reputation shared across all addresses.`
-                : "Link at least one EVM address to enable settlement."}
-            </div>
-          </div>
-
-          {/* ============================================ */}
-          {/* SECURITY DEPOSIT VAULT */}
-          {/* ============================================ */}
-          <div>
-            <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>
-              Security Deposit Vault
-            </div>
-
-            {vaultLoading ? (
-              <div className="flex items-center gap-2 py-3">
-                <div className="w-3 h-3 rounded-full border-[1.5px] animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
-                <span className="text-[13px]" style={{ color: "var(--t3)" }}>Loading vault...</span>
-              </div>
-            ) : !hasVault ? (
-              /* No deposit yet — onboarding */
-              <div className="card p-4" style={{ borderColor: "var(--warn)", borderWidth: 1 }}>
-                <div className="text-[13px] mb-3" style={{ color: "var(--t2)" }}>
-                  To place quotes as a maker, deposit stablecoins as collateral. This protects takers and backs your quotes.
-                  Your quoting capacity is 90% of your deposit.
-                </div>
-                <div className="text-[12px] mb-3 px-3 py-2 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
-                  Deposits can be withdrawn anytime with a 12-hour cooling period. No lock-up beyond active trades.
-                </div>
-                <div className="flex items-center gap-2 mb-3">
-                  <input type="number" placeholder="Amount" value={depositAmount} onChange={e => setDepositAmount(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded border text-[14px] mono outline-none"
-                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-                  <select value={depositCurrency} onChange={e => setDepositCurrency(e.target.value as any)}
-                    className="px-2 py-2 rounded border text-[13px] mono outline-none"
-                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }}>
-                    <option value="USDC">USDC</option>
-                    <option value="USDT">USDT</option>
-                  </select>
-                </div>
-                <button onClick={handleDeposit} disabled={depositing || !depositAmount || parseFloat(depositAmount) <= 0}
-                  className="w-full py-2.5 rounded-md text-[14px] font-semibold transition-all disabled:opacity-30 hover:brightness-110"
-                  style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                  {depositing ? "Depositing\u2026" : "Make Security Deposit"}
-                </button>
-                {vaultMessage && (
-                  <div className="mt-2 text-[12px] px-2 py-1.5 rounded" style={{ color: vaultMessage.ok ? "var(--positive)" : "var(--negative)", background: vaultMessage.ok ? "var(--positive-dim)" : "rgba(239,68,68,0.06)" }}>
-                    {vaultMessage.text}
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Has deposit — vault dashboard */
-              <div className="space-y-3">
-                {/* Balance overview */}
-                <div className="grid grid-cols-2 gap-2">
+          {/* =============================== */}
+          {/* PROFILE TAB */}
+          {/* =============================== */}
+          {activeTab === "profile" && (
+            <>
+              {/* Reputation — at the very top */}
+              <div>
+                <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>Reputation</div>
+                <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
-                    <div className="mono text-[16px] font-bold" style={{ color: "var(--t0)" }}>
-                      {vault.totalDeposited.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[11px]" style={{ color: "var(--t3)" }}>Total Deposited ({vault.currency})</div>
+                    <div className="mono text-[18px] font-bold" style={{ color: parseFloat(repScore) >= 4 ? "var(--positive)" : parseFloat(repScore) >= 2 ? "var(--warn)" : "var(--negative)" }}>{repScore}</div>
+                    <div className="text-[11px]" style={{ color: "var(--t3)" }}>rep score</div>
                   </div>
                   <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
-                    <div className="mono text-[16px] font-bold" style={{ color: "var(--positive)" }}>
-                      {vault.matchingLimit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[11px]" style={{ color: "var(--t3)" }}>Matching Limit (90%)</div>
+                    <div className="mono text-[18px] font-bold" style={{ color: "var(--t0)" }}>{tradeCount}</div>
+                    <div className="text-[11px]" style={{ color: "var(--t3)" }}>trades</div>
+                  </div>
+                  <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
+                    <div className="mono text-[18px] font-bold" style={{ color: "var(--t0)" }}>0/3</div>
+                    <div className="text-[11px]" style={{ color: "var(--t3)" }}>timeouts</div>
                   </div>
                 </div>
+                <div className="mt-2 text-[11px] px-2 py-1.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
+                  Taker timeout: -33% rep. Maker default: -67% rep + deposit liquidated. 3 timeouts/month = suspended.
+                </div>
+              </div>
 
-                {/* Detail breakdown */}
-                <div className="card p-3">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[12px]">
-                      <span style={{ color: "var(--t3)" }}>Available</span>
-                      <span className="mono font-medium" style={{ color: "var(--t1)" }}>
-                        {vault.available.toLocaleString(undefined, { minimumFractionDigits: 2 })} {vault.currency}
-                      </span>
+              {/* Identity */}
+              <div>
+                <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>Identity</div>
+                <div className="text-[14px]" style={{ color: "var(--t2)" }}>{isDemo ? "Demo Mode" : "Authenticated via StarKey"}</div>
+              </div>
+
+              {/* Supra Address */}
+              <div className="card p-3.5">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Supra (MoveVM)</span>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] mono uppercase" style={{ background: "rgba(34,197,94,0.1)", color: "var(--positive)" }}>Primary</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
+                    <span className="mono text-[12px]" style={{ color: "var(--positive)" }}>verified</span>
+                  </div>
+                </div>
+                <div className="mono text-[13px] break-all" style={{ color: "var(--t0)" }}>{supraAddress}</div>
+                <div className="text-[12px] mt-1.5" style={{ color: "var(--t3)" }}>Reputation accumulates on this address</div>
+              </div>
+
+              {/* Linked EVM Addresses */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Linked EVM Addresses</span>
+                  <span className="text-[11px] mono" style={{ color: "var(--t3)" }}>{linkedAddresses.length} linked</span>
+                </div>
+                <div className="space-y-2">
+                  {linkedAddresses.map((la) => (
+                    <div key={la.address} className="card p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="mono text-[10px] uppercase" style={{ color: "var(--t3)" }}>{la.chain}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] mono" style={{ background: "var(--surface-3)", color: "var(--t3)" }}>{la.walletProvider}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
+                          <span className="mono text-[11px]" style={{ color: "var(--positive)" }}>verified</span>
+                        </div>
+                      </div>
+                      <div className="mono text-[12px] break-all" style={{ color: "var(--t0)" }}>{la.address}</div>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-[11px]" style={{ color: "var(--t3)" }}>{new Date(la.verifiedAt).toLocaleDateString()}</span>
+                        <button onClick={() => handleRemove(la)} disabled={removing === la.address}
+                          className="text-[11px] px-2 py-0.5 rounded transition-all disabled:opacity-50"
+                          style={{ color: "var(--negative)", background: "var(--surface-3)", border: "none", cursor: "pointer" }}>
+                          {removing === la.address ? "Removing\u2026" : "Remove"}
+                        </button>
+                      </div>
                     </div>
-                    {vault.committed > 0 && (
-                      <div className="flex items-center justify-between text-[12px]">
-                        <span style={{ color: "var(--t3)" }}>Committed (earmarked)</span>
-                        <span className="mono font-medium" style={{ color: "var(--warn)" }}>
-                          {vault.committed.toLocaleString(undefined, { minimumFractionDigits: 2 })} {vault.currency}
-                        </span>
+                  ))}
+                  {linkedAddresses.length === 0 && !profile?.evmVerified && (
+                    <div className="text-[13px] py-2" style={{ color: "var(--t3)" }}>No EVM addresses linked yet.</div>
+                  )}
+                  <div className="card p-3" style={{ borderColor: "var(--border)", borderStyle: "dashed" }}>
+                    {linking ? (
+                      <div className="flex items-center gap-2 py-1">
+                        <div className="w-3 h-3 rounded-full border-[1.5px] animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+                        <span className="text-[13px]" style={{ color: "var(--t2)" }}>Waiting for {linkingProvider === "starkey" ? "StarKey" : "MetaMask"} signature...</span>
                       </div>
-                    )}
-                    {vault.pendingWithdrawal > 0 && (
-                      <div className="flex items-center justify-between text-[12px]">
-                        <span style={{ color: "var(--t3)" }}>Pending Withdrawal</span>
-                        <span className="mono font-medium" style={{ color: "var(--warn)" }}>
-                          {vault.pendingWithdrawal.toLocaleString(undefined, { minimumFractionDigits: 2 })} {vault.currency}
-                        </span>
+                    ) : showWalletChoice ? (
+                      <div className="space-y-2">
+                        <div className="text-[12px] mb-1" style={{ color: "var(--t3)" }}>Choose wallet to sign with:</div>
+                        <button onClick={() => handleLink("starkey")} className="w-full py-2 rounded-md text-[13px] font-semibold transition-all hover:brightness-110" style={{ background: "var(--accent)", color: "#fff", border: "none" }}>StarKey (EVM)</button>
+                        <button onClick={() => handleLink("metamask")} className="w-full py-2 rounded-md text-[13px] font-semibold transition-all hover:brightness-110" style={{ background: "var(--surface-3)", color: "var(--t1)", border: "1px solid var(--border)" }}>MetaMask</button>
+                        <button onClick={() => setShowWalletChoice(false)} className="w-full py-1 text-[12px]" style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>cancel</button>
                       </div>
+                    ) : (
+                      <button onClick={() => setShowWalletChoice(true)} className="w-full py-1.5 text-[13px] font-medium transition-all" style={{ color: "var(--accent-light)", background: "none", border: "none", cursor: "pointer" }}>+ Add EVM Address</button>
                     )}
                   </div>
                 </div>
+              </div>
 
-                {/* Deposit more */}
-                <div className="flex items-center gap-2">
-                  <input type="number" placeholder="Add more" value={depositAmount} onChange={e => setDepositAmount(e.target.value)}
-                    className="flex-1 px-2.5 py-[6px] rounded border text-[13px] mono outline-none"
-                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+              {/* Verification Status */}
+              <div className="rounded-md p-3.5" style={{ background: isVerified ? "var(--positive-dim)" : "var(--warn-dim)" }}>
+                <div className="text-[14px] font-medium" style={{ color: isVerified ? "var(--positive)" : "var(--warn)" }}>
+                  {isVerified ? "Ready to Trade" : "Complete Setup to Trade"}
+                </div>
+                <div className="text-[13px] mt-1" style={{ color: "var(--t3)" }}>
+                  {isVerified ? `${linkedAddresses.length} EVM address${linkedAddresses.length !== 1 ? "es" : ""} linked.` : "Link at least one EVM address to enable settlement."}
+                </div>
+              </div>
+
+              {/* Settlement Routing */}
+              <div>
+                <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>Settlement Routing</div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between py-2 px-3 rounded-md text-[14px]" style={{ background: "var(--surface-2)" }}>
+                    <span style={{ color: "var(--t3)" }}>Sepolia ETH legs</span>
+                    <span className="mono" style={{ color: hasAnyEvm ? "var(--t1)" : "var(--t3)" }}>
+                      {linkedAddresses.length > 0 ? shortAddr(linkedAddresses[0].address) : profile?.evmAddress ? shortAddr(profile.evmAddress) : "\u2014"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 px-3 rounded-md text-[14px]" style={{ background: "var(--surface-2)" }}>
+                    <span style={{ color: "var(--t3)" }}>Supra token legs</span>
+                    <span className="mono" style={{ color: "var(--t1)" }}>{supraShort}</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* =============================== */}
+          {/* SECURITY DEPOSIT TAB */}
+          {/* =============================== */}
+          {activeTab === "vault" && (
+            <>
+              {vaultLoading ? (
+                <div className="flex items-center gap-2 py-6 justify-center">
+                  <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+                  <span className="text-[13px]" style={{ color: "var(--t3)" }}>Loading vault...</span>
+                </div>
+              ) : !hasVault ? (
+                /* No deposit — onboarding */
+                <div>
+                  <div className="text-center mb-5">
+                    <div className="text-[15px] font-semibold mb-2" style={{ color: "var(--t1)" }}>Become a Maker</div>
+                    <div className="text-[13px]" style={{ color: "var(--t3)" }}>
+                      Deposit stablecoins to start placing quotes on RFQs. Your deposit protects takers and backs your commitments.
+                    </div>
+                  </div>
+
+                  <div className="card p-4 mb-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--t2)" }}>
+                        <span style={{ color: "var(--positive)" }}>1.</span> Deposit USDC or USDT as collateral
+                      </div>
+                      <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--t2)" }}>
+                        <span style={{ color: "var(--positive)" }}>2.</span> Your quoting capacity = 90% of deposit
+                      </div>
+                      <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--t2)" }}>
+                        <span style={{ color: "var(--positive)" }}>3.</span> Withdraw anytime (12-hour cooling period)
+                      </div>
+                      <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--t2)" }}>
+                        <span style={{ color: "var(--warn)" }}>!</span> If you default on a trade, deposit covers the taker
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-3">
+                    <input type="number" placeholder="Amount" value={depositAmount} onChange={e => setDepositAmount(e.target.value)}
+                      className="flex-1 px-3 py-2.5 rounded border text-[14px] mono outline-none"
+                      style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+                    <select value={depositCurrency} onChange={e => setDepositCurrency(e.target.value as any)}
+                      className="px-2 py-2.5 rounded border text-[13px] mono outline-none"
+                      style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }}>
+                      <option value="USDC">USDC</option>
+                      <option value="USDT">USDT</option>
+                    </select>
+                  </div>
                   <button onClick={handleDeposit} disabled={depositing || !depositAmount || parseFloat(depositAmount) <= 0}
-                    className="px-3 py-[6px] rounded text-[12px] font-semibold transition-all disabled:opacity-30"
+                    className="w-full py-3 rounded-md text-[14px] font-semibold transition-all disabled:opacity-30 hover:brightness-110"
                     style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-                    {depositing ? "\u2026" : "Deposit"}
+                    {depositing ? "Depositing\u2026" : "Make Security Deposit"}
                   </button>
                 </div>
-
-                {/* Withdraw */}
-                {showWithdraw ? (
-                  <div className="card p-3">
-                    <div className="text-[12px] mb-2" style={{ color: "var(--t3)" }}>
-                      Withdrawals have a 12-hour cooling period. Cannot withdraw while trades are active.
+              ) : (
+                /* Has deposit — vault dashboard */
+                <div className="space-y-4">
+                  {/* Balance cards */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
+                      <div className="mono text-[18px] font-bold" style={{ color: "var(--t0)" }}>
+                        {vault.totalDeposited.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[11px]" style={{ color: "var(--t3)" }}>Total ({vault.currency})</div>
                     </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <input type="number" placeholder="Amount" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)}
-                        className="flex-1 px-2.5 py-[6px] rounded border text-[13px] mono outline-none"
+                    <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
+                      <div className="mono text-[18px] font-bold" style={{ color: "var(--positive)" }}>
+                        {vault.matchingLimit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[11px]" style={{ color: "var(--t3)" }}>Matching Limit (90%)</div>
+                    </div>
+                  </div>
+
+                  {/* Breakdown */}
+                  <div className="card p-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[12px]">
+                        <span style={{ color: "var(--t3)" }}>Available</span>
+                        <span className="mono font-medium" style={{ color: "var(--t1)" }}>{vault.available.toLocaleString(undefined, { minimumFractionDigits: 2 })} {vault.currency}</span>
+                      </div>
+                      {vault.committed > 0 && (
+                        <div className="flex items-center justify-between text-[12px]">
+                          <span style={{ color: "var(--t3)" }}>Committed (earmarked)</span>
+                          <span className="mono font-medium" style={{ color: "var(--warn)" }}>{vault.committed.toLocaleString(undefined, { minimumFractionDigits: 2 })} {vault.currency}</span>
+                        </div>
+                      )}
+                      {vault.pendingWithdrawal > 0 && (
+                        <div className="flex items-center justify-between text-[12px]">
+                          <span style={{ color: "var(--t3)" }}>Pending Withdrawal</span>
+                          <span className="mono font-medium" style={{ color: "var(--warn)" }}>{vault.pendingWithdrawal.toLocaleString(undefined, { minimumFractionDigits: 2 })} {vault.currency}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Add more deposit */}
+                  <div>
+                    <div className="mono text-[10px] uppercase tracking-wider mb-2 font-medium" style={{ color: "var(--t3)" }}>Add to Deposit</div>
+                    <div className="flex items-center gap-2">
+                      <input type="number" placeholder="Amount" value={depositAmount} onChange={e => setDepositAmount(e.target.value)}
+                        className="flex-1 px-2.5 py-[7px] rounded border text-[13px] mono outline-none"
                         style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
-                      <button onClick={handleWithdrawRequest} disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
-                        className="px-3 py-[6px] rounded text-[12px] font-semibold transition-all disabled:opacity-30"
-                        style={{ background: "var(--surface-3)", color: "var(--t1)", border: "1px solid var(--border)" }}>
-                        {withdrawing ? "\u2026" : "Request"}
+                      <button onClick={handleDeposit} disabled={depositing || !depositAmount || parseFloat(depositAmount) <= 0}
+                        className="px-4 py-[7px] rounded text-[12px] font-semibold transition-all disabled:opacity-30 hover:brightness-110"
+                        style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+                        {depositing ? "\u2026" : "Deposit"}
                       </button>
                     </div>
-                    <button onClick={() => setShowWithdraw(false)} className="text-[11px]" style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>cancel</button>
                   </div>
-                ) : (
-                  <button onClick={() => setShowWithdraw(true)}
-                    className="text-[12px] transition-all"
-                    style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
-                    Request Withdrawal
-                  </button>
-                )}
 
-                {vaultMessage && (
-                  <div className="text-[12px] px-2 py-1.5 rounded" style={{ color: vaultMessage.ok ? "var(--positive)" : "var(--negative)", background: vaultMessage.ok ? "var(--positive-dim)" : "rgba(239,68,68,0.06)" }}>
-                    {vaultMessage.text}
+                  {/* Withdraw */}
+                  <div>
+                    <div className="mono text-[10px] uppercase tracking-wider mb-2 font-medium" style={{ color: "var(--t3)" }}>Withdraw</div>
+                    {showWithdraw ? (
+                      <div className="card p-3">
+                        <div className="text-[12px] mb-2" style={{ color: "var(--t3)" }}>12-hour cooling period. Cannot withdraw while trades are active.</div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <input type="number" placeholder="Amount" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)}
+                            className="flex-1 px-2.5 py-[6px] rounded border text-[13px] mono outline-none"
+                            style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--t0)" }} />
+                          <button onClick={handleWithdrawRequest} disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
+                            className="px-3 py-[6px] rounded text-[12px] font-semibold transition-all disabled:opacity-30"
+                            style={{ background: "var(--surface-3)", color: "var(--t1)", border: "1px solid var(--border)" }}>
+                            {withdrawing ? "\u2026" : "Request"}
+                          </button>
+                        </div>
+                        <button onClick={() => setShowWithdraw(false)} className="text-[11px]" style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>cancel</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setShowWithdraw(true)}
+                        className="text-[12px] px-3 py-1.5 rounded transition-all hover:brightness-110"
+                        style={{ color: "var(--t2)", background: "var(--surface-2)", border: "none", cursor: "pointer" }}>
+                        Request Withdrawal
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-          </div>
 
-          {/* ============================================ */}
-          {/* REPUTATION */}
-          {/* ============================================ */}
-          <div>
-            <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>
-              Reputation
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
-                <div className="mono text-[18px] font-bold" style={{ color: parseFloat(repScore) >= 4 ? "var(--positive)" : parseFloat(repScore) >= 2 ? "var(--warn)" : "var(--negative)" }}>
-                  {repScore}
+                  {/* Risk notice */}
+                  <div className="text-[11px] px-3 py-2 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
+                    If you default on a trade (fail to send within 30 min after taker sends), your deposit covers the taker's loss plus a 10% surcharge.
+                  </div>
                 </div>
-                <div className="text-[11px]" style={{ color: "var(--t3)" }}>rep score</div>
-              </div>
-              <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
-                <div className="mono text-[18px] font-bold" style={{ color: "var(--t0)" }}>{tradeCount}</div>
-                <div className="text-[11px]" style={{ color: "var(--t3)" }}>trades</div>
-              </div>
-              <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
-                <div className="mono text-[18px] font-bold" style={{ color: "var(--t0)" }}>0/3</div>
-                <div className="text-[11px]" style={{ color: "var(--t3)" }}>timeouts</div>
-              </div>
-            </div>
-            <div className="mt-2 text-[11px] px-2 py-1.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
-              Taker timeout: -33% rep. Maker default: -67% rep + deposit liquidated. 3 timeouts/month = suspended.
-            </div>
-          </div>
+              )}
 
-          {/* Settlement Routing */}
-          <div>
-            <div className="mono text-[11px] uppercase tracking-wider mb-3 font-medium" style={{ color: "var(--t3)" }}>Settlement Routing</div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between py-2 px-3 rounded-md text-[14px]" style={{ background: "var(--surface-2)" }}>
-                <span style={{ color: "var(--t3)" }}>Sepolia ETH legs</span>
-                <span className="mono" style={{ color: hasAnyEvm ? "var(--t1)" : "var(--t3)" }}>
-                  {linkedAddresses.length > 0 ? shortAddr(linkedAddresses[0].address) : profile?.evmAddress ? shortAddr(profile.evmAddress) : "\u2014"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2 px-3 rounded-md text-[14px]" style={{ background: "var(--surface-2)" }}>
-                <span style={{ color: "var(--t3)" }}>Supra token legs</span>
-                <span className="mono" style={{ color: "var(--t1)" }}>{supraShort}</span>
-              </div>
-            </div>
-          </div>
+              {vaultMessage && (
+                <div className="text-[12px] px-2 py-1.5 rounded mt-3" style={{ color: vaultMessage.ok ? "var(--positive)" : "var(--negative)", background: vaultMessage.ok ? "var(--positive-dim)" : "rgba(239,68,68,0.06)" }}>
+                  {vaultMessage.text}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Footer */}

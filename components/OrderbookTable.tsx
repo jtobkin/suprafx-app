@@ -1138,9 +1138,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                                 To place quotes, you need a security deposit in the vault. This protects takers and backs your quotes. Your quoting capacity is 90% of your deposit.
                               </div>
                               <button onClick={() => {
-                                // Find and click the profile button to open sidebar
-                                const profileBtn = document.querySelector("[data-profile-trigger]") as HTMLElement;
-                                if (profileBtn) profileBtn.click();
+                                window.dispatchEvent(new Event("suprafx:open-vault"));
                                 setShowDepositPrompt(false);
                               }}
                                 className="px-3 py-1.5 rounded text-[12px] font-semibold transition-all hover:brightness-110"

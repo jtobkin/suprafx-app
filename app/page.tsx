@@ -190,8 +190,18 @@ function VerificationGate() {
   );
 }
 
+function VaultTabListener({ onOpen }: { onOpen: () => void }) {
+  useEffect(() => {
+    const handler = () => onOpen();
+    window.addEventListener("suprafx:open-vault", handler);
+    return () => window.removeEventListener("suprafx:open-vault", handler);
+  }, [onOpen]);
+  return null;
+}
+
 function Dashboard() {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileTab, setProfileTab] = useState<"profile" | "vault">("profile");
   const [trades, setTrades] = useState<Trade[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -229,9 +239,11 @@ function Dashboard() {
 
   return (
     <div>
-      <Header onProfileClick={() => setProfileOpen(true)} />
-      <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <Header onProfileClick={() => { setProfileTab("profile"); setProfileOpen(true); }} />
+      <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} initialTab={profileTab} />
       <Notifications trades={trades} quotes={quotes} />
+      {/* Listen for vault tab open requests */}
+      <VaultTabListener onOpen={() => { setProfileTab("vault"); setProfileOpen(true); }} />
       <div className="max-w-[1240px] mx-auto px-5 py-5">
         <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <SubmitRFQ onSubmitted={fetchAll} />
