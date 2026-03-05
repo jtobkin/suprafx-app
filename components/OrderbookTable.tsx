@@ -129,32 +129,16 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
   );
 }
 
-function InlineTimer({ deadline, tradeId, onExpired }: { deadline: string; tradeId: string; onExpired?: () => void }) {
-  const [remaining, setRemaining] = useState<number | null>(null);
-  const triggered = useRef(false);
+function InlineTimer({ deadline }: { deadline: string }) {
+  const [remaining, setRemaining] = useState<number>(Math.max(0, new Date(deadline).getTime() - Date.now()));
 
   useEffect(() => {
-    const update = () => {
-      const ms = new Date(deadline).getTime() - Date.now();
-      setRemaining(ms > 0 ? ms : 0);
-      if (ms <= 0 && !triggered.current) {
-        triggered.current = true;
-        fetch("/api/timeout-trade", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tradeId }),
-        }).then(r => r.json()).then(data => {
-          console.log("[SupraFX] Inline timeout:", data);
-          if (onExpired) onExpired();
-        }).catch(() => {});
-      }
-    };
-    update();
-    const iv = setInterval(update, 1000);
+    const iv = setInterval(() => {
+      setRemaining(Math.max(0, new Date(deadline).getTime() - Date.now()));
+    }, 1000);
     return () => clearInterval(iv);
-  }, [deadline, tradeId, onExpired]);
+  }, [deadline]);
 
-  if (remaining === null) return null;
   const totalSec = Math.floor(remaining / 1000);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
@@ -169,53 +153,25 @@ function InlineTimer({ deadline, tradeId, onExpired }: { deadline: string; trade
   );
 }
 
-function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }: { deadline: string | null; label: string; penaltyWarning?: string; onExpired?: () => void; tradeId?: string }) {
-  const [remaining, setRemaining] = useState<number | null>(null);
-  const expiredTriggered = useRef(false);
+function CountdownTimer({ deadline, label, penaltyWarning }: { deadline: string | null; label: string; penaltyWarning?: string }) {
+  const [remaining, setRemaining] = useState<number>(deadline ? Math.max(0, new Date(deadline).getTime() - Date.now()) : -1);
 
   useEffect(() => {
     if (!deadline) return;
-    expiredTriggered.current = false;
-    const update = () => {
-      const ms = new Date(deadline).getTime() - Date.now();
-      setRemaining(ms > 0 ? ms : 0);
-      // When timer hits zero, trigger timeout immediately
-      if (ms <= 0 && !expiredTriggered.current) {
-        expiredTriggered.current = true;
-        console.log("[SupraFX] Timer expired for trade:", tradeId, "— triggering timeout...");
-        if (tradeId) {
-          fetch("/api/timeout-trade", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tradeId }),
-          }).then(r => {
-            console.log("[SupraFX] Timeout response status:", r.status);
-            return r.json();
-          }).then(data => {
-            console.log("[SupraFX] Timeout result:", JSON.stringify(data));
-            if (onExpired) onExpired();
-          }).catch(err => {
-            console.error("[SupraFX] Timeout-trade FAILED:", err);
-          });
-        } else {
-          console.warn("[SupraFX] No tradeId passed to CountdownTimer");
-        }
-      }
-    };
-    update();
-    const iv = setInterval(update, 1000);
+    const calc = () => Math.max(0, new Date(deadline).getTime() - Date.now());
+    setRemaining(calc());
+    const iv = setInterval(() => setRemaining(calc()), 1000);
     return () => clearInterval(iv);
-  }, [deadline, onExpired]);
+  }, [deadline]);
 
-  if (!deadline || remaining === null) return null;
+  if (!deadline || remaining === -1) return null;
 
   const totalSec = Math.floor(remaining / 1000);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
-  const isWarning = remaining < 5 * 60 * 1000 && remaining > 0; // under 5 min
-  const isCritical = remaining < 60 * 1000 && remaining > 0;     // under 1 min
+  const isWarning = remaining < 5 * 60 * 1000 && remaining > 0;
+  const isCritical = remaining < 60 * 1000 && remaining > 0;
   const isExpired = remaining <= 0;
-
   const color = isExpired ? "var(--negative)" : isCritical ? "var(--negative)" : isWarning ? "var(--warn)" : "var(--t2)";
   const bgColor = isExpired ? "rgba(239,68,68,0.08)" : isCritical ? "rgba(239,68,68,0.06)" : isWarning ? "rgba(234,179,8,0.06)" : "var(--surface-2)";
 
@@ -231,7 +187,7 @@ function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }:
         <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: `${color}15`, color }}>{penaltyWarning}</span>
       )}
       {isExpired && (
-        <span className="text-[10px]" style={{ color: "var(--negative)" }}>Awaiting Council timeout ruling</span>
+        <span className="text-[11px]" style={{ color: "var(--negative)" }}>Processing timeout...</span>
       )}
     </div>
   );
@@ -735,9 +691,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
               deadline={trade.taker_deadline}
               label={isTaker ? "Your deadline:" : "Taker deadline:"}
               penaltyWarning={isTaker ? "-33% reputation" : undefined}
-              onExpired={onUpdate}
-              tradeId={trade.id}
-            />
+              />
           )}
           {isTaker ? (
             <>
@@ -827,9 +781,7 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
               deadline={trade.maker_deadline}
               label={isMaker ? "Your deadline:" : "Maker deadline:"}
               penaltyWarning={isMaker ? "-67% rep + deposit liquidated" : undefined}
-              onExpired={onUpdate}
-              tradeId={trade.id}
-            />
+              />
           )}
           {(isMaker || isBot) ? (
             <div>
@@ -968,6 +920,33 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
 
   const openRfqs = rfqs.filter(r => r.status === "open")
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // === TIMEOUT TRIGGER: fires ONCE per expired trade ===
+  const processedTimeouts = useRef(new Set<string>());
+  useEffect(() => {
+    if (!trades) return;
+    for (const t of trades) {
+      const key = t.id + ':' + t.status;
+      if (processedTimeouts.current.has(key)) continue;
+
+      let shouldFire = false;
+      if (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline) < new Date()) shouldFire = true;
+      if (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline) < new Date()) shouldFire = true;
+
+      if (shouldFire) {
+        processedTimeouts.current.add(key);
+        console.log("[SupraFX] Timeout trigger for trade:", t.id, "status:", t.status);
+        fetch("/api/timeout-trade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tradeId: t.id }),
+        }).then(r => r.json()).then(data => {
+          console.log("[SupraFX] Timeout result:", JSON.stringify(data));
+          if (onUpdate) onUpdate();
+        }).catch(err => console.error("[SupraFX] Timeout error:", err));
+      }
+    }
+  }, [trades, onUpdate]);
 
   const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
   const activeTrades = (trades || [])
@@ -1340,11 +1319,11 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
                         {/* Inline deadline display on collapsed row */}
-                        {t.status === "open" && t.taker_deadline && (
-                          <InlineTimer deadline={t.taker_deadline} tradeId={t.id} onExpired={onUpdate} />
+                        {!isTradeExpanded && t.status === "open" && t.taker_deadline && (
+                          <InlineTimer deadline={t.taker_deadline} />
                         )}
-                        {t.status === "taker_verified" && t.maker_deadline && (
-                          <InlineTimer deadline={t.maker_deadline} tradeId={t.id} onExpired={onUpdate} />
+                        {!isTradeExpanded && t.status === "taker_verified" && t.maker_deadline && (
+                          <InlineTimer deadline={t.maker_deadline} />
                         )}
                         <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "▲" : "▼"}</span>
                       </div>
