@@ -129,22 +129,27 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
   );
 }
 
-function InlineTimer({ deadline, tradeId, onExpired }: { deadline: string; tradeId: string; onExpired?: () => void }) {
+function InlineTimer({ deadline, tradeId, onExpired, tradeStatus }: { deadline: string; tradeId: string; onExpired?: () => void; tradeStatus?: string }) {
   const [remaining, setRemaining] = useState<number | null>(null);
   const triggered = useRef(false);
 
   useEffect(() => {
+    // Don't fire for already-terminal trades
+    const terminal = ['taker_timed_out', 'maker_defaulted', 'settled', 'cancelled', 'failed'];
+    if (tradeStatus && terminal.includes(tradeStatus)) return;
+
     const update = () => {
       const ms = new Date(deadline).getTime() - Date.now();
       setRemaining(ms > 0 ? ms : 0);
       if (ms <= 0 && !triggered.current) {
         triggered.current = true;
+        console.log("[SupraFX] InlineTimer firing for:", tradeId);
         fetch("/api/timeout-trade", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tradeId }),
         }).then(r => r.json()).then(data => {
-          console.log("[SupraFX] Inline timeout:", data);
+          console.log("[SupraFX] Inline timeout result:", JSON.stringify(data));
           if (onExpired) onExpired();
         }).catch(() => {});
       }
@@ -152,7 +157,7 @@ function InlineTimer({ deadline, tradeId, onExpired }: { deadline: string; trade
     update();
     const iv = setInterval(update, 1000);
     return () => clearInterval(iv);
-  }, [deadline, tradeId, onExpired]);
+  }, [deadline, tradeId, onExpired, tradeStatus]);
 
   if (remaining === null) return null;
   const totalSec = Math.floor(remaining / 1000);
@@ -187,6 +192,8 @@ function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }:
   // Fire timeout when remaining hits 0
   useEffect(() => {
     if (remaining > 0 || remaining === -1 || firedRef.current || !tradeId) return;
+    // Don't re-fire if already expired from a previous render
+    if (firedRef.current) return;
     firedRef.current = true;
     setStatus("Triggering Settlement Council...");
     console.log("[SupraFX] CountdownTimer expired, calling /api/timeout-trade for:", tradeId);
@@ -1370,10 +1377,10 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                         <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
                         {/* Inline deadline display on collapsed row */}
                         {!isTradeExpanded && t.status === "open" && t.taker_deadline && (
-                          <InlineTimer deadline={t.taker_deadline} tradeId={t.id} onExpired={onUpdate} />
+                          <InlineTimer deadline={t.taker_deadline} tradeId={t.id} onExpired={onUpdate} tradeStatus={t.status} />
                         )}
                         {!isTradeExpanded && t.status === "taker_verified" && t.maker_deadline && (
-                          <InlineTimer deadline={t.maker_deadline} tradeId={t.id} onExpired={onUpdate} />
+                          <InlineTimer deadline={t.maker_deadline} tradeId={t.id} onExpired={onUpdate} tradeStatus={t.status} />
                         )}
                         <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "▲" : "▼"}</span>
                       </div>
