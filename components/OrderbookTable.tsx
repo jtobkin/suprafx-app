@@ -129,19 +129,42 @@ function LogLine({ time, text, color }: { time: string; text: string; color?: st
   );
 }
 
-function CountdownTimer({ deadline, label, penaltyWarning }: { deadline: string | null; label: string; penaltyWarning?: string }) {
+function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }: { deadline: string | null; label: string; penaltyWarning?: string; onExpired?: () => void; tradeId?: string }) {
   const [remaining, setRemaining] = useState<number | null>(null);
+  const expiredTriggered = useRef(false);
 
   useEffect(() => {
     if (!deadline) return;
+    expiredTriggered.current = false;
     const update = () => {
       const ms = new Date(deadline).getTime() - Date.now();
       setRemaining(ms > 0 ? ms : 0);
+      // When timer hits zero, trigger timeout for this specific trade
+      if (ms <= 0 && !expiredTriggered.current) {
+        expiredTriggered.current = true;
+        setTimeout(() => {
+          if (tradeId) {
+            fetch("/api/timeout-trade", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tradeId }),
+            }).then(r => r.json()).then(data => {
+              console.log("[SupraFX] Timeout processed:", data);
+              if (onExpired) onExpired();
+            }).catch(() => {
+              // Fallback to generic cron
+              fetch("/api/cron/timeouts").then(() => { if (onExpired) onExpired(); });
+            });
+          } else {
+            fetch("/api/cron/timeouts").then(() => { if (onExpired) onExpired(); });
+          }
+        }, 2000);
+      }
     };
     update();
     const iv = setInterval(update, 1000);
     return () => clearInterval(iv);
-  }, [deadline]);
+  }, [deadline, onExpired]);
 
   if (!deadline || remaining === null) return null;
 
@@ -671,6 +694,8 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
               deadline={trade.taker_deadline}
               label={isTaker ? "Your deadline:" : "Taker deadline:"}
               penaltyWarning={isTaker ? "-33% reputation" : undefined}
+              onExpired={onUpdate}
+              tradeId={trade.id}
             />
           )}
           {isTaker ? (
@@ -761,6 +786,8 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
               deadline={trade.maker_deadline}
               label={isMaker ? "Your deadline:" : "Maker deadline:"}
               penaltyWarning={isMaker ? "-67% rep + deposit liquidated" : undefined}
+              onExpired={onUpdate}
+              tradeId={trade.id}
             />
           )}
           {(isMaker || isBot) ? (

@@ -5,7 +5,8 @@ import { getServiceClient } from '@/lib/supabase';
 import { councilVerifyAndSign } from '@/lib/council-sign';
 import { applyTimeoutPenalty } from '@/lib/reputation';
 import { releaseEarmark, liquidateForDefault, recordTimeout } from '@/lib/vault';
-import { storeSignedAction } from '@/lib/signed-actions';
+import { storeSignedAction, getTradeActions } from '@/lib/signed-actions';
+import { submitCommitteeAttestation, buildAttestationBundle } from '@/lib/bot-wallets';
 
 export async function GET() {
   const db = getServiceClient();
@@ -68,6 +69,48 @@ export async function GET() {
           tradeId: trade.id,
         });
 
+        // Submit on-chain attestation for taker timeout
+        try {
+          if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+            const tradeActions = await getTradeActions(trade.id);
+            const bundle = await buildAttestationBundle(
+              trade.id,
+              councilResult.aggregateHash,
+              undefined,
+              {
+                displayId: trade.display_id, pair: trade.pair, size: trade.size, rate: trade.rate,
+                sourceChain: trade.source_chain, destChain: trade.dest_chain,
+                takerAddress: trade.taker_address, makerAddress: trade.maker_address,
+              },
+              {
+                taker: { address: trade.taker_address, oldScore: penalty.oldScore, newScore: penalty.newScore, speedBonus: 0 },
+              },
+              tradeActions,
+            );
+            // Override the type to reflect this is a timeout, not a settlement
+            bundle.type = 'taker_timeout_attestation';
+            bundle.timeout = {
+              party: 'taker',
+              penaltyPercent: '33%',
+              oldScore: penalty.oldScore,
+              newScore: penalty.newScore,
+              timeoutCount,
+              banned,
+              earmarkReleased: true,
+            };
+            const attTxHash = await submitCommitteeAttestation(
+              trade.id, councilResult.aggregateHash, undefined, undefined, bundle,
+            );
+            await db.from('committee_requests').upsert({
+              trade_id: trade.id, verification_type: 'taker_timeout_attestation',
+              status: 'approved', approvals: 5, rejections: 0,
+              resolved_at: new Date().toISOString(), attestation_tx: attTxHash,
+            }, { onConflict: 'trade_id,verification_type' });
+          }
+        } catch (e: any) {
+          console.error('[Timeout] Taker timeout attestation failed:', e.message);
+        }
+
         results.push(`Taker timeout: ${trade.id}, rep ${penalty.oldScore.toFixed(2)} → ${penalty.newScore.toFixed(2)} (-33%), timeouts ${timeoutCount}/3${banned ? ' BANNED' : ''}`);
       }
     }
@@ -129,6 +172,51 @@ export async function GET() {
           signature: councilResult.aggregateHash,
           tradeId: trade.id,
         });
+
+        // Submit on-chain attestation for maker default
+        try {
+          if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+            const tradeActions = await getTradeActions(trade.id);
+            const bundle = await buildAttestationBundle(
+              trade.id,
+              councilResult.aggregateHash,
+              undefined,
+              {
+                displayId: trade.display_id, pair: trade.pair, size: trade.size, rate: trade.rate,
+                sourceChain: trade.source_chain, destChain: trade.dest_chain,
+                takerAddress: trade.taker_address, makerAddress: trade.maker_address,
+                takerTxHash: trade.taker_tx_hash,
+              },
+              {
+                taker: { address: trade.taker_address, oldScore: 0, newScore: 0, speedBonus: 0 },
+                maker: { address: trade.maker_address, oldScore: penalty.oldScore, newScore: penalty.newScore, speedBonus: 0 },
+              },
+              tradeActions,
+            );
+            bundle.type = 'maker_default_attestation';
+            bundle.default = {
+              party: 'maker',
+              penaltyPercent: '67%',
+              oldScore: penalty.oldScore,
+              newScore: penalty.newScore,
+              liquidatedAmount: liquidation.liquidatedAmount,
+              takerRepaid: liquidation.takerRepaid || tradeValue,
+              councilSurcharge: liquidation.councilSurcharge || tradeValue * 0.10,
+              timeoutCount,
+              banned,
+            };
+            const attTxHash = await submitCommitteeAttestation(
+              trade.id, councilResult.aggregateHash, undefined, undefined, bundle,
+            );
+            await db.from('committee_requests').upsert({
+              trade_id: trade.id, verification_type: 'maker_default_attestation',
+              status: 'approved', approvals: 5, rejections: 0,
+              resolved_at: new Date().toISOString(), attestation_tx: attTxHash,
+            }, { onConflict: 'trade_id,verification_type' });
+          }
+        } catch (e: any) {
+          console.error('[Timeout] Maker default attestation failed:', e.message);
+        }
 
         results.push(`Maker default: ${trade.id}, rep ${penalty.oldScore.toFixed(2)} → ${penalty.newScore.toFixed(2)} (-67%), liquidated ${liquidation.liquidatedAmount}, taker repaid ${liquidation.takerRepaid || tradeValue}, council surcharge ${liquidation.councilSurcharge || tradeValue * 0.10}`);
       }

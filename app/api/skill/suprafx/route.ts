@@ -363,6 +363,7 @@ async function handleAcceptQuote(body: any) {
   const tradeDisplayId = `T-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${String(tradeCount).padStart(3, '0')}`;
 
   // Council confirms the match (Phase 2C) — runs AFTER accept is stored
+  const { isAgentBanned } = await import('@/lib/vault');
   const matchResult = await councilVerifyAndSign(
     'confirm_match',
     { quoteId, rfqId: rfq.id, takerAddress: rfq.taker_address, makerAddress: quote.maker_address, rate: quote.rate, pair: rfq.pair },
@@ -375,6 +376,10 @@ async function handleAcceptQuote(body: any) {
         return { passed: hasCouncil, reason: hasCouncil ? undefined : 'Quote not co-signed by Council' };
       }},
       { name: 'no_cancellation', fn: async () => ({ passed: rfq.status === 'open' || rfq.status === 'matched' }) },
+      { name: 'taker_not_banned', fn: async () => {
+        const banned = await isAgentBanned(rfq.taker_address);
+        return { passed: !banned, reason: banned ? 'Taker is banned (3 timeouts this month)' : undefined };
+      }},
     ],
     { rfqId: rfq.id, quoteId, db },
   );
@@ -408,7 +413,7 @@ async function handleAcceptQuote(body: any) {
     taker_accept_payload_hash: acceptHash || null,
     council_match_signature: matchResult.aggregateHash,
     match_confirmed_at: new Date().toISOString(),
-    taker_deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    taker_deadline: new Date(Date.now() + 1 * 60 * 1000).toISOString(), // 1 min for testing (production: 30 min)
     status: 'open',
   }).select().single();
 

@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
         await db.from('trades').update({
           status: 'taker_verified',
           taker_tx_confirmed_at: new Date().toISOString(),
-          maker_deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          maker_deadline: new Date(Date.now() + 1 * 60 * 1000).toISOString(), // 1 min for testing (production: 30 min)
         }).eq('id', tradeId);
 
         // === AUTO MAKER BOT: Send SUPRA to taker ===
