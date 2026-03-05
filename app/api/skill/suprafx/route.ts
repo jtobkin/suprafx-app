@@ -588,14 +588,18 @@ async function handlePlaceQuote(body: any) {
   } catch (e: any) { console.error('[Council] quote_registered error:', e.message); }
 
   // If Council rejected the quote (e.g., insufficient vault), cancel it
-  if (quoteEventResult && !quoteEventResult.consensusReached) {
+  if (quoteEventResult && quoteEventResult.consensusDecision === 'rejected') {
     await db.from('quotes').update({ status: 'rejected' }).eq('id', quote.id);
     const rejectReasons = quoteEventResult.votes
       .filter((v: any) => v.decision === 'reject')
       .map((v: any) => v.reason || 'rejected')
       .filter((r: string, i: number, a: string[]) => a.indexOf(r) === i);
     return NextResponse.json({
-      error: `Council rejected quote: ${rejectReasons.join('; ') || 'insufficient vault capacity'}`,
+      error: `Settlement Council rejected quote: ${rejectReasons.join('; ') || 'insufficient vault capacity'}`,
+      councilDecision: 'rejected',
+      approvals: quoteEventResult.approvals,
+      rejections: quoteEventResult.rejections,
+      reasons: rejectReasons,
     }, { status: 400 });
   }
 

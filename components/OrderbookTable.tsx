@@ -1,4 +1,5 @@
 "use client";
+// BUILD_VERSION: earmark-v4-2026-03-05
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
@@ -1033,26 +1034,34 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
     if (!supraAddress || !quotePrice) return;
     setQuotingLoading(true);
     try {
-      await fetch("/api/skill/suprafx", {
+      const quoteBody: any = { action: "place_quote", rfqId, makerAddress: supraAddress, rate: quotePrice };
+      try {
+        const signed = await signAction("place_quote", { rfqId, rate: quotePrice });
+        quoteBody.signedPayload = signed.payload;
+        quoteBody.signature = signed.signature;
+        quoteBody.payloadHash = signed.payloadHash;
+        quoteBody.sessionNonce = signed.payload.sessionNonce;
+        quoteBody.sessionPublicKey = signed.sessionPublicKey;
+        quoteBody.sessionAuthSignature = signed.sessionAuthSignature;
+        quoteBody.sessionNonce = signed.sessionNonce;
+        quoteBody.sessionCreatedAt = signed.sessionCreatedAt;
+        console.log("[SupraFX] Action signed:", signed.payloadHash.slice(0, 16) + "...");
+      } catch (e) { console.warn("[SupraFX] Signing failed:", e); }
+
+      const quoteRes = await fetch("/api/skill/suprafx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: await (async () => {
-          const body: any = { action: "place_quote", rfqId, makerAddress: supraAddress, rate: quotePrice };
-          try {
-            const signed = await signAction("place_quote", { rfqId, rate: quotePrice });
-            body.signedPayload = signed.payload;
-            body.signature = signed.signature;
-            body.payloadHash = signed.payloadHash;
-            body.sessionNonce = signed.payload.sessionNonce;
-            body.sessionPublicKey = signed.sessionPublicKey;
-            body.sessionAuthSignature = signed.sessionAuthSignature;
-            body.sessionNonce = signed.sessionNonce;
-            body.sessionCreatedAt = signed.sessionCreatedAt;
-            console.log("[SupraFX] Action signed:", signed.payloadHash.slice(0, 16) + "...");
-          } catch (e) { console.warn("[SupraFX] Signing failed:", e); }
-          return JSON.stringify(body);
-        })(),
+        body: JSON.stringify(quoteBody),
       });
+      const quoteData = await quoteRes.json();
+
+      if (quoteData.error) {
+        // Show rejection reason (including Council rejection)
+        alert(quoteData.error);
+        setQuotingLoading(false);
+        return;
+      }
+
       setQuotePrice("");
       setQuotingRfq(null);
       if (onUpdate) onUpdate();
@@ -1246,12 +1255,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                                 setShowDepositPrompt(true);
                                 return;
                               }
-                              // Check capacity for this RFQ's notional
-                              const estNotional = r.size * r.reference_price;
-                              if (makerVault.availableCapacity !== undefined && estNotional > makerVault.availableCapacity) {
-                                alert(`Insufficient vault capacity. Need ~${estNotional.toFixed(0)}, available: ${makerVault.availableCapacity.toFixed(0)}`);
-                                return;
-                              }
+
                               setQuotingRfq(r.id);
                               setQuotePrice(fmtRate(r.reference_price));
                               setShowDepositPrompt(false);

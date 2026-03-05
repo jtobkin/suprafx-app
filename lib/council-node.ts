@@ -65,9 +65,10 @@ async function nodeSign(nodeId: string, message: string): Promise<string> {
 async function computeMakerEarmarks(db: any, makerAddress: string): Promise<{ totalEarmarked: number; earmarkDetails: Array<{ rfqId: string; quoteId: string; amount: number; status: string }> }> {
   // Get all quote_registered events for this maker that reached consensus
   const { data: quoteEvents } = await db.from('council_event_chain')
-    .select('id, rfq_id, payload, consensus_reached, sequence_number')
+    .select('id, rfq_id, payload, consensus_reached, consensus_decision, sequence_number')
     .eq('event_type', 'quote_registered')
     .eq('consensus_reached', true)
+    .eq('consensus_decision', 'approved')
     .order('created_at', { ascending: true });
 
   if (!quoteEvents?.length) return { totalEarmarked: 0, earmarkDetails: [] };
@@ -174,9 +175,10 @@ export interface ProcessEventResult {
   eventId: string;
   eventHash: string;
   consensusReached: boolean;
+  consensusDecision: 'approved' | 'rejected' | 'pending';
   approvals: number;
   rejections: number;
-  votes: Array<{ nodeId: string; decision: string; signature: string }>;
+  votes: Array<{ nodeId: string; decision: string; signature: string; reason?: string }>;
 }
 
 /**
@@ -249,7 +251,8 @@ export async function processEvent(
         consensusReached: existing.consensus_reached,
         approvals: (existingVotes || []).filter((v: any) => v.decision === 'approve').length,
         rejections: (existingVotes || []).filter((v: any) => v.decision === 'reject').length,
-        votes: (existingVotes || []).map((v: any) => ({ nodeId: v.node_id, decision: v.decision, signature: v.signature })),
+        votes: (existingVotes || []).map((v: any) => ({ nodeId: v.node_id, decision: v.decision, signature: v.signature, reason: v.reason })),
+        consensusDecision: existing.consensus_reached ? 'approved' : 'pending',
       };
     }
     throw new Error(`Failed to create event: ${eventErr.message}`);
@@ -258,7 +261,7 @@ export async function processEvent(
   const eventId = event.id;
 
   // Each node votes independently
-  const votes: Array<{ nodeId: string; decision: string; signature: string }> = [];
+  const votes: Array<{ nodeId: string; decision: string; signature: string; reason?: string }> = [];
   let approvals = 0;
   let rejections = 0;
 
@@ -268,7 +271,7 @@ export async function processEvent(
 
     // Auto-add vault capacity check for quote_registered
     const allChecks = [...(checks || [])];
-    if (eventType === 'quote_registered' && payload.makerAddress && payload.rate) {
+    if (eventType === 'quote_registered' && payload.makerAddress && payload.rate && payload.makerAddress !== 'auto-maker-bot') {
       const rfqSize = payload.size || 0;
       const quoteRate = payload.rate || 0;
       const notional = rfqSize * quoteRate;
@@ -287,7 +290,7 @@ export async function processEvent(
     }
 
     // Auto-add vault capacity check for match_confirmed (re-verify at match time)
-    if (eventType === 'match_confirmed' && payload.makerAddress && payload.rate && payload.size) {
+    if (eventType === 'match_confirmed' && payload.makerAddress && payload.rate && payload.size && payload.makerAddress !== 'auto-maker-bot') {
       const notional = payload.size * payload.rate;
       allChecks.push({
         name: 'vault_capacity_at_match',
@@ -337,7 +340,7 @@ export async function processEvent(
     if (decision === 'approve') approvals++;
     else rejections++;
 
-    votes.push({ nodeId, decision, signature });
+    votes.push({ nodeId, decision, signature, reason });
 
     // Update this node's view
     await db.from('council_node_views').upsert({
@@ -353,11 +356,16 @@ export async function processEvent(
     }, { onConflict: 'node_id,rfq_id' });
   }
 
-  // Check consensus
-  const consensusReached = approvals >= THRESHOLD;
+  // Check consensus — both approval and rejection require majority
+  const approvalConsensus = approvals >= THRESHOLD;
+  const rejectionConsensus = rejections >= THRESHOLD;
+  const consensusReached = approvalConsensus || rejectionConsensus;
+  const consensusDecision = approvalConsensus ? 'approved' : rejectionConsensus ? 'rejected' : 'pending';
+
   if (consensusReached) {
     await db.from('council_event_chain').update({
       consensus_reached: true,
+      consensus_decision: consensusDecision,
       consensus_at: now.toISOString(),
     }).eq('id', eventId);
   }
@@ -373,7 +381,7 @@ export async function processEvent(
 
     // Each node "sees" all votes (simulated — in production they'd receive broadcasts)
     votesSeen[eventHash] = votes.filter(v => v.decision === 'approve').map(v => v.nodeId);
-    consensusConfirmed[eventHash] = (votesSeen[eventHash]?.length || 0) >= THRESHOLD;
+    consensusConfirmed[eventHash] = approvalConsensus;
 
     await db.from('council_node_views').update({
       votes_seen_per_event: votesSeen,
@@ -386,7 +394,7 @@ export async function processEvent(
     await db.from('committee_requests').upsert({
       trade_id: tradeId,
       verification_type: eventType,
-      status: consensusReached ? 'approved' : 'rejected',
+      status: consensusDecision,
       approvals,
       rejections,
       threshold: THRESHOLD,
@@ -408,7 +416,7 @@ export async function processEvent(
     }
   }
 
-  return { eventId, eventHash, consensusReached, approvals, rejections, votes };
+  return { eventId, eventHash, consensusReached, consensusDecision, approvals, rejections, votes };
 }
 
 // =====================================================

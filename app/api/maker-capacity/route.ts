@@ -20,9 +20,10 @@ export async function GET(req: NextRequest) {
 
   // Compute active earmarks from council event chain
   const { data: quoteEvents } = await db.from('council_event_chain')
-    .select('id, rfq_id, payload, consensus_reached, sequence_number')
+    .select('id, rfq_id, payload, consensus_reached, consensus_decision, sequence_number')
     .eq('event_type', 'quote_registered')
-    .eq('consensus_reached', true);
+    .eq('consensus_reached', true)
+    .eq('consensus_decision', 'approved');
 
   let totalEarmarked = 0;
   const activeEarmarks: Array<{ rfqId: string; quoteId: string; amount: number }> = [];
