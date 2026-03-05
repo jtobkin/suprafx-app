@@ -921,33 +921,6 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const openRfqs = rfqs.filter(r => r.status === "open")
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-  // === TIMEOUT TRIGGER: fires ONCE per expired trade ===
-  const processedTimeouts = useRef(new Set<string>());
-  useEffect(() => {
-    if (!trades) return;
-    for (const t of trades) {
-      const key = t.id + ':' + t.status;
-      if (processedTimeouts.current.has(key)) continue;
-
-      let shouldFire = false;
-      if (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline) < new Date()) shouldFire = true;
-      if (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline) < new Date()) shouldFire = true;
-
-      if (shouldFire) {
-        processedTimeouts.current.add(key);
-        console.log("[SupraFX] Timeout trigger for trade:", t.id, "status:", t.status);
-        fetch("/api/timeout-trade", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tradeId: t.id }),
-        }).then(r => r.json()).then(data => {
-          console.log("[SupraFX] Timeout result:", JSON.stringify(data));
-          if (onUpdate) onUpdate();
-        }).catch(err => console.error("[SupraFX] Timeout error:", err));
-      }
-    }
-  }, [trades, onUpdate]);
-
   const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
   const activeTrades = (trades || [])
     .filter(t => !terminalStatuses.includes(t.status))

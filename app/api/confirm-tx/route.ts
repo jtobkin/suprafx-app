@@ -94,11 +94,18 @@ export async function POST(req: NextRequest) {
       const { verified } = await runCommittee(db, tradeId, 'verify_taker_tx', trade.source_chain, txHash, tradeInfo);
 
       if (verified) {
+        // Update status first
         await db.from('trades').update({
           status: 'taker_verified',
           taker_tx_confirmed_at: new Date().toISOString(),
-          maker_deadline: new Date(Date.now() + 1 * 60 * 1000).toISOString(), // 1 min for testing (production: 30 min)
         }).eq('id', tradeId);
+
+        // Set maker deadline as a SEPARATE write to guarantee it commits
+        const makerDeadline = new Date(Date.now() + 1 * 60 * 1000).toISOString(); // 1 min for testing (production: 30 min)
+        await db.from('trades').update({
+          maker_deadline: makerDeadline,
+        }).eq('id', tradeId);
+        console.log('[SupraFX] Maker deadline set:', makerDeadline, 'for trade:', tradeId);
 
         // === AUTO MAKER BOT: Send SUPRA to taker ===
         if (trade.maker_address === 'auto-maker-bot') {

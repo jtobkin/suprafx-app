@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { WalletProvider, useWallet } from "@/components/WalletProvider";
 import Header from "@/components/Header";
 import ProfilePanel from "@/components/ProfilePanel";
@@ -236,6 +236,43 @@ function Dashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchAll]);
   useEffect(() => { const iv = setInterval(fetchAll, 2000); return () => clearInterval(iv); }, [fetchAll]);
+
+  // === TIMEOUT ENFORCEMENT: check for expired deadlines every poll ===
+  const processedTimeoutsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!trades?.length) return;
+    const now = new Date();
+    for (const t of trades) {
+      // Taker timeout: status open + taker_deadline expired
+      if (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline) < now) {
+        const key = `taker:${t.id}`;
+        if (processedTimeoutsRef.current.has(key)) continue;
+        processedTimeoutsRef.current.add(key);
+        console.log('[SupraFX] Taker timeout detected:', t.id);
+        fetch('/api/timeout-trade', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tradeId: t.id }),
+        }).then(r => r.json()).then(d => {
+          console.log('[SupraFX] Taker timeout result:', JSON.stringify(d));
+          fetchAll();
+        }).catch(() => {});
+      }
+      // Maker default: status taker_verified + maker_deadline expired
+      if (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline) < now) {
+        const key = `maker:${t.id}`;
+        if (processedTimeoutsRef.current.has(key)) continue;
+        processedTimeoutsRef.current.add(key);
+        console.log('[SupraFX] Maker default detected:', t.id);
+        fetch('/api/timeout-trade', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tradeId: t.id }),
+        }).then(r => r.json()).then(d => {
+          console.log('[SupraFX] Maker default result:', JSON.stringify(d));
+          fetchAll();
+        }).catch(() => {});
+      }
+    }
+  }, [trades, fetchAll]);
 
   // Timeout enforcement: client-side CountdownTimer is primary trigger, Vercel cron is backup
 
