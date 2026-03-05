@@ -213,7 +213,7 @@ function Dashboard() {
       supabase.from("trades").select("*").order("created_at", { ascending: false }),
       supabase.from("rfqs").select("*").order("created_at", { ascending: false }),
       supabase.from("agents").select("*").order("created_at", { ascending: false }),
-      supabase.from("committee_requests").select("*").order("created_at", { ascending: false }),
+      fetch("/api/committee").then(r => r.json()).then(d => ({ data: d.requests || [], error: null })).catch(() => ({ data: [], error: null })),
       supabase.from("quotes").select("*").order("created_at", { ascending: false }),
     ]);
     if (t.data) setTrades(t.data);

@@ -45,8 +45,17 @@ export default function CommitteePanel({ nodes, requests, trades, rfqs }: Props)
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.from("committee_votes").select("*").order("created_at", { ascending: false }).limit(100)
-      .then(({ data }) => { if (data) setVotes(data); });
+    // Fetch via server API to bypass any RLS issues
+    fetch("/api/committee")
+      .then(r => r.json())
+      .then(data => {
+        if (data.votes) setVotes(data.votes);
+      })
+      .catch(() => {
+        // Fallback to direct Supabase
+        supabase.from("committee_votes").select("*").order("created_at", { ascending: false }).limit(200)
+          .then(({ data }) => { if (data) setVotes(data); });
+      });
   }, [requests]);
 
   // Group requests by trade
