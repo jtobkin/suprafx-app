@@ -2,6 +2,73 @@
 import { useState, useEffect, useCallback } from "react";
 import { useWallet, LinkedAddress } from "./WalletProvider";
 
+
+function ReputationHistory({ address }: { address: string }) {
+  const [open, setOpen] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!open || loaded || !address) return;
+    fetch(`/api/reputation-history?address=${encodeURIComponent(address)}`)
+      .then(r => r.json())
+      .then(data => {
+        setHistory(data.history || []);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [open, loaded, address]);
+
+  return (
+    <div className="mt-3">
+      <button onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 text-[12px] font-medium transition-colors w-full"
+        style={{ color: "var(--t2)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+        <span style={{ fontSize: 8 }}>{open ? "\u25bc" : "\u25b6"}</span>
+        Reputation History
+        {loaded && <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>({history.length})</span>}
+      </button>
+      {open && (
+        <div className="mt-2 rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          {!loaded ? (
+            <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>Loading...</div>
+          ) : history.length === 0 ? (
+            <div className="px-3 py-3 text-[12px]" style={{ color: "var(--t3)" }}>No reputation changes yet. Complete a trade to build your score.</div>
+          ) : (
+            <div>
+              {history.map((h: any, i: number) => {
+                const isPositive = h.change > 0;
+                const isTimeout = h.eventType === "taker_timed_out";
+                const isDefault = h.eventType === "maker_defaulted";
+                const color = isPositive ? "var(--positive)" : "var(--negative)";
+                const icon = isPositive ? "+" : isTimeout ? "\u23f1" : isDefault ? "\u26a0" : "-";
+                const timeStr = new Date(h.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + new Date(h.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                return (
+                  <div key={i} className="flex items-center gap-3 px-3 py-2 text-[11px]"
+                    style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none",
+                      background: isPositive ? "rgba(34,197,94,0.02)" : isDefault || isTimeout ? "rgba(239,68,68,0.02)" : "transparent" }}>
+                    <span className="w-5 text-center font-bold" style={{ color }}>{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium" style={{ color: "var(--t1)" }}>
+                        {h.eventType === "settlement" ? "Trade Settled" : isTimeout ? "Taker Timeout" : isDefault ? "Maker Default" : h.eventType}
+                      </div>
+                      <div className="text-[10px] truncate" style={{ color: "var(--t3)" }}>{h.details}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="mono font-bold" style={{ color }}>{h.changeLabel}</div>
+                      <div className="mono text-[9px]" style={{ color: "var(--t3)" }}>{timeStr}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProfilePanel({ open, onClose, initialTab = "profile" }: { open: boolean; onClose: () => void; initialTab?: "profile" | "vault" }) {
   const { supraAddress, profile, isVerified, isDemo, linkEvmAddress, disconnect, supraShort } = useWallet();
   const [linking, setLinking] = useState(false);
@@ -187,6 +254,10 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
                     </div>
                     <div className="text-[11px]" style={{ color: "var(--t3)" }}>timeouts</div>
                   </div>
+                </div>
+                {/* Reputation History */}
+                <ReputationHistory address={supraAddress || ""} />
+                <div style={{ display: "none" }}>
                 </div>
                 <div className="mt-2 text-[11px] px-2 py-1.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
                   Taker timeout: -33% rep. Maker default: -67% rep + deposit liquidated. 3 timeouts/month = suspended.

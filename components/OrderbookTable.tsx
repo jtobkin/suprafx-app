@@ -1,5 +1,5 @@
 "use client";
-// BUILD_VERSION: earmark-v5-vault-fix
+// BUILD_VERSION: polish-v1-rep-terminal-retry
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
@@ -1412,18 +1412,48 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                       <span className="mono text-[13px] w-24 shrink-0">{t.size} {baseClean}</span>
                       <span className="mono text-[13px] w-28 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)} {quoteClean}</span>
                       <span className="text-[12px] w-36 shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} → {t.dest_chain}</span>
-                      <span className="mono text-[13px] w-16 shrink-0" style={{ color: t.settle_ms ? "var(--positive)" : "var(--t3)" }}>
-                        {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : "—"}
+                      <span className="mono text-[13px] w-16 shrink-0" style={{ color: t.settle_ms ? "var(--positive)" : t.status === "taker_timed_out" || t.status === "maker_defaulted" ? "var(--negative)" : "var(--t3)" }}>
+                        {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : t.status === "taker_timed_out" ? "T/O" : t.status === "maker_defaulted" ? "DEF" : "—"}
                       </span>
                       <div className="flex-1" />
-                      <span className={`tag tag-${t.status}`}>
-                        {t.status === "settled" ? "Settled" : t.status.replace(/_/g, " ")}
+                      <span className={`tag tag-${t.status}`} style={
+                        t.status === "taker_timed_out" ? { background: "rgba(239,68,68,0.15)", color: "var(--negative)", fontWeight: 600 } :
+                        t.status === "maker_defaulted" ? { background: "rgba(239,68,68,0.15)", color: "var(--negative)", fontWeight: 600 } :
+                        t.status === "settled" ? { background: "rgba(34,197,94,0.15)", color: "var(--positive)", fontWeight: 600 } : {}
+                      }>
+                        {t.status === "settled" ? "Settled" :
+                         t.status === "taker_timed_out" ? "Taker Timed Out" :
+                         t.status === "maker_defaulted" ? "Maker Defaulted" :
+                         t.status.replace(/_/g, " ")}
                       </span>
                       <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
                     </div>
 
                     {isExpanded && (
                       <div className="px-6 pb-4 pt-1" style={{ background: "var(--bg-raised)" }}>
+                        {/* Terminal status banner */}
+                        {t.status === "taker_timed_out" && (
+                          <div className="px-3 py-2 rounded mb-3 flex items-center gap-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
+                            <span style={{ color: "var(--negative)", fontSize: 14 }}>⏱</span>
+                            <div>
+                              <div className="text-[12px] font-semibold" style={{ color: "var(--negative)" }}>Taker Timed Out</div>
+                              <div className="text-[11px]" style={{ color: "var(--t3)" }}>
+                                {t.taker_address === supraAddress ? "You did not settle within the deadline. -33% reputation." : "Taker failed to settle. Earmark released."}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {t.status === "maker_defaulted" && (
+                          <div className="px-3 py-2 rounded mb-3 flex items-center gap-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
+                            <span style={{ color: "var(--negative)", fontSize: 14 }}>⚠</span>
+                            <div>
+                              <div className="text-[12px] font-semibold" style={{ color: "var(--negative)" }}>Maker Defaulted</div>
+                              <div className="text-[11px]" style={{ color: "var(--t3)" }}>
+                                {t.maker_address === supraAddress ? "You did not settle within the deadline. -67% reputation, deposit liquidated." : "Maker defaulted. You have been repaid from their security deposit."}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {/* --- Trade Summary --- */}
                         <div className="grid grid-cols-3 gap-6 mb-4">
                           <div>

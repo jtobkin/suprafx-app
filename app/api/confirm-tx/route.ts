@@ -69,8 +69,18 @@ export async function POST(req: NextRequest) {
     if (!trade) return NextResponse.json({ error: 'Trade not found' }, { status: 404 });
 
     if (side === 'taker') {
+      // Allow retry: if taker_sent (TX submitted but not verified), allow new hash
+      if (trade.status === 'taker_sent') {
+        console.log('[SupraFX] Taker TX retry for trade:', tradeId);
+        // Reset to open, update hash
+        await db.from('trades').update({
+          status: 'open',
+          taker_tx_hash: null,
+        }).eq('id', tradeId);
+        // Continue with normal open flow below
+      }
       if (trade.status !== 'open') {
-        return NextResponse.json({ error: 'Trade not in open state' }, { status: 400 });
+        return NextResponse.json({ error: `Cannot submit taker TX: trade is ${trade.status}` }, { status: 400 });
       }
 
       // Update to taker_sent
@@ -268,11 +278,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, status: 'taker_sent', verified: false });
 
     } else if (side === 'maker') {
-      // Re-fetch trade to get latest status (might have been defaulted by timeout)
+      // Re-fetch trade to get latest status
       const { data: freshTrade } = await db.from('trades').select('status, maker_deadline').eq('id', tradeId).single();
       const currentStatus = freshTrade?.status || trade.status;
-      
-      if (currentStatus !== 'taker_verified') {
+
+      // Allow retry: if maker_sent (TX submitted but not verified), allow new hash
+      if (currentStatus === 'maker_sent') {
+        console.log('[SupraFX] Maker TX retry for trade:', tradeId);
+        await db.from('trades').update({
+          status: 'taker_verified',
+          maker_tx_hash: null,
+        }).eq('id', tradeId);
+        // Continue with taker_verified flow below
+      } else if (currentStatus !== 'taker_verified') {
         return NextResponse.json({ error: `Cannot settle: trade is ${currentStatus}`, status: currentStatus }, { status: 400 });
       }
       
