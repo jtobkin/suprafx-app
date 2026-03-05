@@ -4,12 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { verifySepoliaTx } from '@/lib/chains';
 import { updateReputation } from '@/lib/reputation';
-import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation, buildAttestationBundle } from '@/lib/bot-wallets';
-import { getTradeActions } from '@/lib/signed-actions';
-import { generateMultisig, councilVerifyAndSign } from '@/lib/council-sign';
+import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation } from '@/lib/bot-wallets';
+import { generateMultisig } from '@/lib/committee-sig';
 import { storeSignedAction } from '@/lib/signed-actions';
 import { botSignAction } from '@/lib/bot-signing';
-import { releaseEarmark } from '@/lib/vault';
 
 const COMMITTEE_NODES = ['N-1', 'N-2', 'N-3', 'N-4', 'N-5'];
 
@@ -25,35 +23,38 @@ async function verifyOnChain(chain: string, txHash: string): Promise<boolean> {
 }
 
 async function runCommittee(db: any, tradeId: string, verificationType: string, chain: string, txHash: string, tradeData?: any) {
-  // Each council node independently verifies — they run in parallel via councilVerifyAndSign
-  const checks: Array<{ name: string; fn: () => Promise<{ passed: boolean; reason?: string }> }> = [];
+  const verified = await verifyOnChain(chain, txHash);
 
-  if (verificationType === 'verify_taker_tx' || verificationType === 'verify_maker_tx') {
-    checks.push({
-      name: 'on_chain_verification',
-      fn: async () => {
-        const verified = await verifyOnChain(chain, txHash);
-        return { passed: verified, reason: verified ? undefined : 'TX not verified on chain' };
-      },
-    });
-    checks.push({
-      name: 'tx_hash_format',
-      fn: async () => ({ passed: !!(txHash && txHash.length > 10) }),
-    });
-  }
-
-  if (verificationType === 'approve_reputation') {
-    checks.push({ name: 'settlement_confirmed', fn: async () => ({ passed: true }) });
-  }
-
-  const result = await councilVerifyAndSign(
+  // Generate multisig signatures
+  const multisig = generateMultisig(
+    tradeId,
     verificationType,
-    { tradeId, chain, txHash, ...tradeData },
-    checks,
-    { tradeId, db },
+    verified ? "approved" : "rejected",
+    tradeData || {},
   );
 
-  return { verified: result.decision === 'approved', multisig: { aggregateHash: result.aggregateHash, signatures: result.votes } };
+  await db.from('committee_requests').upsert({
+    trade_id: tradeId,
+    verification_type: verificationType,
+    status: verified ? 'approved' : 'pending',
+    approvals: verified ? 5 : 0,
+    rejections: verified ? 0 : 5,
+    resolved_at: verified ? new Date().toISOString() : null,
+  }, { onConflict: 'trade_id,verification_type' });
+
+  for (const sig of multisig.signatures) {
+    await db.from('committee_votes').upsert({
+      trade_id: tradeId,
+      node_id: sig.nodeId,
+      verification_type: verificationType,
+      decision: verified ? 'approve' : 'reject',
+      chain,
+      tx_hash: txHash,
+      signature: sig.signature,
+    }, { onConflict: 'trade_id,node_id,verification_type' });
+  }
+
+  return { verified, multisig };
 }
 
 export async function POST(req: NextRequest) {
@@ -94,18 +95,10 @@ export async function POST(req: NextRequest) {
       const { verified } = await runCommittee(db, tradeId, 'verify_taker_tx', trade.source_chain, txHash, tradeInfo);
 
       if (verified) {
-        // Update status first
         await db.from('trades').update({
           status: 'taker_verified',
           taker_tx_confirmed_at: new Date().toISOString(),
         }).eq('id', tradeId);
-
-        // Set maker deadline as a SEPARATE write to guarantee it commits
-        const makerDeadline = new Date(Date.now() + 1 * 60 * 1000).toISOString(); // 1 min for testing (production: 30 min)
-        await db.from('trades').update({
-          maker_deadline: makerDeadline,
-        }).eq('id', tradeId);
-        console.log('[SupraFX] Maker deadline set:', makerDeadline, 'for trade:', tradeId);
 
         // === AUTO MAKER BOT: Send SUPRA to taker ===
         if (trade.maker_address === 'auto-maker-bot') {
@@ -176,45 +169,17 @@ export async function POST(req: NextRequest) {
             await updateReputation(trade.taker_address, settleMs);
             await updateReputation(trade.maker_address, settleMs);
 
-            // Release earmark on settlement
-            try {
-              const { data: acceptedQuote } = await db.from('quotes')
-                .select('id').eq('rfq_id', trade.rfq_id).eq('status', 'accepted').single();
-              if (acceptedQuote) await releaseEarmark(acceptedQuote.id, 'trade_settled');
-            } catch {}
-
             const { data: takerAgent } = await db.from('agents').select('rep_total, trade_count')
               .eq('wallet_address', trade.taker_address).single();
 
             // Attestation on-chain
             let attestationTxHash = '';
             try {
-              // Build full attestation bundle with audit trail
-              const tradeActions = await getTradeActions(tradeId);
-              const bundle = await buildAttestationBundle(
-                tradeId,
-                repResult.multisig.aggregateHash,
-                settleMs,
-                {
-                  displayId: trade.display_id,
-                  pair: trade.pair, size: trade.size, rate: trade.rate,
-                  sourceChain: trade.source_chain, destChain: trade.dest_chain,
-                  takerAddress: trade.taker_address, makerAddress: trade.maker_address,
-                  takerSettlementAddress: trade.taker_settlement_address,
-                  makerSettlementAddress: trade.maker_settlement_address,
-                  takerTxHash: trade.taker_tx_hash || txHash, makerTxHash: makerTxHash,
-                },
-                {
-                  taker: takerAgent ? { address: trade.taker_address, oldScore: Number(takerAgent.rep_total), newScore: Number(takerAgent.rep_total), speedBonus: 0 } : undefined,
-                },
-                tradeActions,
-              );
               attestationTxHash = await submitCommitteeAttestation(
                 tradeId,
                 repResult.multisig.aggregateHash,
                 settleMs,
                 takerAgent ? { address: trade.taker_address, newScore: takerAgent.rep_total } : undefined,
-                bundle,
               );
               await db.from('committee_requests').update({
                 attestation_tx: attestationTxHash,
@@ -252,17 +217,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, status: 'taker_sent', verified: false });
 
     } else if (side === 'maker') {
-      // Re-fetch trade to get latest status (might have been defaulted by timeout)
-      const { data: freshTrade } = await db.from('trades').select('status, maker_deadline').eq('id', tradeId).single();
-      const currentStatus = freshTrade?.status || trade.status;
-      
-      if (currentStatus !== 'taker_verified') {
-        return NextResponse.json({ error: `Cannot settle: trade is ${currentStatus}`, status: currentStatus }, { status: 400 });
-      }
-      
-      // Check if maker deadline has expired — if so, reject (timeout will process it)
-      if (freshTrade?.maker_deadline && new Date(freshTrade.maker_deadline) < new Date()) {
-        return NextResponse.json({ error: 'Maker deadline has expired. Settlement Council is processing the default.', status: 'maker_defaulted' }, { status: 400 });
+      if (trade.status !== 'taker_verified') {
+        return NextResponse.json({ error: 'Trade not in taker_verified state' }, { status: 400 });
       }
 
       await db.from('trades').update({ maker_tx_hash: txHash, status: 'maker_sent' }).eq('id', tradeId);
@@ -299,13 +255,6 @@ export async function POST(req: NextRequest) {
         await updateReputation(trade.taker_address, settleMs);
         await updateReputation(trade.maker_address, settleMs);
 
-        // Release earmark on settlement
-        try {
-          const { data: acceptedQuote } = await db.from('quotes')
-            .select('id').eq('rfq_id', trade.rfq_id).eq('status', 'accepted').single();
-          if (acceptedQuote) await releaseEarmark(acceptedQuote.id, 'trade_settled');
-        } catch {}
-
         const { data: takerAgent } = await db.from('agents').select('rep_total, trade_count')
           .eq('wallet_address', trade.taker_address).single();
 
@@ -314,31 +263,11 @@ export async function POST(req: NextRequest) {
           // Always submit attestation to Supra L1 — every trade gets an on-chain record
           // regardless of which chains the trade settled on
           if (process.env.BOT_SUPRA_PRIVATE_KEY) {
-            const tradeActions = await getTradeActions(tradeId);
-            const bundle = await buildAttestationBundle(
-              tradeId,
-              repResult.multisig.aggregateHash,
-              settleMs,
-              {
-                displayId: trade.display_id,
-                pair: trade.pair, size: trade.size, rate: trade.rate,
-                sourceChain: trade.source_chain, destChain: trade.dest_chain,
-                takerAddress: trade.taker_address, makerAddress: trade.maker_address,
-                takerSettlementAddress: trade.taker_settlement_address,
-                makerSettlementAddress: trade.maker_settlement_address,
-                takerTxHash: trade.taker_tx_hash, makerTxHash: txHash,
-              },
-              {
-                taker: takerAgent ? { address: trade.taker_address, oldScore: Number(takerAgent.rep_total), newScore: Number(takerAgent.rep_total), speedBonus: 0 } : undefined,
-              },
-              tradeActions,
-            );
             attestationTxHash = await submitCommitteeAttestation(
               tradeId,
               repResult.multisig.aggregateHash,
               settleMs,
               takerAgent ? { address: trade.taker_address, newScore: takerAgent.rep_total } : undefined,
-              bundle,
             );
             await db.from('committee_requests').update({
               attestation_tx: attestationTxHash,
