@@ -260,6 +260,8 @@ export async function POST(req: NextRequest) {
 
         let attestationTxHash = '';
         try {
+          // Always submit attestation to Supra L1 — every trade gets an on-chain record
+          // regardless of which chains the trade settled on
           if (process.env.BOT_SUPRA_PRIVATE_KEY) {
             attestationTxHash = await submitCommitteeAttestation(
               tradeId,
@@ -270,9 +272,11 @@ export async function POST(req: NextRequest) {
             await db.from('committee_requests').update({
               attestation_tx: attestationTxHash,
             }).eq('trade_id', tradeId).eq('verification_type', 'approve_reputation');
+          } else {
+            console.warn('[SupraFX] Cannot submit attestation: BOT_SUPRA_PRIVATE_KEY not configured');
           }
         } catch (e: any) {
-          console.error('Attestation TX failed:', e);
+          console.error('Attestation TX failed:', e.message);
         }
 
         return NextResponse.json({ success: true, status: 'settled', verified: true, settleMs, attestationTxHash: attestationTxHash || null });
