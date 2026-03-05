@@ -206,23 +206,20 @@ export async function councilVerifyAndSign(
       resolved_at: new Date().toISOString(),
     }, { onConflict: 'trade_id,verification_type' });
 
-    // Store individual node votes — delete old ones first, then insert fresh
-    if (storeOpts.tradeId) {
-      await db.from('committee_votes')
-        .delete()
-        .eq('trade_id', storeOpts.tradeId)
-        .eq('verification_type', actionType);
-    }
+    // Store individual node votes — try insert, ignore duplicates
     for (const vote of votes) {
-      await db.from('committee_votes').insert({
-        trade_id: storeOpts.tradeId || null,
-        node_id: vote.nodeId,
-        verification_type: actionType,
-        decision: vote.decision,
-        chain: '',
-        tx_hash: '',
-        signature: vote.signature,
-      });
+      try {
+        await db.from('committee_votes').insert({
+          trade_id: storeOpts.tradeId || null,
+          node_id: vote.nodeId,
+          verification_type: actionType,
+          decision: vote.decision,
+          chain: '',
+          tx_hash: '',
+          signature: vote.signature,
+          created_at: new Date().toISOString(),
+        });
+      } catch {}
     }
 
     // Store council action in signed_actions audit trail
