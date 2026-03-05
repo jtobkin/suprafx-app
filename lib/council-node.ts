@@ -144,13 +144,13 @@ async function checkMakerCapacity(db: any, makerAddress: string, notionalValue: 
   reason?: string;
 }> {
   // Get vault balance
-  const { data: balance } = await db.from('vault_balances')
-    .select('balance')
+  const { data: vaultRow } = await db.from('vault_balances')
+    .select('total_deposited, available, matching_limit, committed')
     .eq('maker_address', makerAddress)
     .single();
 
-  const vaultBalance = Number(balance?.balance || 0);
-  const matchingLimit = vaultBalance * 0.9; // 90% of deposit
+  const vaultBalance = Number(vaultRow?.total_deposited || 0);
+  const matchingLimit = Number(vaultRow?.matching_limit || vaultBalance * 0.9);
 
   // Compute active earmarks from event chain
   const { totalEarmarked } = await computeMakerEarmarks(db, makerAddress);

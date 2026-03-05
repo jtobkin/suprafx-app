@@ -1,5 +1,5 @@
 "use client";
-// BUILD_VERSION: earmark-v4-2026-03-05
+// BUILD_VERSION: earmark-v5-vault-fix
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
