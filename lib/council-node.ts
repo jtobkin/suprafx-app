@@ -372,6 +372,25 @@ export async function checkDeadlines(): Promise<string[]> {
         rfqId: event.rfq_id,
       });
 
+      // Build and store attestation
+      try {
+        const att = await buildAttestation(event.rfq_id, tradeId, timeoutType);
+        if (att) {
+          // Post to Supra chain
+          try {
+            const { submitCommitteeAttestation } = await import('./bot-wallets');
+            if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+              const attTxHash = await submitCommitteeAttestation(tradeId, att.chainHash);
+              await db.from('council_attestations').update({
+                attestation_tx_hash: attTxHash,
+                posted_to_chain: true,
+                posted_at: new Date().toISOString(),
+              }).eq('id', att.attestationId);
+            }
+          } catch (e: any) { console.error('[Council] Supra attestation post error:', e.message); }
+        }
+      } catch (e: any) { console.error('[Council] Attestation build error:', e.message); }
+
       processed.push(`${timeoutType}:${tradeId}`);
     }
   }

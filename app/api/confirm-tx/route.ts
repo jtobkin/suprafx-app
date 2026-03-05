@@ -7,7 +7,7 @@ import { updateReputation } from '@/lib/reputation';
 import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation, buildAttestationBundle } from '@/lib/bot-wallets';
 import { getTradeActions } from '@/lib/signed-actions';
 import { generateMultisig, councilVerifyAndSign } from '@/lib/council-sign';
-import { processEvent } from '@/lib/council-node';
+import { processEvent, buildAttestation } from '@/lib/council-node';
 import { storeSignedAction } from '@/lib/signed-actions';
 import { botSignAction } from '@/lib/bot-signing';
 import { releaseEarmark } from '@/lib/vault';
@@ -219,6 +219,12 @@ export async function POST(req: NextRequest) {
                 },
                 tradeActions,
               );
+              // Build council attestation from event chain
+              try {
+                const att = await buildAttestation(trade.rfq_id, tradeId, 'settled');
+                if (att) console.log('[Council] Attestation built:', att.chainHash.slice(0, 16), 'sigs:', att.signatures);
+              } catch (e: any) { console.error('[Council] Attestation error:', e.message); }
+
               attestationTxHash = await submitCommitteeAttestation(
                 tradeId,
                 repResult.multisig.aggregateHash,
@@ -348,6 +354,12 @@ export async function POST(req: NextRequest) {
               },
               tradeActions,
             );
+            // Build council attestation from event chain
+            try {
+              const att = await buildAttestation(trade.rfq_id, tradeId, 'settled');
+              if (att) console.log('[Council] Attestation built:', att.chainHash.slice(0, 16), 'sigs:', att.signatures);
+            } catch (e: any) { console.error('[Council] Attestation error:', e.message); }
+
             attestationTxHash = await submitCommitteeAttestation(
               tradeId,
               repResult.multisig.aggregateHash,

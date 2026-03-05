@@ -197,6 +197,7 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
   const [events, setEvents] = useState<any[]>([]);
   const [votes, setVotes] = useState<any[]>([]);
   const [signedActions, setSignedActions] = useState<any[]>([]);
+  const [attestation, setAttestation] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
@@ -209,70 +210,46 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
         setEvents(data.events || []);
         setVotes(data.votes || []);
         setSignedActions(data.signedActions || []);
+        setAttestation(data.attestation || null);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
   }, [open, loaded, tradeId]);
 
   const eventLabel: Record<string, string> = {
-    rfq_registered: "RFQ Registered",
-    quote_registered: "Quote Registered",
-    quote_withdrawn: "Quote Withdrawn",
-    rfq_cancelled: "RFQ Cancelled",
-    match_confirmed: "Match Confirmed",
-    taker_tx_verified: "Taker TX Verified",
-    maker_tx_verified: "Maker TX Verified",
-    taker_timed_out: "Taker Timed Out",
-    maker_defaulted: "Maker Defaulted",
-    settlement_attested: "Settlement Attested",
+    rfq_registered: "RFQ Registered", quote_registered: "Quote Registered",
+    quote_withdrawn: "Quote Withdrawn", rfq_cancelled: "RFQ Cancelled",
+    match_confirmed: "Match Confirmed", taker_tx_verified: "Taker TX Verified",
+    maker_tx_verified: "Maker TX Verified", taker_timed_out: "Taker Timed Out",
+    maker_defaulted: "Maker Defaulted", settlement_attested: "Settlement Attested",
   };
 
   const eventColor: Record<string, string> = {
-    rfq_registered: "var(--accent-light)",
-    quote_registered: "var(--warn)",
-    quote_withdrawn: "var(--t3)",
-    rfq_cancelled: "var(--negative)",
-    match_confirmed: "var(--positive)",
-    taker_tx_verified: "#8b5cf6",
-    maker_tx_verified: "#8b5cf6",
-    taker_timed_out: "var(--negative)",
-    maker_defaulted: "var(--negative)",
-    settlement_attested: "var(--positive)",
+    rfq_registered: "var(--accent-light)", quote_registered: "var(--warn)",
+    match_confirmed: "var(--positive)", taker_tx_verified: "#8b5cf6",
+    maker_tx_verified: "#8b5cf6", taker_timed_out: "var(--negative)",
+    maker_defaulted: "var(--negative)", settlement_attested: "var(--positive)",
   };
 
-  const getVotesForEvent = (eventId: string) =>
-    votes.filter((v: any) => v.event_id === eventId);
+  const getVotesForEvent = (eventId: string) => votes.filter((v: any) => v.event_id === eventId);
 
-  // Find related signed action (user signature) for an event
   const getSignedAction = (eventType: string) => {
-    const mapping: Record<string, string> = {
-      rfq_registered: "submit_rfq",
-      quote_registered: "place_quote",
-      match_confirmed: "accept_quote",
-      taker_tx_verified: "confirm_taker_tx",
-      maker_tx_verified: "confirm_maker_tx",
-    };
-    const actionType = mapping[eventType];
-    if (!actionType) return null;
-    return signedActions.find((a: any) => a.action_type === actionType);
+    const m: Record<string, string> = { rfq_registered: "submit_rfq", quote_registered: "place_quote", match_confirmed: "accept_quote", taker_tx_verified: "confirm_taker_tx", maker_tx_verified: "confirm_maker_tx" };
+    return m[eventType] ? signedActions.find((a: any) => a.action_type === m[eventType]) : null;
   };
 
-  const totalEvents = events.length;
+  const nodes = ["N-1", "N-2", "N-3", "N-4", "N-5"];
 
   return (
     <div className="mt-3">
-      <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 text-[12px] mono transition-colors"
-        style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
-        <span style={{ fontSize: 8 }}>{open ? "▼" : "▶"}</span>
-        Event Chain {loaded ? `(${totalEvents} event${totalEvents !== 1 ? "s" : ""})` : "(click to load)"}
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 text-[12px] mono transition-colors" style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+        <span style={{ fontSize: 8 }}>{open ? "\u25bc" : "\u25b6"}</span>
+        Event Chain {loaded ? `(${events.length} events)` : "(click to load)"}
       </button>
       {open && (
         <div className="mt-2 rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
           {!loaded ? (
-            <div className="px-3 py-2 flex items-center gap-2 text-[12px]" style={{ color: "var(--t3)" }}>
-              Loading...
-            </div>
+            <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>Loading...</div>
           ) : events.length === 0 ? (
             <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>No council events recorded.</div>
           ) : (
@@ -284,67 +261,46 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
                 const isExpanded = expandedEvent === evt.id;
                 const userAction = getSignedAction(evt.event_type);
                 const isTerminal = ["taker_timed_out", "maker_defaulted", "settlement_attested"].includes(evt.event_type);
-
                 return (
                   <div key={evt.id} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
-                    {/* Summary row */}
-                    <div className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors"
-                      onClick={() => setExpandedEvent(isExpanded ? null : evt.id)}
-                      style={{ background: isTerminal ? "rgba(239,68,68,0.03)" : i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
+                    <div className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors" onClick={() => setExpandedEvent(isExpanded ? null : evt.id)} style={{ background: isTerminal ? "rgba(239,68,68,0.03)" : "transparent" }}>
                       <span className="mono text-[10px] w-6 shrink-0 text-center font-bold" style={{ color: "var(--t3)" }}>#{evt.sequence_number}</span>
                       <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
-                      <span className="text-[12px] w-40 shrink-0 font-semibold" style={{ color: eventColor[evt.event_type] || "var(--t2)" }}>
-                        {eventLabel[evt.event_type] || evt.event_type.replace(/_/g, " ")}
-                      </span>
+                      <span className="text-[12px] w-40 shrink-0 font-semibold" style={{ color: eventColor[evt.event_type] || "var(--t2)" }}>{eventLabel[evt.event_type] || evt.event_type.replace(/_/g, " ")}</span>
                       <div className="flex items-center gap-2 flex-1 justify-end">
                         {evt.consensus_reached ? (
-                          <span className="mono text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ background: "rgba(34,197,94,0.1)", color: "var(--positive)" }}>
-                            {approvals}/5 ✓
-                          </span>
+                          <span className="mono text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ background: "rgba(34,197,94,0.1)", color: "var(--positive)" }}>{approvals}/5 &#x2713;</span>
                         ) : (
-                          <span className="mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(234,179,8,0.1)", color: "var(--warn)" }}>
-                            {approvals}/5 pending
-                          </span>
+                          <span className="mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(234,179,8,0.1)", color: "var(--warn)" }}>{approvals}/5 pending</span>
                         )}
-                        {evt.deadline_type && (
-                          <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
-                            {evt.deadline_type === "taker_send" ? "taker timer" : "maker timer"}
-                          </span>
-                        )}
-                        <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
+                        {evt.deadline_type && <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>{evt.deadline_type === "taker_send" ? "taker timer" : "maker timer"}</span>}
+                        <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "\u25b2" : "\u25bc"}</span>
                       </div>
                     </div>
-
-                    {/* Expanded detail */}
                     {isExpanded && (
                       <div className="px-4 py-3 space-y-3" style={{ background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
-                        {/* Chain linkage */}
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="flex items-center gap-1">
                             <span className="mono text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Event Hash:</span>
-                            <span className="mono text-[10px] select-all" style={{ color: "var(--t2)" }}>{evt.event_hash.slice(0, 24)}…</span>
+                            <span className="mono text-[10px] select-all" style={{ color: "var(--t2)" }}>{evt.event_hash.slice(0, 24)}...</span>
                           </div>
                           {evt.previous_event_hash && (
                             <div className="flex items-center gap-1">
-                              <span className="mono text-[9px]" style={{ color: "var(--t3)" }}>← prev:</span>
-                              <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{evt.previous_event_hash.slice(0, 16)}…</span>
+                              <span className="mono text-[9px]" style={{ color: "var(--t3)" }}>&#x2190; prev:</span>
+                              <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{evt.previous_event_hash.slice(0, 16)}...</span>
                             </div>
                           )}
                         </div>
-
-                        {/* Payload summary */}
                         {evt.payload && (
                           <div>
                             <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Payload</span>
                             <div className="text-[11px] mono px-2 py-1.5 rounded break-all" style={{ background: "var(--surface-2)", color: "var(--t2)" }}>
-                              {Object.entries(evt.payload).filter(([k]) => !k.includes('signature') && !k.includes('SessionKey')).map(([k, v]) => (
-                                <div key={k}><span style={{ color: "var(--t3)" }}>{k}:</span> {typeof v === 'string' && (v as string).length > 40 ? (v as string).slice(0, 20) + '…' + (v as string).slice(-8) : String(v)}</div>
+                              {Object.entries(evt.payload).filter(([k]: [string, any]) => !k.includes("signature") && !k.includes("SessionKey")).map(([k, v]: [string, any]) => (
+                                <div key={k}><span style={{ color: "var(--t3)" }}>{k}:</span> {typeof v === "string" && v.length > 40 ? v.slice(0, 20) + "..." + v.slice(-8) : String(v)}</div>
                               ))}
                             </div>
                           </div>
                         )}
-
-                        {/* Deadline info */}
                         {evt.deadline && (
                           <div className="flex items-center gap-2 text-[11px]">
                             <span style={{ color: "var(--t3)" }}>Deadline set:</span>
@@ -352,35 +308,22 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
                             <span style={{ color: "var(--t3)" }}>({evt.deadline_type})</span>
                           </div>
                         )}
-
-                        {/* Node votes */}
                         <div>
                           <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Council Node Votes</span>
                           <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-                            {["N-1", "N-2", "N-3", "N-4", "N-5"].map((nodeId, ni) => {
+                            {nodes.map((nodeId, ni) => {
                               const vote = evtVotes.find((v: any) => v.node_id === nodeId);
                               return (
-                                <div key={nodeId} className="flex items-center gap-3 px-3 py-1.5 text-[11px]"
-                                  style={{ borderBottom: ni < 4 ? "1px solid var(--border)" : "none",
-                                    background: vote?.decision === "approve" ? "rgba(16,185,129,0.03)" : "transparent" }}>
+                                <div key={nodeId} className="flex items-center gap-3 px-3 py-1.5 text-[11px]" style={{ borderBottom: ni < 4 ? "1px solid var(--border)" : "none", background: vote?.decision === "approve" ? "rgba(16,185,129,0.03)" : "transparent" }}>
                                   <div className="flex items-center gap-1.5 w-10 shrink-0">
-                                    <div className="w-1.5 h-1.5 rounded-full"
-                                      style={{ background: vote ? (vote.decision === "approve" ? "var(--positive)" : "var(--negative)") : "var(--t3)", opacity: vote ? 1 : 0.3 }} />
+                                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: vote ? (vote.decision === "approve" ? "var(--positive)" : "var(--negative)") : "var(--t3)", opacity: vote ? 1 : 0.3 }} />
                                     <span className="mono font-medium" style={{ color: "var(--t2)" }}>{nodeId}</span>
                                   </div>
                                   {vote ? (
                                     <>
-                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold"
-                                        style={{ background: vote.decision === "approve" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-                                          color: vote.decision === "approve" ? "var(--positive)" : "var(--negative)" }}>
-                                        {vote.decision.toUpperCase()}
-                                      </span>
-                                      <span className="mono text-[10px] truncate flex-1" style={{ color: "var(--t3)" }}>
-                                        sig: {vote.signature.slice(0, 20)}…
-                                      </span>
-                                      <span className="mono text-[10px] shrink-0" style={{ color: "var(--t3)" }}>
-                                        {new Date(vote.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                                      </span>
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold" style={{ background: vote.decision === "approve" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: vote.decision === "approve" ? "var(--positive)" : "var(--negative)" }}>{vote.decision.toUpperCase()}</span>
+                                      <span className="mono text-[10px] truncate flex-1" style={{ color: "var(--t3)" }}>sig: {vote.signature.slice(0, 20)}...</span>
+                                      <span className="mono text-[10px] shrink-0" style={{ color: "var(--t3)" }}>{new Date(vote.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
                                     </>
                                   ) : (
                                     <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>pending</span>
@@ -390,25 +333,13 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
                             })}
                           </div>
                         </div>
-
-                        {/* User signature (if this event has an associated signed action) */}
                         {userAction && (
                           <div>
                             <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>User Signature</span>
                             <div className="space-y-1 text-[10px]">
-                              <div><span style={{ color: "var(--t3)" }}>Signer:</span> <span className="mono select-all" style={{ color: "var(--t1)" }}>{userAction.signer_address}</span></div>
-                              {userAction.signature && userAction.signature.length > 10 && (
-                                <div><span style={{ color: "var(--t3)" }}>Action Sig (ECDSA):</span> <span className="mono select-all break-all" style={{ color: "var(--positive)" }}>{userAction.signature}</span></div>
-                              )}
-                              {userAction.payload_hash && (
-                                <div><span style={{ color: "var(--t3)" }}>Payload Hash:</span> <span className="mono select-all" style={{ color: "var(--t2)" }}>{userAction.payload_hash}</span></div>
-                              )}
-                              {userAction.session_public_key && (
-                                <div><span style={{ color: "var(--t3)" }}>Session Key:</span> <span className="mono select-all break-all" style={{ color: "var(--t2)" }}>{userAction.session_public_key}</span></div>
-                              )}
-                              {userAction.session_auth_signature && userAction.session_auth_signature.length > 10 && (
-                                <div><span style={{ color: "var(--t3)" }}>StarKey Auth:</span> <span className="mono select-all break-all" style={{ color: "var(--positive)" }}>{userAction.session_auth_signature}</span></div>
-                              )}
+                              <div><span style={{ color: "var(--t3)" }}>Signer:</span> <span className="mono" style={{ color: "var(--t1)" }}>{userAction.signer_address}</span></div>
+                              {userAction.signature && userAction.signature.length > 10 && <div><span style={{ color: "var(--t3)" }}>Sig:</span> <span className="mono break-all" style={{ color: "var(--positive)" }}>{userAction.signature}</span></div>}
+                              {userAction.payload_hash && <div><span style={{ color: "var(--t3)" }}>Payload Hash:</span> <span className="mono" style={{ color: "var(--t2)" }}>{userAction.payload_hash}</span></div>}
                             </div>
                           </div>
                         )}
@@ -417,6 +348,36 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
                   </div>
                 );
               })}
+              {attestation && (
+                <div className="px-4 py-3" style={{ borderTop: "1px solid var(--border)", background: "rgba(34,197,94,0.03)" }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="mono text-[10px] uppercase tracking-wider font-semibold" style={{ color: "var(--positive)" }}>On-Chain Attestation</span>
+                    <span className="mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(34,197,94,0.1)", color: "var(--positive)" }}>{attestation.node_signatures?.length || 0} nodes signed</span>
+                    {attestation.posted_to_chain && <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: "rgba(34,197,94,0.15)", color: "var(--positive)" }}>posted to Supra</span>}
+                  </div>
+                  <div className="space-y-1 text-[10px] mono">
+                    <div><span style={{ color: "var(--t3)" }}>Chain Hash:</span> <span className="select-all" style={{ color: "var(--t1)" }}>{attestation.chain_hash}</span></div>
+                    <div><span style={{ color: "var(--t3)" }}>Outcome:</span> <span style={{ color: attestation.outcome === "settled" ? "var(--positive)" : "var(--negative)" }}>{attestation.outcome}</span></div>
+                    <div><span style={{ color: "var(--t3)" }}>Events:</span> <span style={{ color: "var(--t2)" }}>{attestation.event_summary?.length || 0}</span></div>
+                    {attestation.attestation_tx_hash && (
+                      <div><span style={{ color: "var(--t3)" }}>Supra TX: </span><a href={`https://testnet.suprascan.io/tx/${attestation.attestation_tx_hash.replace(/^0x/, "")}`} target="_blank" rel="noopener" className="hover:underline" style={{ color: "var(--accent)" }}>{attestation.attestation_tx_hash.slice(0, 24)}... &#x2197;</a></div>
+                    )}
+                  </div>
+                  {attestation.node_signatures?.length > 0 && (
+                    <div className="mt-2">
+                      <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Node Attestation Signatures</span>
+                      <div className="space-y-0.5">
+                        {attestation.node_signatures.map((ns: any) => (
+                          <div key={ns.nodeId} className="flex items-center gap-2 text-[10px] mono">
+                            <span className="w-8" style={{ color: "var(--positive)" }}>{ns.nodeId}</span>
+                            <span className="truncate" style={{ color: "var(--t3)" }}>{ns.signature.slice(0, 32)}...</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

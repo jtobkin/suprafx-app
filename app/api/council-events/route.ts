@@ -35,9 +35,18 @@ export async function GET(req: NextRequest) {
     .or(tradeId ? `trade_id.eq.${tradeId},rfq_id.eq.${resolvedRfqId}` : `rfq_id.eq.${resolvedRfqId}`)
     .order('created_at', { ascending: true });
 
+  // Get attestation if it exists
+  const { data: attestation } = await db.from('council_attestations')
+    .select('*')
+    .eq('rfq_id', resolvedRfqId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
   return NextResponse.json({
     events: events || [],
     votes: votes || [],
     signedActions: signedActions || [],
+    attestation: attestation || null,
   });
 }
