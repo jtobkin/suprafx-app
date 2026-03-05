@@ -969,12 +969,13 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const openRfqs = rfqs.filter(r => r.status === "open")
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+  const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
   const activeTrades = (trades || [])
-    .filter(t => !["settled", "failed"].includes(t.status))
+    .filter(t => !terminalStatuses.includes(t.status))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const completedTrades = (trades || [])
-    .filter(t => t.status === "settled" || t.status === "failed")
+    .filter(t => terminalStatuses.includes(t.status))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   useEffect(() => {
