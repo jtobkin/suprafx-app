@@ -311,7 +311,7 @@ async function handleSubmitRFQ(body: any) {
     try {
       await processEvent('quote_registered', {
         quoteId: botQuote.id, rfqId: rfq.id, makerAddress: makerAddress,
-        rate: botRate, pair: normalizedPair,
+        rate: botRate, pair: normalizedPair, size: rfq.size,
       }, rfq.id);
     } catch (e: any) { console.error('[Council] quote_registered error:', e.message); }
   }
@@ -580,11 +580,24 @@ async function handlePlaceQuote(body: any) {
   });
 
   // Council event: quote_registered (human)
+  let quoteEventResult;
   try {
-    await processEvent('quote_registered', {
-      quoteId: quote.id, rfqId, makerAddress, rate: parsedRate, pair: rfq.pair,
+    quoteEventResult = await processEvent('quote_registered', {
+      quoteId: quote.id, rfqId, makerAddress, rate: parsedRate, pair: rfq.pair, size: rfq.size,
     }, rfqId);
   } catch (e: any) { console.error('[Council] quote_registered error:', e.message); }
+
+  // If Council rejected the quote (e.g., insufficient vault), cancel it
+  if (quoteEventResult && !quoteEventResult.consensusReached) {
+    await db.from('quotes').update({ status: 'rejected' }).eq('id', quote.id);
+    const rejectReasons = quoteEventResult.votes
+      .filter((v: any) => v.decision === 'reject')
+      .map((v: any) => v.reason || 'rejected')
+      .filter((r: string, i: number, a: string[]) => a.indexOf(r) === i);
+    return NextResponse.json({
+      error: `Council rejected quote: ${rejectReasons.join('; ') || 'insufficient vault capacity'}`,
+    }, { status: 400 });
+  }
 
   // Council co-signs the quote
   const councilResult = await councilVerifyAndSign(

@@ -1246,6 +1246,12 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                                 setShowDepositPrompt(true);
                                 return;
                               }
+                              // Check capacity for this RFQ's notional
+                              const estNotional = r.size * r.reference_price;
+                              if (makerVault.availableCapacity !== undefined && estNotional > makerVault.availableCapacity) {
+                                alert(`Insufficient vault capacity. Need ~${estNotional.toFixed(0)}, available: ${makerVault.availableCapacity.toFixed(0)}`);
+                                return;
+                              }
                               setQuotingRfq(r.id);
                               setQuotePrice(fmtRate(r.reference_price));
                               setShowDepositPrompt(false);

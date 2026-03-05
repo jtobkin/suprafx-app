@@ -53,6 +53,120 @@ async function nodeSign(nodeId: string, message: string): Promise<string> {
 }
 
 // =====================================================
+// EARMARK COMPUTATION (derived from event chain)
+// =====================================================
+
+/**
+ * Compute a maker's committed capital by walking the event chain.
+ * Active earmarks = quote_registered consensus amounts
+ *   MINUS released (quote_withdrawn, rfq_cancelled, match_confirmed for losing quotes,
+ *                   taker_timed_out, maker_tx_verified, maker_defaulted)
+ */
+async function computeMakerEarmarks(db: any, makerAddress: string): Promise<{ totalEarmarked: number; earmarkDetails: Array<{ rfqId: string; quoteId: string; amount: number; status: string }> }> {
+  // Get all quote_registered events for this maker that reached consensus
+  const { data: quoteEvents } = await db.from('council_event_chain')
+    .select('id, rfq_id, payload, consensus_reached, sequence_number')
+    .eq('event_type', 'quote_registered')
+    .eq('consensus_reached', true)
+    .order('created_at', { ascending: true });
+
+  if (!quoteEvents?.length) return { totalEarmarked: 0, earmarkDetails: [] };
+
+  const earmarks: Array<{ rfqId: string; quoteId: string; amount: number; status: string }> = [];
+
+  for (const evt of quoteEvents) {
+    const payload = evt.payload;
+    if (payload.makerAddress !== makerAddress) continue;
+
+    const quoteId = payload.quoteId;
+    const rfqId = evt.rfq_id;
+    const notional = (payload.size || 0) * (payload.rate || 0);
+    if (notional <= 0) continue;
+
+    // Check if this earmark has been released by a subsequent event
+    const { data: laterEvents } = await db.from('council_event_chain')
+      .select('event_type, payload, consensus_reached')
+      .eq('rfq_id', rfqId)
+      .eq('consensus_reached', true)
+      .gt('sequence_number', evt.sequence_number);
+
+    let status = 'active';
+    for (const later of laterEvents || []) {
+      // Quote withdrawn by this maker
+      if (later.event_type === 'quote_withdrawn' && later.payload?.quoteId === quoteId) {
+        status = 'released_withdrawn';
+        break;
+      }
+      // RFQ cancelled
+      if (later.event_type === 'rfq_cancelled') {
+        status = 'released_cancelled';
+        break;
+      }
+      // Match confirmed — release if this quote was NOT the winning one
+      if (later.event_type === 'match_confirmed') {
+        if (later.payload?.quoteId !== quoteId) {
+          status = 'released_not_matched';
+        }
+        // If this IS the winning quote, check for settlement or timeout
+        if (later.payload?.quoteId === quoteId) {
+          // Check for terminal events
+          for (const term of laterEvents || []) {
+            if (term.event_type === 'maker_tx_verified') { status = 'released_settled'; break; }
+            if (term.event_type === 'taker_timed_out') { status = 'released_taker_timeout'; break; }
+            if (term.event_type === 'maker_defaulted') { status = 'liquidated'; break; }
+          }
+        }
+        break;
+      }
+    }
+
+    earmarks.push({ rfqId, quoteId, amount: notional, status });
+  }
+
+  const totalEarmarked = earmarks
+    .filter(e => e.status === 'active')
+    .reduce((sum, e) => sum + e.amount, 0);
+
+  return { totalEarmarked, earmarkDetails: earmarks };
+}
+
+/**
+ * Check if a maker has sufficient vault capacity for a quote.
+ * Returns { eligible, availableCapacity, matchingLimit, totalEarmarked }
+ */
+async function checkMakerCapacity(db: any, makerAddress: string, notionalValue: number): Promise<{
+  eligible: boolean;
+  availableCapacity: number;
+  matchingLimit: number;
+  vaultBalance: number;
+  totalEarmarked: number;
+  reason?: string;
+}> {
+  // Get vault balance
+  const { data: balance } = await db.from('vault_balances')
+    .select('balance')
+    .eq('maker_address', makerAddress)
+    .single();
+
+  const vaultBalance = Number(balance?.balance || 0);
+  const matchingLimit = vaultBalance * 0.9; // 90% of deposit
+
+  // Compute active earmarks from event chain
+  const { totalEarmarked } = await computeMakerEarmarks(db, makerAddress);
+
+  const availableCapacity = matchingLimit - totalEarmarked;
+
+  if (vaultBalance <= 0) {
+    return { eligible: false, availableCapacity: 0, matchingLimit: 0, vaultBalance, totalEarmarked, reason: 'No security deposit' };
+  }
+  if (availableCapacity < notionalValue) {
+    return { eligible: false, availableCapacity, matchingLimit, vaultBalance, totalEarmarked, reason: `Insufficient capacity: need ${notionalValue.toFixed(2)}, available ${availableCapacity.toFixed(2)}` };
+  }
+
+  return { eligible: true, availableCapacity, matchingLimit, vaultBalance, totalEarmarked };
+}
+
+// =====================================================
 // CORE: PROCESS AN EVENT
 // =====================================================
 
@@ -152,21 +266,54 @@ export async function processEvent(
     let decision = 'approve';
     let reason: string | undefined;
 
-    // Run checks if provided
-    if (checks) {
-      for (const check of checks) {
-        try {
-          const result = await check.fn();
-          if (!result.passed) {
-            decision = 'reject';
-            reason = result.reason || check.name;
-            break;
-          }
-        } catch (e: any) {
+    // Auto-add vault capacity check for quote_registered
+    const allChecks = [...(checks || [])];
+    if (eventType === 'quote_registered' && payload.makerAddress && payload.rate) {
+      const rfqSize = payload.size || 0;
+      const quoteRate = payload.rate || 0;
+      const notional = rfqSize * quoteRate;
+      if (notional > 0) {
+        allChecks.push({
+          name: 'vault_capacity',
+          fn: async () => {
+            const cap = await checkMakerCapacity(db, payload.makerAddress, notional);
+            return {
+              passed: cap.eligible,
+              reason: cap.reason || undefined,
+            };
+          },
+        });
+      }
+    }
+
+    // Auto-add vault capacity check for match_confirmed (re-verify at match time)
+    if (eventType === 'match_confirmed' && payload.makerAddress && payload.rate && payload.size) {
+      const notional = payload.size * payload.rate;
+      allChecks.push({
+        name: 'vault_capacity_at_match',
+        fn: async () => {
+          const cap = await checkMakerCapacity(db, payload.makerAddress, notional);
+          return {
+            passed: cap.eligible,
+            reason: cap.reason || undefined,
+          };
+        },
+      });
+    }
+
+    // Run checks
+    for (const check of allChecks) {
+      try {
+        const result = await check.fn();
+        if (!result.passed) {
           decision = 'reject';
-          reason = e.message;
+          reason = result.reason || check.name;
           break;
         }
+      } catch (e: any) {
+        decision = 'reject';
+        reason = e.message;
+        break;
       }
     }
 
