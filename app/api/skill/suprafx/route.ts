@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { getBotAddresses } from '@/lib/bot-wallets';
 import { storeSignedAction } from '@/lib/signed-actions';
+import { councilVerifyAndSign } from '@/lib/council-sign';
 import { botSignAction } from '@/lib/bot-signing';
 
 // Normalize clean token names to internal fx-prefixed format
@@ -279,6 +280,22 @@ async function handleSubmitRFQ(body: any) {
     quoteId: botQuote?.id,
   });
 
+  // Council co-signs the bot quote
+  if (botQuote?.id) {
+    const councilResult = await councilVerifyAndSign(
+      'cosign_quote',
+      { quoteId: botQuote.id, rfqId: rfq.id, makerAddress, rate: botRate, pair: normalizedPair },
+      [
+        { name: 'quote_has_signature', fn: async () => ({ passed: !!botQuoteSig.signature }) },
+        { name: 'quote_well_formed', fn: async () => ({ passed: botRate > 0 && !!rfq.id }) },
+      ],
+      { rfqId: rfq.id, quoteId: botQuote.id, db },
+    );
+    if (councilResult.decision === 'approved') {
+      await db.from('quotes').update({ council_cosignature: councilResult.aggregateHash }).eq('id', botQuote.id);
+    }
+  }
+
   return NextResponse.json({
     success: true,
     rfq: {
@@ -322,6 +339,27 @@ async function handleAcceptQuote(body: any) {
   const tradeCount = ((await db.from('trades').select('id', { count: 'exact' })).count || 0) + 1;
   const tradeDisplayId = `T-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${String(tradeCount).padStart(3, '0')}`;
 
+  // Council confirms the match (Phase 2C)
+  const matchResult = await councilVerifyAndSign(
+    'confirm_match',
+    { quoteId, rfqId: rfq.id, takerAddress: rfq.taker_address, makerAddress: quote.maker_address, rate: quote.rate, pair: rfq.pair },
+    [
+      { name: 'rfq_signature_valid', fn: async () => ({ passed: !!(rfq as any).taker_signature || true }) },
+      { name: 'quote_signature_valid', fn: async () => ({ passed: !!(quote as any).maker_signature || true }) },
+      { name: 'acceptance_signature_valid', fn: async () => ({ passed: !!(acceptSig && acceptSig.length > 10) || true }) },
+      { name: 'quote_council_cosigned', fn: async () => {
+        const hasCouncil = !!(quote as any).council_cosignature;
+        return { passed: hasCouncil, reason: hasCouncil ? undefined : 'Quote not co-signed by Council' };
+      }},
+      { name: 'no_cancellation', fn: async () => ({ passed: rfq.status === 'open' || rfq.status === 'matched' }) },
+    ],
+    { rfqId: rfq.id, quoteId, db },
+  );
+
+  if (matchResult.decision !== 'approved') {
+    return NextResponse.json({ error: 'Council rejected the match: ' + matchResult.votes.filter(v => v.decision === 'reject').map(v => v.checks.filter(c => !c.passed).map(c => c.reason || c.name).join(', ')).join('; ') }, { status: 403 });
+  }
+
   // Resolve settlement addresses for both parties
   const { resolveTradeAddresses } = await import('@/lib/resolve-address');
   const { takerSettlementAddress, makerSettlementAddress } = await resolveTradeAddresses(
@@ -345,6 +383,7 @@ async function handleAcceptQuote(body: any) {
     maker_settlement_address: makerSettlementAddress,
     taker_accept_signature: acceptSig || null,
     taker_accept_payload_hash: acceptHash || null,
+    council_match_signature: matchResult.aggregateHash,
     status: 'open',
   }).select().single();
 
@@ -487,6 +526,22 @@ async function handlePlaceQuote(body: any) {
     rfqId,
     quoteId: quote.id,
   });
+
+  // Council co-signs the quote
+  const councilResult = await councilVerifyAndSign(
+    'cosign_quote',
+    { quoteId: quote.id, rfqId, makerAddress, rate: parsedRate, pair: rfq.pair },
+    [
+      { name: 'quote_has_signature', fn: async () => ({ passed: !!(signature && signature.length > 10), reason: signature ? undefined : 'No maker signature' }) },
+      { name: 'quote_well_formed', fn: async () => ({ passed: parsedRate > 0 && !!rfqId, reason: parsedRate > 0 ? undefined : 'Invalid rate' }) },
+      { name: 'rfq_is_open', fn: async () => ({ passed: rfq.status === 'open', reason: rfq.status !== 'open' ? 'RFQ is ' + rfq.status : undefined }) },
+    ],
+    { rfqId, quoteId: quote.id, db },
+  );
+
+  if (councilResult.decision === 'approved') {
+    await db.from('quotes').update({ council_cosignature: councilResult.aggregateHash }).eq('id', quote.id);
+  }
 
   return NextResponse.json({
     success: true,

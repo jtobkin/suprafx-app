@@ -5,7 +5,7 @@ import { getServiceClient } from '@/lib/supabase';
 import { verifySepoliaTx } from '@/lib/chains';
 import { updateReputation } from '@/lib/reputation';
 import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation } from '@/lib/bot-wallets';
-import { generateMultisig } from '@/lib/committee-sig';
+import { generateMultisig, councilVerifyAndSign } from '@/lib/council-sign';
 import { storeSignedAction } from '@/lib/signed-actions';
 import { botSignAction } from '@/lib/bot-signing';
 
@@ -23,38 +23,45 @@ async function verifyOnChain(chain: string, txHash: string): Promise<boolean> {
 }
 
 async function runCommittee(db: any, tradeId: string, verificationType: string, chain: string, txHash: string, tradeData?: any) {
-  const verified = await verifyOnChain(chain, txHash);
+  // Build checks based on verification type
+  const checks: Array<{ name: string; fn: () => Promise<{ passed: boolean; reason?: string }> }> = [];
 
-  // Generate multisig signatures
-  const multisig = generateMultisig(
-    tradeId,
-    verificationType,
-    verified ? "approved" : "rejected",
-    tradeData || {},
-  );
+  if (verificationType === 'verify_taker_tx' || verificationType === 'verify_maker_tx') {
+    // Check 1: Verify TX on-chain
+    checks.push({
+      name: 'on_chain_verification',
+      fn: async () => {
+        const verified = await verifyOnChain(chain, txHash);
+        return { passed: verified, reason: verified ? undefined : 'TX not verified on chain' };
+      },
+    });
 
-  await db.from('committee_requests').upsert({
-    trade_id: tradeId,
-    verification_type: verificationType,
-    status: verified ? 'approved' : 'pending',
-    approvals: verified ? 5 : 0,
-    rejections: verified ? 0 : 5,
-    resolved_at: verified ? new Date().toISOString() : null,
-  }, { onConflict: 'trade_id,verification_type' });
-
-  for (const sig of multisig.signatures) {
-    await db.from('committee_votes').upsert({
-      trade_id: tradeId,
-      node_id: sig.nodeId,
-      verification_type: verificationType,
-      decision: verified ? 'approve' : 'reject',
-      chain,
-      tx_hash: txHash,
-      signature: sig.signature,
-    }, { onConflict: 'trade_id,node_id,verification_type' });
+    // Check 2: TX hash is valid format
+    checks.push({
+      name: 'tx_hash_format',
+      fn: async () => {
+        const valid = txHash && txHash.length > 10;
+        return { passed: !!valid, reason: valid ? undefined : 'Invalid TX hash format' };
+      },
+    });
   }
 
-  return { verified, multisig };
+  if (verificationType === 'approve_reputation') {
+    // Always approve reputation updates after settlement
+    checks.push({
+      name: 'settlement_confirmed',
+      fn: async () => ({ passed: true }),
+    });
+  }
+
+  const result = await councilVerifyAndSign(
+    verificationType,
+    { tradeId, chain, txHash, ...tradeData },
+    checks,
+    { tradeId, db },
+  );
+
+  return { verified: result.decision === 'approved', multisig: { aggregateHash: result.aggregateHash, signatures: result.votes } };
 }
 
 export async function POST(req: NextRequest) {
