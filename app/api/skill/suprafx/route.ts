@@ -5,6 +5,7 @@ import { getServiceClient } from '@/lib/supabase';
 import { getBotAddresses } from '@/lib/bot-wallets';
 import { storeSignedAction } from '@/lib/signed-actions';
 import { councilVerifyAndSign } from '@/lib/council-sign';
+import { earmarkBalance, releaseEarmark } from '@/lib/vault';
 import { botSignAction } from '@/lib/bot-signing';
 
 // Normalize clean token names to internal fx-prefixed format
@@ -399,6 +400,8 @@ async function handleAcceptQuote(body: any) {
     taker_accept_signature: acceptSig || null,
     taker_accept_payload_hash: acceptHash || null,
     council_match_signature: matchResult.aggregateHash,
+    match_confirmed_at: new Date().toISOString(),
+    taker_deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     status: 'open',
   }).select().single();
 

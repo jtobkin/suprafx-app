@@ -8,6 +8,7 @@ import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation } from 
 import { generateMultisig, councilVerifyAndSign } from '@/lib/council-sign';
 import { storeSignedAction } from '@/lib/signed-actions';
 import { botSignAction } from '@/lib/bot-signing';
+import { releaseEarmark } from '@/lib/vault';
 
 const COMMITTEE_NODES = ['N-1', 'N-2', 'N-3', 'N-4', 'N-5'];
 
@@ -105,6 +106,7 @@ export async function POST(req: NextRequest) {
         await db.from('trades').update({
           status: 'taker_verified',
           taker_tx_confirmed_at: new Date().toISOString(),
+          maker_deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
         }).eq('id', tradeId);
 
         // === AUTO MAKER BOT: Send SUPRA to taker ===
@@ -175,6 +177,13 @@ export async function POST(req: NextRequest) {
             });
             await updateReputation(trade.taker_address, settleMs);
             await updateReputation(trade.maker_address, settleMs);
+
+            // Release earmark on settlement
+            try {
+              const { data: acceptedQuote } = await db.from('quotes')
+                .select('id').eq('rfq_id', trade.rfq_id).eq('status', 'accepted').single();
+              if (acceptedQuote) await releaseEarmark(acceptedQuote.id, 'trade_settled');
+            } catch {}
 
             const { data: takerAgent } = await db.from('agents').select('rep_total, trade_count')
               .eq('wallet_address', trade.taker_address).single();
@@ -261,6 +270,13 @@ export async function POST(req: NextRequest) {
         });
         await updateReputation(trade.taker_address, settleMs);
         await updateReputation(trade.maker_address, settleMs);
+
+        // Release earmark on settlement
+        try {
+          const { data: acceptedQuote } = await db.from('quotes')
+            .select('id').eq('rfq_id', trade.rfq_id).eq('status', 'accepted').single();
+          if (acceptedQuote) await releaseEarmark(acceptedQuote.id, 'trade_settled');
+        } catch {}
 
         const { data: takerAgent } = await db.from('agents').select('rep_total, trade_count')
           .eq('wallet_address', trade.taker_address).single();
