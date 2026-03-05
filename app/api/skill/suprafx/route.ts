@@ -141,7 +141,15 @@ export async function POST(req: NextRequest) {
         if (!agentAddress) return NextResponse.json({ error: 'agentAddress required' }, { status: 400 });
         const db = getServiceClient();
         const { data: agent } = await db.from('agents').select('*').eq('wallet_address', agentAddress).single();
-        return NextResponse.json({ agent });
+        // Get timeout count for current month
+        const month = new Date().toISOString().slice(0, 7);
+        const { data: timeout } = await db.from('timeout_tracking')
+          .select('timeout_count, banned_at')
+          .eq('agent_address', agentAddress)
+          .eq('month', month)
+          .single();
+        const agentWithTimeout = agent ? { ...agent, timeout_count: timeout?.timeout_count || 0, banned: !!timeout?.banned_at } : null;
+        return NextResponse.json({ agent: agentWithTimeout });
       }
       case 'list_trades':
         return handleListTrades(body);

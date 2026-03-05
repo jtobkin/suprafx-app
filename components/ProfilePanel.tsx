@@ -65,6 +65,12 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
   }, [supraAddress, isDemo]);
 
   useEffect(() => { if (open && supraAddress) loadData(); }, [open, supraAddress, loadData]);
+  // Refresh data every 5 seconds while panel is open (catches rep changes from timeouts)
+  useEffect(() => {
+    if (!open || !supraAddress) return;
+    const iv = setInterval(loadData, 5000);
+    return () => clearInterval(iv);
+  }, [open, supraAddress, loadData]);
 
   const handleLink = async (provider: "metamask" | "starkey") => {
     setLinking(true); setLinkingProvider(provider); setShowWalletChoice(false);
@@ -177,7 +183,9 @@ export default function ProfilePanel({ open, onClose, initialTab = "profile" }: 
                     <div className="text-[11px]" style={{ color: "var(--t3)" }}>trades</div>
                   </div>
                   <div className="rounded-md p-3" style={{ background: "var(--surface-2)" }}>
-                    <div className="mono text-[18px] font-bold" style={{ color: "var(--t0)" }}>0/3</div>
+                    <div className="mono text-[18px] font-bold" style={{ color: "var(--t0)" }}>
+                      {agent?.timeout_count || 0}/3
+                    </div>
                     <div className="text-[11px]" style={{ color: "var(--t3)" }}>timeouts</div>
                   </div>
                 </div>
