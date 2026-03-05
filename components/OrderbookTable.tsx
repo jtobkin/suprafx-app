@@ -1,5 +1,5 @@
 "use client";
-// BUILD_VERSION: polish-v1-rep-terminal-retry
+// BUILD_VERSION: cancel-withdraw-events-v1
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
@@ -227,6 +227,7 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
 
   const eventColor: Record<string, string> = {
     rfq_registered: "var(--accent-light)", quote_registered: "var(--warn)",
+    quote_withdrawn: "var(--t3)", rfq_cancelled: "var(--negative)",
     match_confirmed: "var(--positive)", taker_tx_verified: "#8b5cf6",
     maker_tx_verified: "#8b5cf6", taker_timed_out: "var(--negative)",
     maker_defaulted: "var(--negative)", settlement_attested: "var(--positive)",
@@ -261,7 +262,7 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
                 const approvals = evtVotes.filter((v: any) => v.decision === "approve").length;
                 const isExpanded = expandedEvent === evt.id;
                 const userAction = getSignedAction(evt.event_type);
-                const isTerminal = ["taker_timed_out", "maker_defaulted", "settlement_attested"].includes(evt.event_type);
+                const isTerminal = ["taker_timed_out", "maker_defaulted", "settlement_attested", "rfq_cancelled"].includes(evt.event_type);
                 return (
                   <div key={evt.id} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
                     <div className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors" onClick={() => setExpandedEvent(isExpanded ? null : evt.id)} style={{ background: isTerminal ? "rgba(239,68,68,0.03)" : "transparent" }}>

@@ -487,9 +487,25 @@ async function handleCancelRFQ(body: any) {
   if (rfq.taker_address !== agentAddress) return NextResponse.json({ error: 'Only the RFQ taker can cancel' }, { status: 403 });
   if (rfq.status !== 'open') return NextResponse.json({ error: 'RFQ is no longer open' }, { status: 400 });
 
+  // Get active quote IDs before cancelling (for earmark tracking)
+  const { data: activeQuotes } = await db.from('quotes')
+    .select('id, maker_address')
+    .eq('rfq_id', rfqId)
+    .eq('status', 'pending');
+
   // Cancel RFQ and reject all pending quotes
   await db.from('rfqs').update({ status: 'cancelled' }).eq('id', rfqId);
   await db.from('quotes').update({ status: 'rejected' }).eq('rfq_id', rfqId).eq('status', 'pending');
+
+  // Council event: rfq_cancelled
+  try {
+    await processEvent('rfq_cancelled', {
+      rfqId, takerAddress: agentAddress,
+      reason: 'taker_cancelled',
+      activeQuoteIds: (activeQuotes || []).map(q => q.id),
+      affectedMakers: (activeQuotes || []).map(q => q.maker_address),
+    }, rfqId);
+  } catch (e: any) { console.error('[Council] rfq_cancelled error:', e.message); }
 
   return NextResponse.json({ success: true, message: 'RFQ cancelled, all pending quotes rejected.' });
 }
@@ -507,6 +523,14 @@ async function handleWithdrawQuote(body: any) {
   if (quote.status !== 'pending') return NextResponse.json({ error: 'Quote is no longer pending' }, { status: 400 });
 
   await db.from('quotes').update({ status: 'withdrawn' }).eq('id', quoteId);
+
+  // Council event: quote_withdrawn
+  try {
+    await processEvent('quote_withdrawn', {
+      quoteId, rfqId: quote.rfq_id, makerAddress: agentAddress,
+      reason: 'maker_withdrew',
+    }, quote.rfq_id);
+  } catch (e: any) { console.error('[Council] quote_withdrawn error:', e.message); }
 
   return NextResponse.json({ success: true, message: 'Quote withdrawn.' });
 }
