@@ -713,23 +713,45 @@ async function handleListTrades(body: any) {
 export async function GET() {
   return NextResponse.json({
     name: 'SupraFX OpenClaw Skill',
-    version: '2.0',
-    description: 'Cross-chain FX settlement marketplace between Ethereum (Sepolia) and Supra Testnet. Dual-role: any agent can be both taker and maker.',
+    version: '4.0',
+    description: 'Cross-chain FX settlement marketplace between Ethereum (Sepolia) and Supra Testnet. Dual-role: any agent can be both taker and maker. Secured by a 5-node Settlement Council that tracks every trade via a hash-chain of events, enforces deadlines, and posts attestations to the Supra blockchain.',
     endpoint: 'POST /api/skill/suprafx',
+
+    // ===== PROTOCOL OVERVIEW =====
+    protocol: {
+      summary: 'SupraFX uses a Request-for-Quote (RFQ) model. Takers request quotes, makers compete with rates, and a 5-node Settlement Council validates every step from RFQ to settlement via an immutable event hash chain.',
+      settlementRule: 'The taker ALWAYS goes first. The maker is protected by a stablecoin security deposit. If the maker defaults, the taker is automatically repaid from the deposit.',
+      councilRole: 'The Settlement Council (5 nodes, 3-of-5 threshold) independently verifies and votes on every event: RFQ registration, quote validation (including vault capacity checks), match confirmation, TX verification, timeouts, and defaults. All events form a hash chain. The chain hash is signed and posted to Supra blockchain as an attestation.',
+    },
+
+    // ===== SECURITY DEPOSIT (MAKERS MUST READ) =====
+    securityDeposit: {
+      requirement: 'Makers MUST have a stablecoin security deposit in the vault BEFORE placing quotes. Without a deposit, the Settlement Council will reject your quotes.',
+      supportedCurrencies: ['USDC', 'USDT'],
+      matchingLimit: '90% of your total deposit. If you deposit $10,000, you can quote on trades up to $9,000 in notional value.',
+      earmarking: 'When you place a quote that the Council approves, the notional value is earmarked against your deposit. You cannot over-commit beyond your matching limit across multiple quotes.',
+      earmarkRelease: 'Earmarks are released when: your quote is withdrawn, the RFQ is cancelled, another quote is matched instead of yours, the trade settles, or the taker times out.',
+      defaultPenalty: 'If you are the maker and fail to settle within the deadline: your reputation drops by 67%, your deposit is liquidated (trade value + 10% surcharge), and the taker is repaid from your deposit.',
+      howToDeposit: 'Use the web UI: Profile → Security Deposit tab → enter amount → Make Security Deposit. API deposit endpoint coming soon.',
+      checkCapacity: 'GET /api/maker-capacity?address=your_supra_address — returns your vault balance, matching limit, total earmarked, and available capacity.',
+    },
+
+    // ===== API ACTIONS =====
     actions: {
       get_pairs: {
         body: { action: 'get_pairs' },
-        description: 'Get available trading pairs, reference prices, and supported chains',
+        description: 'Get available trading pairs, reference prices, settlement caps, and supported chains.',
       },
       submit_rfq: {
         body: {
           action: 'submit_rfq',
           agentAddress: 'your_supra_address',
           pair: 'ETH/SUPRA',
-          size: '0.001',
-          price: '2500 (optional, uses oracle if omitted)',
+          size: '1',
+          price: '2500 (optional — uses Supra DORA oracle if omitted)',
         },
-        description: 'Submit a request for quote as a taker. Bot auto-places a quote. Other makers can also quote.',
+        description: 'Submit a request for quote as a taker. An auto-maker bot will immediately place a competing quote. Other makers can also quote.',
+        councilAction: 'Council registers rfq_registered event in the hash chain.',
       },
       place_quote: {
         body: {
@@ -738,7 +760,13 @@ export async function GET() {
           makerAddress: 'your_supra_address',
           rate: '2450.50',
         },
-        description: 'Place a quote on an open RFQ as a maker. Cannot quote on your own RFQ. One pending quote per maker per RFQ.',
+        description: 'Place a quote on an open RFQ as a maker. Cannot quote on your own RFQ. One pending quote per maker per RFQ. REQUIRES a security deposit with sufficient available capacity.',
+        councilAction: 'Council validates vault capacity and earmarks. If 3+ nodes reject (insufficient deposit), quote is rejected with reason.',
+        possibleErrors: [
+          'Settlement Council rejected quote: No security deposit',
+          'Settlement Council rejected quote: Insufficient capacity: need X, available Y',
+          'You already have a pending quote on this RFQ',
+        ],
       },
       accept_quote: {
         body: {
@@ -746,7 +774,8 @@ export async function GET() {
           quoteId: 'uuid of the pending quote',
           agentAddress: 'taker_supra_address',
         },
-        description: 'Accept a pending quote on your RFQ. Creates a trade and rejects all other quotes.',
+        description: 'Accept a pending quote on your RFQ. Creates a trade, rejects all other quotes, releases their earmarks. Council re-checks maker vault capacity at match time.',
+        councilAction: 'Council confirms match (match_confirmed event). Taker deadline starts (30 min production, 1 min testnet).',
       },
       cancel_rfq: {
         body: {
@@ -754,7 +783,7 @@ export async function GET() {
           rfqId: 'uuid of the open RFQ',
           agentAddress: 'taker_supra_address',
         },
-        description: 'Cancel your open RFQ. All pending quotes are rejected.',
+        description: 'Cancel your open RFQ. All pending quotes are rejected and earmarks released.',
       },
       withdraw_quote: {
         body: {
@@ -762,53 +791,132 @@ export async function GET() {
           quoteId: 'uuid of your pending quote',
           agentAddress: 'maker_supra_address',
         },
-        description: 'Withdraw your pending quote from an RFQ.',
+        description: 'Withdraw your pending quote from an RFQ. Your earmark is released.',
+      },
+      confirm_tx: {
+        endpoint: 'POST /api/confirm-tx',
+        body: {
+          tradeId: 'uuid of the trade',
+          txHash: '0x... or supra tx hash',
+          side: 'taker or maker',
+          senderAddress: 'your_supra_address',
+        },
+        description: 'Confirm that you have sent your tokens on-chain. The Settlement Council will independently verify the TX. For takers: after acceptance. For makers: after taker TX is verified.',
+        councilAction: 'Council verifies TX on-chain (each node checks independently). On verification: taker_tx_verified or maker_tx_verified event added to hash chain.',
       },
       check_trade: {
         body: { action: 'check_trade', tradeId: 'uuid' },
-        description: 'Check full status of a trade including committee votes, TX hashes, and settlement time.',
+        description: 'Check full status of a trade including council event chain, node votes, TX hashes, settlement time, and attestation.',
       },
       list_trades: {
         body: { action: 'list_trades', agentAddress: 'your_supra_address' },
         description: 'List all trades where you are taker or maker.',
       },
+      check_agent: {
+        body: { action: 'check_agent', agentAddress: 'your_supra_address' },
+        description: 'Check agent profile: reputation score, trade count, timeout count, ban status.',
+      },
     },
-    oracleEndpoint: {
-      method: 'GET',
-      url: '/api/oracle?pair=ETH/SUPRA',
-      description: 'Real-time price data from Supra DORA oracle. Returns base/quote prices, 24h high/low/change, and conversion rate.',
+
+    // ===== ADDITIONAL ENDPOINTS =====
+    additionalEndpoints: {
+      oracle: {
+        method: 'GET',
+        url: '/api/oracle?pair=ETH/SUPRA',
+        description: 'Real-time price data from Supra DORA oracle.',
+      },
+      makerCapacity: {
+        method: 'GET',
+        url: '/api/maker-capacity?address=your_supra_address',
+        description: 'Check your vault balance, matching limit, earmarked amount, and available capacity for quoting.',
+      },
+      councilEvents: {
+        method: 'GET',
+        url: '/api/council-events?tradeId=uuid',
+        description: 'Get the full council event hash chain for a trade, including all node votes and attestation.',
+      },
     },
+
+    // ===== SUPPORTED PAIRS =====
     supportedPairs: [
       'ETH/SUPRA', 'SUPRA/ETH',
-      'fxAAVE/SUPRA', 'fxLINK/SUPRA',
-      'fxUSDC/SUPRA', 'fxUSDT/SUPRA',
+      'fxAAVE/SUPRA', 'SUPRA/fxAAVE',
+      'fxLINK/SUPRA', 'SUPRA/fxLINK',
+      'fxUSDC/SUPRA', 'SUPRA/fxUSDC',
+      'fxUSDT/SUPRA', 'SUPRA/fxUSDT',
       'ETH/fxAAVE', 'ETH/fxLINK', 'ETH/fxUSDC', 'ETH/fxUSDT',
       'fxAAVE/fxLINK', 'fxAAVE/fxUSDC', 'fxAAVE/fxUSDT',
       'fxLINK/fxUSDC', 'fxLINK/fxUSDT',
     ],
     chains: {
-      sepolia: { tokens: ['ETH', 'fxAAVE', 'fxLINK', 'fxUSDC', 'fxUSDT'] },
-      'supra-testnet': { tokens: ['SUPRA'] },
+      sepolia: { tokens: ['ETH', 'fxAAVE', 'fxLINK', 'fxUSDC', 'fxUSDT'], explorer: 'https://sepolia.etherscan.io' },
+      'supra-testnet': { tokens: ['SUPRA'], explorer: 'https://testnet.suprascan.io' },
     },
+
+    // ===== SETTLEMENT FLOW =====
     settlementFlow: [
-      '1. Taker calls submit_rfq → RFQ created, bot auto-quotes',
-      '2. Other makers call place_quote to compete on the RFQ',
-      '3. Taker calls accept_quote → trade created (status: open)',
-      '4. Taker sends tokens on source chain → confirms via /api/confirm-tx',
-      '5. Settlement Council (3-of-5 multisig) verifies taker TX',
-      '6. Maker sends tokens on dest chain (auto or manual)',
-      '7. Council verifies maker TX → trade settled',
-      '8. Reputation updated, attestation posted on-chain',
+      '1. Taker calls submit_rfq → RFQ created, Council registers rfq_registered event, bot auto-quotes',
+      '2. Makers call place_quote → Council validates vault capacity, earmarks if approved (quote_registered event)',
+      '3. Taker calls accept_quote → Council confirms match (match_confirmed event), taker deadline starts',
+      '4. Taker sends tokens on source chain → POST /api/confirm-tx with side=taker',
+      '5. Council verifies taker TX on-chain (5 nodes independently) → taker_tx_verified event, maker deadline starts',
+      '6. Maker sends tokens on dest chain → POST /api/confirm-tx with side=maker',
+      '7. Council verifies maker TX → maker_tx_verified event, trade settles',
+      '8. Council builds attestation: verifies full event chain, signs chain hash, posts to Supra blockchain',
+      '9. Reputation updated for both parties based on settlement speed',
     ],
-    agentIntegration: {
-      description: 'AI agents can operate as takers, makers, or both via this REST API.',
-      takerFlow: 'submit_rfq → wait for quotes → accept_quote → send tokens → settled',
-      makerFlow: 'poll for open RFQs (list_trades or Supabase realtime) → place_quote → if accepted, send tokens → settled',
-      authentication: 'Supra wallet address used as agent identity. No API key required for testnet.',
+
+    // ===== TIMEOUT RULES =====
+    timeoutRules: {
+      takerDeadline: '30 minutes (1 minute on testnet) from match confirmation to send tokens',
+      makerDeadline: '30 minutes (1 minute on testnet) from taker TX verification to send tokens',
+      takerTimeout: 'If taker fails to send within deadline: -33% reputation, earmark released. 3 timeouts/month = ban.',
+      makerDefault: 'If maker fails to send within deadline: -67% reputation, deposit liquidated (trade value + 10% surcharge), taker automatically repaid.',
+      enforcement: 'Deadlines enforced server-side by the Settlement Council. No dependency on any client being online.',
+      makerBlocked: 'After deadline expires, the maker CANNOT settle even if they try. The Council processes the default.',
     },
+
+    // ===== REPUTATION =====
+    reputation: {
+      baseScore: 5.0,
+      settlementBonus: '+5.0 (<5min), +3.0 (<15min), +1.0 (<30min)',
+      takerTimeoutPenalty: '-33% of current score',
+      makerDefaultPenalty: '-67% of current score',
+      ban: '3 taker timeouts in a calendar month = matching suspended',
+      checkScore: 'Use check_agent action to see your current score',
+    },
+
+    // ===== AGENT INTEGRATION GUIDE =====
+    agentIntegration: {
+      description: 'AI agents can operate as takers, makers, or both via this REST API. No API key required for testnet.',
+      takerFlow: [
+        '1. Call get_pairs to see available pairs and reference prices',
+        '2. Call submit_rfq with your desired pair and size',
+        '3. Wait for quotes (poll list_trades or use Supabase realtime)',
+        '4. Call accept_quote to accept the best quote',
+        '5. Send tokens on source chain',
+        '6. Call POST /api/confirm-tx with txHash and side=taker',
+        '7. Wait for settlement (Council verifies, maker sends, trade settles)',
+      ],
+      makerFlow: [
+        '1. FIRST: Deposit stablecoins in the Security Vault (currently UI-only)',
+        '2. Check capacity: GET /api/maker-capacity?address=your_address',
+        '3. Poll for open RFQs via list_trades or Supabase realtime',
+        '4. Call place_quote on RFQs you want to fill (must be within vault capacity)',
+        '5. If your quote is accepted, you will see the trade via list_trades',
+        '6. Wait for taker to send and Council to verify',
+        '7. Send tokens on dest chain',
+        '8. Call POST /api/confirm-tx with txHash and side=maker',
+        '9. Trade settles, earmark released, reputation updated',
+      ],
+      authentication: 'Supra wallet address used as agent identity. Sign actions via session key for audit trail.',
+      riskWarning: 'As a maker, if you fail to settle within the deadline, your security deposit will be liquidated. Always ensure you can fulfill trades you quote on.',
+    },
+
     testnetLimits: {
       ethLeg: '0.00001 ETH per settlement',
       supraLeg: '0.001 SUPRA per settlement',
+      note: 'Notional values can be large but actual on-chain transfers are capped to small testnet amounts.',
     },
   });
 }
