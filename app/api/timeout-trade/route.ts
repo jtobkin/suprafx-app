@@ -20,6 +20,13 @@ export async function POST(req: NextRequest) {
 
   // === Taker timeout ===
   if (trade.status === 'open' && trade.taker_deadline && new Date(trade.taker_deadline) < now) {
+    // Re-check status to prevent duplicate processing from concurrent triggers
+    const { data: freshTrade } = await db.from('trades').select('status').eq('id', tradeId).single();
+    if (freshTrade?.status !== 'open') {
+      return NextResponse.json({ processed: false, reason: 'Already processed (status: ' + freshTrade?.status + ')' });
+    }
+    // Immediately mark as processing to prevent race conditions
+    await db.from('trades').update({ status: 'taker_timed_out' }).eq('id', tradeId).eq('status', 'open');
     const councilResult = await councilVerifyAndSign(
       'taker_timeout',
       { tradeId: trade.id, takerAddress: trade.taker_address, deadline: trade.taker_deadline },
@@ -31,7 +38,7 @@ export async function POST(req: NextRequest) {
     );
 
     if (councilResult.decision === 'approved') {
-      await db.from('trades').update({ status: 'taker_timed_out' }).eq('id', trade.id);
+      // Status already set above to prevent races
 
       const penalty = await applyTimeoutPenalty(trade.taker_address, 'taker_timeout');
 
@@ -88,6 +95,13 @@ export async function POST(req: NextRequest) {
 
   // === Maker default ===
   if (trade.status === 'taker_verified' && trade.maker_deadline && new Date(trade.maker_deadline) < now) {
+    // Re-check status to prevent duplicate processing
+    const { data: freshTrade2 } = await db.from('trades').select('status').eq('id', tradeId).single();
+    if (freshTrade2?.status !== 'taker_verified') {
+      return NextResponse.json({ processed: false, reason: 'Already processed (status: ' + freshTrade2?.status + ')' });
+    }
+    // Immediately mark as processing
+    await db.from('trades').update({ status: 'maker_defaulted' }).eq('id', tradeId).eq('status', 'taker_verified');
     const councilResult = await councilVerifyAndSign(
       'maker_default',
       { tradeId: trade.id, makerAddress: trade.maker_address, deadline: trade.maker_deadline },
@@ -99,7 +113,7 @@ export async function POST(req: NextRequest) {
     );
 
     if (councilResult.decision === 'approved') {
-      await db.from('trades').update({ status: 'maker_defaulted' }).eq('id', trade.id);
+      // Status already set above to prevent races
 
       const penalty = await applyTimeoutPenalty(trade.maker_address, 'maker_default');
       const tradeValue = trade.size * trade.rate;

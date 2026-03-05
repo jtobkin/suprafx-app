@@ -48,7 +48,15 @@ export async function GET() {
       if (!trade) continue;
 
       if (trade.status === 'open' && trade.taker_deadline && new Date(trade.taker_deadline) < new Date()) {
-        // Taker timeout
+        // Atomic claim: only proceed if we successfully flip the status
+        const { data: claimed } = await db.from('trades')
+          .update({ status: 'taker_timed_out' })
+          .eq('id', tradeId)
+          .eq('status', 'open')  // Only if still open (prevents races)
+          .select('id')
+          .single();
+        if (!claimed) continue; // Another process already handled it
+
         const result = await councilVerifyAndSign(
           'taker_timeout',
           { tradeId, takerAddress: trade.taker_address, deadline: trade.taker_deadline },
@@ -60,7 +68,7 @@ export async function GET() {
         );
 
         if (result.decision === 'approved') {
-          await db.from('trades').update({ status: 'taker_timed_out' }).eq('id', tradeId);
+          // Status already claimed above
           const penalty = await applyTimeoutPenalty(trade.taker_address, 'taker_timeout');
 
           const { data: acceptedQuote } = await db.from('quotes')
@@ -83,7 +91,15 @@ export async function GET() {
       }
 
       if (trade.status === 'taker_verified' && trade.maker_deadline && new Date(trade.maker_deadline) < new Date()) {
-        // Maker default
+        // Atomic claim
+        const { data: claimed2 } = await db.from('trades')
+          .update({ status: 'maker_defaulted' })
+          .eq('id', tradeId)
+          .eq('status', 'taker_verified')
+          .select('id')
+          .single();
+        if (!claimed2) continue;
+
         const result = await councilVerifyAndSign(
           'maker_default',
           { tradeId, makerAddress: trade.maker_address, deadline: trade.maker_deadline },
@@ -95,7 +111,7 @@ export async function GET() {
         );
 
         if (result.decision === 'approved') {
-          await db.from('trades').update({ status: 'maker_defaulted' }).eq('id', tradeId);
+          // Status already claimed above
           const penalty = await applyTimeoutPenalty(trade.maker_address, 'maker_default');
           const tradeValue = trade.size * trade.rate;
           const liquidation = await liquidateForDefault(tradeId, tradeValue, trade.maker_address, trade.taker_address);

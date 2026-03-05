@@ -22,6 +22,15 @@ export async function GET() {
       .lt('taker_deadline', now.toISOString());
 
     for (const trade of takerTimeouts || []) {
+      // Atomic claim to prevent duplicate processing
+      const { data: claimed } = await db.from('trades')
+        .update({ status: 'taker_timed_out' })
+        .eq('id', trade.id)
+        .eq('status', 'open')
+        .select('id')
+        .single();
+      if (!claimed) continue;
+
       const councilResult = await councilVerifyAndSign(
         'taker_timeout',
         { tradeId: trade.id, takerAddress: trade.taker_address, deadline: trade.taker_deadline },
@@ -33,8 +42,7 @@ export async function GET() {
       );
 
       if (councilResult.decision === 'approved') {
-        // Update trade status
-        await db.from('trades').update({ status: 'taker_timed_out' }).eq('id', trade.id);
+        // Status already claimed above
 
         // Apply -33% reputation penalty
         const penalty = await applyTimeoutPenalty(trade.taker_address, 'taker_timeout');
@@ -123,6 +131,15 @@ export async function GET() {
       .lt('maker_deadline', now.toISOString());
 
     for (const trade of makerDefaults || []) {
+      // Atomic claim
+      const { data: claimed2 } = await db.from('trades')
+        .update({ status: 'maker_defaulted' })
+        .eq('id', trade.id)
+        .eq('status', 'taker_verified')
+        .select('id')
+        .single();
+      if (!claimed2) continue;
+
       const councilResult = await councilVerifyAndSign(
         'maker_default',
         { tradeId: trade.id, makerAddress: trade.maker_address, deadline: trade.maker_deadline },
@@ -134,7 +151,7 @@ export async function GET() {
       );
 
       if (councilResult.decision === 'approved') {
-        await db.from('trades').update({ status: 'maker_defaulted' }).eq('id', trade.id);
+        // Status already claimed above
 
         // Apply -67% reputation penalty
         const penalty = await applyTimeoutPenalty(trade.maker_address, 'maker_default');
