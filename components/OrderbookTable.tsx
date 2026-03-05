@@ -142,18 +142,23 @@ function CountdownTimer({ deadline, label, penaltyWarning, onExpired, tradeId }:
       // When timer hits zero, trigger timeout immediately
       if (ms <= 0 && !expiredTriggered.current) {
         expiredTriggered.current = true;
+        console.log("[SupraFX] Timer expired for trade:", tradeId, "— triggering timeout...");
         if (tradeId) {
-          // Fire immediately — don't wait, don't depend on component staying mounted
           fetch("/api/timeout-trade", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tradeId }),
-          }).then(r => r.json()).then(data => {
-            console.log("[SupraFX] Timeout processed:", data);
+          }).then(r => {
+            console.log("[SupraFX] Timeout response status:", r.status);
+            return r.json();
+          }).then(data => {
+            console.log("[SupraFX] Timeout result:", JSON.stringify(data));
             if (onExpired) onExpired();
           }).catch(err => {
-            console.warn("[SupraFX] Timeout-trade failed:", err);
+            console.error("[SupraFX] Timeout-trade FAILED:", err);
           });
+        } else {
+          console.warn("[SupraFX] No tradeId passed to CountdownTimer");
         }
       }
     };

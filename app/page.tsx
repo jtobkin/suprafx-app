@@ -237,20 +237,16 @@ function Dashboard() {
   }, [fetchAll]);
   useEffect(() => { const iv = setInterval(fetchAll, 2000); return () => clearInterval(iv); }, [fetchAll]);
 
-  // Server-side deadline check every 15 seconds — catches timeouts even if no client timer is watching
+  // Server-side deadline check on page load only (backup for missed timeouts)
+  // Primary trigger is the client-side CountdownTimer; Vercel cron is the fallback
   useEffect(() => {
-    const checkDeadlines = () => {
-      fetch("/api/check-deadlines").then(r => r.json()).then(data => {
-        if (data.processed?.length > 0) {
-          console.log("[SupraFX] Deadlines processed server-side:", data.processed);
-          fetchAll();
-        }
-      }).catch(() => {});
-    };
-    checkDeadlines(); // Check immediately on load
-    const iv = setInterval(checkDeadlines, 15000);
-    return () => clearInterval(iv);
-  }, [fetchAll]);
+    fetch("/api/check-deadlines").then(r => r.json()).then(data => {
+      if (data.processed?.length > 0) {
+        console.log("[SupraFX] Missed deadlines processed:", data.processed);
+        fetchAll();
+      }
+    }).catch(() => {});
+  }, []);
 
   return (
     <div>
