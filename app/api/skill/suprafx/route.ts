@@ -520,7 +520,7 @@ async function handleWithdrawQuote(body: any) {
   const { data: quote, error: qErr } = await db.from('quotes').select('*').eq('id', quoteId).single();
   if (qErr || !quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
   if (quote.maker_address !== agentAddress) return NextResponse.json({ error: 'Only the quote maker can withdraw' }, { status: 403 });
-  if (quote.status !== 'pending') return NextResponse.json({ error: 'Quote is no longer pending' }, { status: 400 });
+  if (quote.status !== 'pending' && quote.status !== 'review') return NextResponse.json({ error: 'Quote is not in a withdrawable state' }, { status: 400 });
 
   await db.from('quotes').update({ status: 'withdrawn' }).eq('id', quoteId);
 
@@ -560,9 +560,9 @@ async function handlePlaceQuote(body: any) {
   }
 
   // Check for existing pending quote from this maker
-  const { data: existing } = await db.from('quotes').select('id').eq('rfq_id', rfqId).eq('maker_address', makerAddress).eq('status', 'pending');
+  const { data: existing } = await db.from('quotes').select('id, status').eq('rfq_id', rfqId).eq('maker_address', makerAddress).in('status', ['pending', 'review']);
   if (existing && existing.length > 0) {
-    return NextResponse.json({ error: 'You already have a pending quote on this RFQ' }, { status: 400 });
+    return NextResponse.json({ error: 'You already have an active quote on this RFQ' }, { status: 400 });
   }
 
   // Upsert agent as maker
@@ -579,7 +579,7 @@ async function handlePlaceQuote(body: any) {
     rfq_id: rfqId,
     maker_address: makerAddress,
     rate: parsedRate,
-    status: 'pending',
+    status: 'review',
     maker_signature: signature || null,
     maker_payload_hash: payloadHash || null,
   }).select('*').single();
@@ -610,6 +610,11 @@ async function handlePlaceQuote(body: any) {
       quoteId: quote.id, rfqId, makerAddress, rate: parsedRate, pair: rfq.pair, size: rfq.size,
     }, rfqId);
   } catch (e: any) { console.error('[Council] quote_registered error:', e.message); }
+
+  // If Council approved, promote quote from review to pending
+  if (quoteEventResult && quoteEventResult.consensusDecision === 'approved') {
+    await db.from('quotes').update({ status: 'pending' }).eq('id', quote.id);
+  }
 
   // If Council rejected the quote (e.g., insufficient vault), cancel it
   if (quoteEventResult && quoteEventResult.consensusDecision === 'rejected') {

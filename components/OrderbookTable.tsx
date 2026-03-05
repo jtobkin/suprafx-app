@@ -1,5 +1,5 @@
 "use client";
-// BUILD_VERSION: cancel-withdraw-events-v1
+// BUILD_VERSION: review-status-capacity-v1
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
@@ -943,9 +943,19 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   // Load maker vault balance
   useEffect(() => {
     if (!supraAddress) return;
-    fetch(`/api/vault?address=${encodeURIComponent(supraAddress)}`)
-      .then(r => r.json())
-      .then(d => setMakerVault(d.balance))
+    Promise.all([
+      fetch(`/api/vault?address=${encodeURIComponent(supraAddress)}`).then(r => r.json()),
+      fetch(`/api/maker-capacity?address=${encodeURIComponent(supraAddress)}`).then(r => r.json()).catch(() => null),
+    ]).then(([vaultData, capData]) => {
+      const bal = vaultData.balance;
+      if (bal) {
+        setMakerVault({
+          ...bal,
+          availableCapacity: capData?.availableCapacity ?? Number(bal.matching_limit || 0),
+          totalEarmarked: capData?.totalEarmarked ?? 0,
+        });
+      }
+    })
       .catch(() => {});
   }, [supraAddress]);
   const [attestations, setAttestations] = useState<Record<string, string>>({});
@@ -1196,8 +1206,10 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                               <span className="mono text-[13px] w-32" style={{ color: "var(--positive)" }}>
                                 {receive >= 1000 ? receive.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receive.toFixed(4)} {quoteClean}
                               </span>
-                              <span className="w-20">
-                                <span className={`tag tag-${q.status}`}>{q.status}</span>
+                              <span className="w-24">
+                                <span className={`tag tag-${q.status}`} style={
+                                  q.status === "review" ? { background: "rgba(234,179,8,0.12)", color: "var(--warn)" } : {}
+                                }>{q.status === "review" ? "In Review" : q.status}</span>
                               </span>
                               {isMine && q.status === "pending" && (
                                 <button onClick={(e) => { e.stopPropagation(); acceptQuote(q.id); }}
@@ -1207,7 +1219,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                                   {accepting === q.id ? "..." : "Accept"}
                                 </button>
                               )}
-                              {q.maker_address === supraAddress && q.status === "pending" && (
+                              {q.maker_address === supraAddress && (q.status === "pending" || q.status === "review") && (
                                 <button onClick={(e) => { e.stopPropagation(); withdrawQuote(q.id); }}
                                   disabled={withdrawing === q.id}
                                   className="px-3 py-1 rounded text-[12px] font-semibold transition-all hover:brightness-110 disabled:opacity-50"
@@ -1287,7 +1299,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                     )}
 
                     {/* Already have a pending quote */}
-                    {!isMine && supraAddress && rfqQuotes.some(q => q.maker_address === supraAddress && q.status === "pending") && quotingRfq !== r.id && (
+                    {!isMine && supraAddress && rfqQuotes.some(q => q.maker_address === supraAddress && (q.status === "pending" || q.status === "review")) && quotingRfq !== r.id && (
                       <div className="px-8 py-2" style={{ borderTop: "1px solid var(--border)" }}>
                         <span className="text-[12px]" style={{ color: "var(--t3)" }}>You have a pending quote on this RFQ</span>
                       </div>
