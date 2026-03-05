@@ -133,6 +133,7 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
   const [timeline, setTimeline] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [expandedAction, setExpandedAction] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || loaded) return;
@@ -145,10 +146,19 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
   const actionLabel: Record<string, string> = {
     submit_rfq: "Submit RFQ", place_quote: "Place Quote", accept_quote: "Accept Quote",
     confirm_taker_tx: "Taker TX Confirm", confirm_maker_tx: "Maker TX Confirm",
+    council_endorse_taker_tx: "Council Endorse Taker", council_endorse_maker_tx: "Council Endorse Maker",
   };
   const actionColor: Record<string, string> = {
     submit_rfq: "var(--accent-light)", place_quote: "var(--warn)", accept_quote: "var(--positive)",
     confirm_taker_tx: "var(--accent-light)", confirm_maker_tx: "var(--positive)",
+    council_endorse_taker_tx: "var(--positive)", council_endorse_maker_tx: "var(--positive)",
+  };
+
+  const roleLabel = (addr: string) => {
+    if (addr === supraAddr) return "You";
+    if (addr === "auto-maker-bot") return "Bot";
+    if (addr.startsWith("N-") || addr.startsWith("council-")) return "Council";
+    return addr.slice(0, 6) + "…" + addr.slice(-4);
   };
 
   return (
@@ -169,35 +179,94 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
             <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>No signed actions recorded.</div>
           ) : (
             <div>
-              <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] mono uppercase" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
-                <span className="w-16">Time</span>
-                <span className="w-28">Action</span>
-                <span className="w-24">Signer</span>
-                <span className="w-20">Sig</span>
-                <span className="flex-1">Session Key</span>
-              </div>
               {timeline.map((a: any, i: number) => {
                 const timeStr = new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-                const signerShort = a.signer_address === "auto-maker-bot" ? "Bot" :
-                  a.signer_address === supraAddr ? "You" :
-                  a.signer_address.slice(0, 6) + "…" + a.signer_address.slice(-4);
                 const hasSig = a.signature && a.signature.length > 10;
                 const hasAuth = a.session_auth_signature && a.session_auth_signature.length > 10;
+                const isExpanded = expandedAction === a.id;
+
                 return (
-                  <div key={a.id || i} className="flex items-center gap-2 px-3 py-1.5 text-[11px]"
-                    style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none", background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                    <span className="mono w-16 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
-                    <span className="w-28 shrink-0 font-medium" style={{ color: actionColor[a.action_type] || "var(--t2)" }}>
-                      {actionLabel[a.action_type] || a.action_type}
-                    </span>
-                    <span className="mono w-24 shrink-0" style={{ color: a.signer_address === supraAddr ? "var(--positive)" : "var(--t2)" }}>{signerShort}</span>
-                    <span className="mono w-20 shrink-0" style={{ color: hasSig ? "var(--positive)" : "var(--t3)" }}>
-                      {hasSig ? a.signature.slice(0, 8) + "…" : "—"}
-                    </span>
-                    <span className="mono flex-1 truncate" style={{ color: hasAuth ? "var(--positive)" : a.session_public_key ? "var(--t2)" : "var(--t3)" }}>
-                      {a.session_public_key ? a.session_public_key.slice(0, 12) + "…" : "—"}
-                      {hasAuth && <span style={{ color: "var(--positive)", marginLeft: 4 }} title="Wallet-authorized session">✓</span>}
-                    </span>
+                  <div key={a.id || i} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
+                    {/* Summary row */}
+                    <div className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                      onClick={() => setExpandedAction(isExpanded ? null : a.id)}
+                      style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
+                      <span className="mono text-[11px] w-16 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
+                      <span className="text-[12px] w-28 shrink-0 font-semibold" style={{ color: actionColor[a.action_type] || "var(--t2)" }}>
+                        {actionLabel[a.action_type] || a.action_type}
+                      </span>
+                      <span className="text-[11px] shrink-0 font-medium" style={{ color: a.signer_address === supraAddr ? "var(--positive)" : "var(--t2)" }}>
+                        {roleLabel(a.signer_address)}
+                      </span>
+                      <div className="flex items-center gap-1 flex-1 justify-end">
+                        {hasSig && <span className="text-[10px]" style={{ color: "var(--positive)" }}>signed</span>}
+                        {hasAuth && <span className="text-[10px]" style={{ color: "var(--positive)" }}>✓ authorized</span>}
+                        <span className="text-[10px] ml-1" style={{ color: "var(--t3)" }}>{isExpanded ? "▲" : "▼"}</span>
+                      </div>
+                    </div>
+
+                    {/* Expanded detail */}
+                    {isExpanded && (
+                      <div className="px-4 py-3 space-y-2" style={{ background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
+                        {/* Signer Address */}
+                        <div>
+                          <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>Signer Address</span>
+                          <span className="mono text-[11px] break-all select-all" style={{ color: "var(--t1)" }}>{a.signer_address}</span>
+                        </div>
+
+                        {/* Action Signature (ECDSA) */}
+                        {hasSig && (
+                          <div>
+                            <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>Action Signature (ECDSA P-256)</span>
+                            <span className="mono text-[10px] break-all select-all" style={{ color: "var(--positive)" }}>{a.signature}</span>
+                          </div>
+                        )}
+
+                        {/* Payload Hash */}
+                        {a.payload_hash && (
+                          <div>
+                            <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>Payload Hash (SHA-256)</span>
+                            <span className="mono text-[10px] break-all select-all" style={{ color: "var(--t2)" }}>{a.payload_hash}</span>
+                          </div>
+                        )}
+
+                        {/* Session Public Key */}
+                        {a.session_public_key && (
+                          <div>
+                            <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>Session Public Key</span>
+                            <span className="mono text-[10px] break-all select-all" style={{ color: "var(--t2)" }}>{a.session_public_key}</span>
+                          </div>
+                        )}
+
+                        {/* Session Authorization Signature (StarKey) */}
+                        {hasAuth && (
+                          <div>
+                            <span className="mono text-[10px] uppercase tracking-wider block mb-0.5" style={{ color: "var(--t3)" }}>
+                              Session Authorization (StarKey Wallet Signature)
+                            </span>
+                            <span className="mono text-[10px] break-all select-all" style={{ color: "var(--positive)" }}>{a.session_auth_signature}</span>
+                          </div>
+                        )}
+
+                        {/* Chain of Trust */}
+                        <div className="mt-1 pt-2" style={{ borderTop: "1px solid var(--border)" }}>
+                          <span className="mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Chain of Trust</span>
+                          <div className="flex items-center gap-1.5 flex-wrap text-[10px] mono">
+                            <span className="px-1.5 py-0.5 rounded" style={{ background: hasAuth ? "rgba(34,197,94,0.1)" : "var(--surface-2)", color: hasAuth ? "var(--positive)" : "var(--t3)" }}>
+                              Wallet Signature {hasAuth ? "✓" : "—"}
+                            </span>
+                            <span style={{ color: "var(--t3)" }}>→</span>
+                            <span className="px-1.5 py-0.5 rounded" style={{ background: a.session_public_key ? "rgba(34,197,94,0.1)" : "var(--surface-2)", color: a.session_public_key ? "var(--positive)" : "var(--t3)" }}>
+                              Session Key {a.session_public_key ? "✓" : "—"}
+                            </span>
+                            <span style={{ color: "var(--t3)" }}>→</span>
+                            <span className="px-1.5 py-0.5 rounded" style={{ background: hasSig ? "rgba(34,197,94,0.1)" : "var(--surface-2)", color: hasSig ? "var(--positive)" : "var(--t3)" }}>
+                              Action Signed {hasSig ? "✓" : "—"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

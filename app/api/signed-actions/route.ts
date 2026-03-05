@@ -15,7 +15,6 @@ export async function GET(req: NextRequest) {
 
   try {
     if (tradeId) {
-      // Get the trade to know who the taker and maker are
       const { data: trade } = await db.from('trades')
         .select('rfq_id, taker_address, maker_address')
         .eq('id', tradeId)
@@ -25,29 +24,36 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ actions: [] });
       }
 
-      // Only return actions signed by the taker, the maker, or council nodes
       const stakeholders = [trade.taker_address, trade.maker_address];
-      // Council nodes will be identified by their signer_address starting with "N-" or "council-"
 
-      const { data, error } = await db.from('signed_actions')
-        .select('*')
-        .or(`trade_id.eq.${tradeId},rfq_id.eq.${trade.rfq_id}`)
-        .order('created_at', { ascending: true });
+      // Query actions linked to this trade OR its parent RFQ
+      // Use two separate queries to avoid Supabase OR syntax issues with UUIDs
+      const [byTrade, byRfq] = await Promise.all([
+        db.from('signed_actions').select('*').eq('trade_id', tradeId).order('created_at', { ascending: true }),
+        trade.rfq_id
+          ? db.from('signed_actions').select('*').eq('rfq_id', trade.rfq_id).order('created_at', { ascending: true })
+          : { data: [] },
+      ]);
 
-      if (error) {
-        return NextResponse.json({ error: error.message, actions: [] }, { status: 500 });
-      }
+      // Merge and dedupe by id
+      const allActions = [...(byTrade.data || []), ...(byRfq.data || [])];
+      const seen = new Set<string>();
+      const deduped = allActions.filter(a => {
+        if (seen.has(a.id)) return false;
+        seen.add(a.id);
+        return true;
+      });
 
-      // Filter to only stakeholders of THIS trade
-      const filtered = (data || []).filter(a => {
-        // Taker or maker of this trade
+      // Filter to stakeholders of THIS trade + council
+      const filtered = deduped.filter(a => {
         if (stakeholders.includes(a.signer_address)) return true;
-        // Council nodes
         if (a.signer_address.startsWith('N-') || a.signer_address.startsWith('council-')) return true;
-        // Council action types
         if (a.action_type.startsWith('council_')) return true;
         return false;
       });
+
+      // Sort chronologically
+      filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
       return NextResponse.json({ actions: filtered });
 
