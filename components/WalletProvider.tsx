@@ -146,15 +146,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       try {
         // Try StarKey's signMessage
-        authSignature = await supra.signMessage({ message: session.authMessage });
+        const rawSig = await supra.signMessage({ message: session.authMessage });
+        // StarKey may return an object { signature: "hex" } or a string
+        authSignature = typeof rawSig === 'string' ? rawSig :
+          rawSig?.signature ? String(rawSig.signature) :
+          rawSig?.result ? String(rawSig.result) :
+          JSON.stringify(rawSig);
       } catch {
         try {
           // Try with hex message
-          authSignature = await supra.signMessage({ message: msgHex });
+          const rawSig2 = await supra.signMessage({ message: msgHex });
+          authSignature = typeof rawSig2 === 'string' ? rawSig2 :
+            rawSig2?.signature ? String(rawSig2.signature) :
+            rawSig2?.result ? String(rawSig2.result) :
+            JSON.stringify(rawSig2);
         } catch {
           try {
             // Try raw sign
-            authSignature = await supra.signMessage(session.authMessage);
+            const rawSig3 = await supra.signMessage(session.authMessage);
+            authSignature = typeof rawSig3 === 'string' ? rawSig3 :
+              rawSig3?.signature ? String(rawSig3.signature) :
+              rawSig3?.result ? String(rawSig3.result) :
+              JSON.stringify(rawSig3);
           } catch (e) {
             console.warn("[SupraFX] StarKey signMessage not available, using fallback:", e);
             // Fallback: use a hash of the address + session info as a pseudo-signature

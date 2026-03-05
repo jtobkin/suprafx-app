@@ -335,11 +335,26 @@ async function handleAcceptQuote(body: any) {
   await db.from('quotes').update({ status: 'rejected' }).eq('rfq_id', rfq.id).neq('id', quoteId).eq('status', 'pending');
   await db.from('rfqs').update({ status: 'matched' }).eq('id', rfq.id);
 
+  // Store signed action for acceptance FIRST (before council, so timeline order is correct)
+  await storeSignedAction({
+    actionType: 'accept_quote',
+    signerAddress: rfq.taker_address,
+    payload: acceptPayload || { action: 'accept_quote', quoteId, rate: quote.rate },
+    payloadHash: acceptHash || '',
+    signature: acceptSig || '',
+    sessionPublicKey: acceptSessionPubKey,
+    sessionAuthSignature: acceptSessionAuthSig,
+    sessionNonce: acceptSessionNonce,
+    sessionCreatedAt: acceptSessionCreatedAt,
+    rfqId: rfq.id,
+    quoteId,
+  });
+
   // Create trade from accepted quote
   const tradeCount = ((await db.from('trades').select('id', { count: 'exact' })).count || 0) + 1;
   const tradeDisplayId = `T-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${String(tradeCount).padStart(3, '0')}`;
 
-  // Council confirms the match (Phase 2C)
+  // Council confirms the match (Phase 2C) — runs AFTER accept is stored
   const matchResult = await councilVerifyAndSign(
     'confirm_match',
     { quoteId, rfqId: rfq.id, takerAddress: rfq.taker_address, makerAddress: quote.maker_address, rate: quote.rate, pair: rfq.pair },
@@ -388,22 +403,6 @@ async function handleAcceptQuote(body: any) {
   }).select().single();
 
   if (tradeErr) return NextResponse.json({ error: tradeErr.message }, { status: 500 });
-
-  // Store signed action for acceptance
-  await storeSignedAction({
-    actionType: 'accept_quote',
-    signerAddress: rfq.taker_address,
-    payload: acceptPayload || { action: 'accept_quote', quoteId, rate: quote.rate },
-    payloadHash: acceptHash || '',
-    signature: acceptSig || '',
-    sessionPublicKey: acceptSessionPubKey,
-    sessionAuthSignature: acceptSessionAuthSig,
-    sessionNonce: acceptSessionNonce,
-    sessionCreatedAt: acceptSessionCreatedAt,
-    rfqId: rfq.id,
-    quoteId,
-    tradeId: trade.id,
-  });
 
   return NextResponse.json({
     success: true,
