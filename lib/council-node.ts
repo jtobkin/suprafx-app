@@ -372,24 +372,10 @@ export async function checkDeadlines(): Promise<string[]> {
         rfqId: event.rfq_id,
       });
 
-      // Build and store attestation
+      // Build attestation (posts to Supra internally)
       try {
-        const att = await buildAttestation(event.rfq_id, tradeId, timeoutType);
-        if (att) {
-          // Post to Supra chain
-          try {
-            const { submitCommitteeAttestation } = await import('./bot-wallets');
-            if (process.env.BOT_SUPRA_PRIVATE_KEY) {
-              const attTxHash = await submitCommitteeAttestation(tradeId, att.chainHash);
-              await db.from('council_attestations').update({
-                attestation_tx_hash: attTxHash,
-                posted_to_chain: true,
-                posted_at: new Date().toISOString(),
-              }).eq('id', att.attestationId);
-            }
-          } catch (e: any) { console.error('[Council] Supra attestation post error:', e.message); }
-        }
-      } catch (e: any) { console.error('[Council] Attestation build error:', e.message); }
+        await buildAttestation(event.rfq_id, tradeId, timeoutType);
+      } catch (e: any) { console.error('[Council] Attestation error:', e.message); }
 
       processed.push(`${timeoutType}:${tradeId}`);
     }
@@ -410,7 +396,7 @@ export async function buildAttestation(
   rfqId: string,
   tradeId: string,
   outcome: string,
-): Promise<{ chainHash: string; attestationId: string; signatures: number } | null> {
+): Promise<{ chainHash: string; attestationId: string; signatures: number; attestationTxHash?: string } | null> {
   const db = getServiceClient();
 
   // Load the full event chain
@@ -477,10 +463,32 @@ export async function buildAttestation(
     node_signatures: nodeSignatures,
   }).select('id').single();
 
+  const attestationId = att?.id || '';
+
+  // Post chain hash to Supra blockchain
+  let attestationTxHash = '';
+  try {
+    if (process.env.BOT_SUPRA_PRIVATE_KEY) {
+      const { submitCommitteeAttestation } = await import('./bot-wallets');
+      attestationTxHash = await submitCommitteeAttestation(tradeId, chainHash);
+      if (attestationTxHash && attestationId) {
+        await db.from('council_attestations').update({
+          attestation_tx_hash: attestationTxHash,
+          posted_to_chain: true,
+          posted_at: new Date().toISOString(),
+        }).eq('id', attestationId);
+      }
+      console.log('[Council] Attestation posted to Supra:', attestationTxHash);
+    }
+  } catch (e: any) {
+    console.error('[Council] Supra post error:', e.message);
+  }
+
   return {
     chainHash,
-    attestationId: att?.id || '',
+    attestationId,
     signatures: nodeSignatures.length,
+    attestationTxHash,
   };
 }
 
