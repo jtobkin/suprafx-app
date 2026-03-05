@@ -145,29 +145,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const msgHex = "0x" + Array.from(new TextEncoder().encode(session.authMessage), b => b.toString(16).padStart(2, "0")).join("");
 
       try {
-        // Try StarKey's signMessage
+        // Extract valid signature string from StarKey response
+        const extractSig = (raw: any): string | null => {
+          if (!raw) return null;
+          if (typeof raw === 'string' && raw.length > 10) return raw;
+          if (typeof raw === 'object') {
+            // Check known fields, skip null values
+            if (raw.signature && typeof raw.signature === 'string' && raw.signature.length > 10) return raw.signature;
+            if (raw.result && typeof raw.result === 'string' && raw.result.length > 10) return raw.result;
+            if (raw.sig && typeof raw.sig === 'string' && raw.sig.length > 10) return raw.sig;
+          }
+          return null;
+        };
+
+        // Try StarKey's signMessage with object param
         const rawSig = await supra.signMessage({ message: session.authMessage });
-        // StarKey may return an object { signature: "hex" } or a string
-        authSignature = typeof rawSig === 'string' ? rawSig :
-          rawSig?.signature ? String(rawSig.signature) :
-          rawSig?.result ? String(rawSig.result) :
-          JSON.stringify(rawSig);
+        authSignature = extractSig(rawSig);
       } catch {
         try {
           // Try with hex message
           const rawSig2 = await supra.signMessage({ message: msgHex });
-          authSignature = typeof rawSig2 === 'string' ? rawSig2 :
-            rawSig2?.signature ? String(rawSig2.signature) :
-            rawSig2?.result ? String(rawSig2.result) :
-            JSON.stringify(rawSig2);
+          authSignature = typeof rawSig2 === 'string' && rawSig2.length > 10 ? rawSig2 :
+            rawSig2?.signature && rawSig2.signature !== null ? String(rawSig2.signature) : null;
         } catch {
           try {
-            // Try raw sign
+            // Try raw string param
             const rawSig3 = await supra.signMessage(session.authMessage);
-            authSignature = typeof rawSig3 === 'string' ? rawSig3 :
-              rawSig3?.signature ? String(rawSig3.signature) :
-              rawSig3?.result ? String(rawSig3.result) :
-              JSON.stringify(rawSig3);
+            authSignature = typeof rawSig3 === 'string' && rawSig3.length > 10 ? rawSig3 :
+              rawSig3?.signature && rawSig3.signature !== null ? String(rawSig3.signature) : null;
           } catch (e) {
             console.warn("[SupraFX] StarKey signMessage not available, using fallback:", e);
             // Fallback: use a hash of the address + session info as a pseudo-signature
@@ -180,6 +185,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
               .map(b => b.toString(16).padStart(2, "0")).join("");
           }
         }
+      }
+
+      // If signMessage returned null/empty, use hash fallback
+      if (!authSignature || authSignature.length < 10) {
+        console.warn("[SupraFX] StarKey signMessage returned null, using hash-based session auth");
+        const encoder = new TextEncoder();
+        const hashBuffer = await crypto.subtle.digest("SHA-256",
+          encoder.encode(addr + ":" + session.nonce + ":" + session.createdAt + ":session-auth")
+        );
+        authSignature = "hash:" + Array.from(new Uint8Array(hashBuffer))
+          .map(b => b.toString(16).padStart(2, "0")).join("");
       }
 
       if (authSignature) {

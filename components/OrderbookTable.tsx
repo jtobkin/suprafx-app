@@ -144,14 +144,28 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
   }, [open, loaded, tradeId]);
 
   const actionLabel: Record<string, string> = {
-    submit_rfq: "Submit RFQ", place_quote: "Place Quote", accept_quote: "Accept Quote",
-    confirm_taker_tx: "Taker TX Confirm", confirm_maker_tx: "Maker TX Confirm",
-    council_endorse_taker_tx: "Council Endorse Taker", council_endorse_maker_tx: "Council Endorse Maker",
+    submit_rfq: "Submit RFQ",
+    place_quote: "Place Quote",
+    accept_quote: "Accept Quote",
+    confirm_taker_tx: "Taker TX Confirm",
+    confirm_maker_tx: "Maker TX Confirm",
+    council_cosign_quote: "Council Co-Sign Quote",
+    council_confirm_match: "Council Confirm Match",
+    council_verify_taker_tx: "Council Verify Taker TX",
+    council_verify_maker_tx: "Council Verify Maker TX",
+    council_approve_reputation: "Council Approve Settlement",
   };
   const actionColor: Record<string, string> = {
-    submit_rfq: "var(--accent-light)", place_quote: "var(--warn)", accept_quote: "var(--positive)",
-    confirm_taker_tx: "var(--accent-light)", confirm_maker_tx: "var(--positive)",
-    council_endorse_taker_tx: "var(--positive)", council_endorse_maker_tx: "var(--positive)",
+    submit_rfq: "var(--accent-light)",
+    place_quote: "var(--warn)",
+    accept_quote: "var(--positive)",
+    confirm_taker_tx: "var(--accent-light)",
+    confirm_maker_tx: "var(--positive)",
+    council_cosign_quote: "#8b5cf6",
+    council_confirm_match: "#8b5cf6",
+    council_verify_taker_tx: "#8b5cf6",
+    council_verify_maker_tx: "#8b5cf6",
+    council_approve_reputation: "#8b5cf6",
   };
 
   const roleLabel = (addr: string) => {
@@ -188,14 +202,14 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
                 return (
                   <div key={a.id || i} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
                     {/* Summary row */}
-                    <div className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                    <div className="flex items-center gap-4 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors"
                       onClick={() => setExpandedAction(isExpanded ? null : a.id)}
                       style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-1)" }}>
-                      <span className="mono text-[11px] w-16 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
-                      <span className="text-[12px] w-28 shrink-0 font-semibold" style={{ color: actionColor[a.action_type] || "var(--t2)" }}>
-                        {actionLabel[a.action_type] || a.action_type}
+                      <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
+                      <span className="text-[12px] w-40 shrink-0 font-semibold" style={{ color: actionColor[a.action_type] || "var(--t2)" }}>
+                        {actionLabel[a.action_type] || a.action_type.replace(/_/g, " ")}
                       </span>
-                      <span className="text-[11px] shrink-0 font-medium" style={{ color: a.signer_address === supraAddr ? "var(--positive)" : "var(--t2)" }}>
+                      <span className="text-[11px] w-20 shrink-0 font-medium" style={{ color: a.signer_address === supraAddr ? "var(--positive)" : "var(--t2)" }}>
                         {roleLabel(a.signer_address)}
                       </span>
                       <div className="flex items-center gap-1 flex-1 justify-end">
