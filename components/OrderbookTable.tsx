@@ -976,26 +976,13 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
 
-      {/* SECTION 1: IN-FLIGHT TRADES */}
+      {/* SECTION 1: IN-FLIGHT TRADES (only visible when you have active trades) */}
+      {filteredActiveTrades.length > 0 && (
       <div className="card mb-4 animate-in" style={{ order: 1 }}>
         <div className="card-header">
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              {(["all", "mine"] as const).map(f => (
-                <button key={f} onClick={() => setActiveFilter(f)}
-                  className="px-2 py-0.5 rounded text-[11px] font-medium transition-all"
-                  style={{ background: activeFilter === f ? "var(--accent)" : "transparent", color: activeFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (activeFilter === f ? "var(--accent)" : "var(--border)") }}>
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                </button>
-              ))}
-            </div>
-            <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>{activeTrades.length} active</span>
-          </div>
+          <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>{filteredActiveTrades.length} active</span>
         </div>
-        {filteredActiveTrades.length === 0 ? (
-          <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No in-flight trades</div>
-        ) : (
           <div>
             <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
               {["TX ID", "Pair", "Size", "Rate", "Route", "Taker", "Maker", "Status"].map(h => (
@@ -1039,6 +1026,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
           </div>
         )}
       </div>
+      )}
 
       {/* SECTION 2: OPEN RFQs (visible by default, collapsible) */}
       <div className="card mb-4 animate-in" style={{ order: 2 }}>
