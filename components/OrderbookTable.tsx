@@ -1,5 +1,5 @@
 "use client";
-// BUILD_VERSION: review-status-capacity-v1
+// BUILD_VERSION: ui-restructure-v1
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
@@ -1199,6 +1199,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                               </div>
                               <span className="mono text-[13px] font-semibold w-36" style={{ color: "var(--t1)" }}>
                                 {fmtRate(q.rate)} {quoteClean}
+                              </span>
+                              <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>
+                                {r.size > 0 ? (r.size * q.rate >= 1000 ? "$" + (r.size * q.rate).toLocaleString(undefined, {maximumFractionDigits: 0}) : "$" + (r.size * q.rate).toFixed(2)) : ""}
                               </span>
                               <span className="mono text-[12px] w-28" style={{ color: diffColor }}>
                                 {diff >= 0 ? "+" : ""}{diff.toFixed(2)}%

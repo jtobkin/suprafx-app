@@ -123,6 +123,8 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
   const [amount, setAmount] = useState("");
   const [price, setPrice] = useState("");
   const [oracleRate, setOracleRate] = useState<number | null>(null);
+  const [sellUsdPrice, setSellUsdPrice] = useState<number | null>(null);
+  const [buyUsdPrice, setBuyUsdPrice] = useState<number | null>(null);
   const [priceEdited, setPriceEdited] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -142,6 +144,8 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
           setPrice(formatPrice(d.conversionRate));
         }
       }
+      if (d.base?.price) setSellUsdPrice(d.base.price);
+      if (d.quote?.price) setBuyUsdPrice(d.quote.price);
     } catch {}
   }, [pair, priceEdited]);
 
@@ -149,6 +153,8 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
     setPriceEdited(false);
     setPrice("");
     setOracleRate(null);
+    setSellUsdPrice(null);
+    setBuyUsdPrice(null);
     fetchRate();
   }, [sellToken, buyToken]);
 
@@ -156,6 +162,11 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
     const iv = setInterval(fetchRate, 3000);
     return () => clearInterval(iv);
   }, [fetchRate]);
+
+  function formatUsd(n: number): string {
+    if (n >= 1) return "$" + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return "$" + n.toFixed(4);
+  }
 
   function formatPrice(n: number): string {
     if (n >= 1000) return n.toFixed(2);
@@ -166,6 +177,8 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
   const parsedAmount = parseFloat(amount) || 0;
   const parsedPrice = parseFloat(price) || 0;
   const receiveAmount = parsedAmount * parsedPrice;
+  const sellUsdTotal = parsedAmount > 0 && sellUsdPrice ? parsedAmount * sellUsdPrice : null;
+  const receiveUsdTotal = receiveAmount > 0 && buyUsdPrice ? receiveAmount * buyUsdPrice : null;
 
   const submit = async () => {
     if (!supraAddress || parsedAmount <= 0 || parsedPrice <= 0) return;
@@ -234,6 +247,9 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
               onChange={e => setAmount(e.target.value)}
               className="w-full px-3 rounded-md mono text-[14px] outline-none"
               style={{ background: "var(--bg-raised)", color: "var(--t0)", border: "1px solid var(--border)", height: 46 }} />
+            {sellUsdTotal !== null && sellUsdTotal > 0 && (
+              <div className="mono text-[10px] mt-1" style={{ color: "var(--t3)" }}>{formatUsd(sellUsdTotal)} USD</div>
+            )}
           </div>
 
           {/* Arrow */}
@@ -270,6 +286,9 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
                 <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>/{sellToken}</span>
               </div>
             </div>
+            {sellUsdPrice && parsedPrice > 0 && (
+              <div className="mono text-[10px] mt-1" style={{ color: "var(--t3)" }}>1 {sellToken} = {formatUsd(sellUsdPrice)} USD</div>
+            )}
           </div>
 
           {/* You Receive */}
@@ -284,6 +303,9 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
                 <span className="mono text-[11px]" style={{ color: "var(--t2)" }}>{buyToken}</span>
               </div>
             </div>
+            {receiveUsdTotal !== null && receiveUsdTotal > 0 && (
+              <div className="mono text-[10px] mt-1" style={{ color: "var(--t3)" }}>{formatUsd(receiveUsdTotal)} USD</div>
+            )}
           </div>
 
           {/* Submit */}
