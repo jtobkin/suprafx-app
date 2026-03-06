@@ -22,6 +22,7 @@ interface WalletCtx {
   profile: ProfileData | null;
   isVerified: boolean;
   isDemo: boolean;
+  profileLoading: boolean;
   connect: () => Promise<void>;
   demo: () => void;
   disconnect: () => void;
@@ -35,7 +36,7 @@ interface WalletCtx {
 }
 
 const Ctx = createContext<WalletCtx>({
-  supraAddress: null, profile: null, isVerified: false, isDemo: false,
+  supraAddress: null, profile: null, isVerified: false, isDemo: false, profileLoading: false,
   signAction: async () => { throw new Error("No wallet connected"); },
   sessionValid: false,
   connect: async () => {}, demo: () => {}, disconnect: () => {},
@@ -130,6 +131,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try { return sessionStorage.getItem("suprafx_demo") === "1"; } catch { return false; }
   });
   const [sessionValid, setSessionValid] = useState(false);
+  // True when we have a saved address but profile hasn't loaded yet (prevents auth gate flash)
+  const [profileLoading, setProfileLoading] = useState(() => {
+    try {
+      const addr = sessionStorage.getItem("suprafx_addr");
+      return !!addr && sessionStorage.getItem("suprafx_demo") !== "1";
+    } catch { return false; }
+  });
 
   const isVerified = !!(profile?.supraAddress && profile?.evmVerified);
 
@@ -255,6 +263,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       setProfile({ supraAddress: addr, evmAddress: null, evmVerified: false, evmSignature: null, linkedAddresses: [] });
+    } finally {
+      setProfileLoading(false);
     }
   }, []);
 
@@ -504,7 +514,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      supraAddress, profile, isVerified, isDemo,
+      supraAddress, profile, isVerified, isDemo, profileLoading,
       connect, demo, disconnect, linkEvmAddress, signAction: handleSignAction, sessionValid,
       sendSepoliaEth, sendSupraTokens,
       supraShort, evmShort,

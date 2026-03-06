@@ -283,7 +283,7 @@ export default function Page() {
 }
 
 function Inner() {
-  const { supraAddress, isVerified, isDemo } = useWallet();
+  const { supraAddress, isVerified, isDemo, profileLoading } = useWallet();
 
   const miniHeader = (
     <header className="h-12 flex items-center px-5 border-b glass-strong" style={{ borderColor: "var(--border)" }}>
@@ -295,6 +295,7 @@ function Inner() {
   );
 
   if (!supraAddress) return <div>{miniHeader}<Login /></div>;
+  if (profileLoading) return <div>{miniHeader}</div>;
   if (!isVerified && !isDemo) return <div>{miniHeader}<VerificationGate /></div>;
   return <Dashboard />;
 }
