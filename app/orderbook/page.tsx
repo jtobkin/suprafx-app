@@ -714,15 +714,6 @@ function OrderbookDashboard() {
         <div className="card mb-4">
           <div className="px-4 py-3 flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1">
-              {(["all", "mine"] as const).map(f => (
-                <button key={f} onClick={() => setOwnerFilter(f)} className="px-2.5 py-0.5 rounded text-[11px] font-medium transition-all"
-                  style={{ background: ownerFilter === f ? "var(--accent)" : "transparent", color: ownerFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (ownerFilter === f ? "var(--accent)" : "var(--border)") }}>
-                  {f === "all" ? "All" : "My Orders"}
-                </button>
-              ))}
-            </div>
-            <div className="w-px h-5" style={{ background: "var(--border)" }} />
-            <div className="flex items-center gap-1">
               <span className="text-[10px] uppercase tracking-wider mr-1" style={{ color: "var(--t3)" }}>Route</span>
               {CHAINS.map(c => (
                 <button key={c} onClick={() => setChainFilter(c)} className="px-2 py-0.5 rounded text-[11px] font-medium transition-all"
@@ -747,7 +738,6 @@ function OrderbookDashboard() {
                 </button>
               ))}
             </div>
-            <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{filteredRfqs.length} RFQ{filteredRfqs.length !== 1 ? "s" : ""}</span>
           </div>
         </div>
 
@@ -790,6 +780,15 @@ function OrderbookDashboard() {
             <div className="card mb-4">
               <div className="card-header">
                 <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
+                <div className="flex items-center gap-2">
+                  {(["all", "mine"] as const).map(f => (
+                    <button key={f} onClick={() => setOwnerFilter(f)} className="px-2.5 py-0.5 rounded text-[11px] font-medium transition-all"
+                      style={{ background: ownerFilter === f ? "var(--accent)" : "transparent", color: ownerFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (ownerFilter === f ? "var(--accent)" : "var(--border)") }}>
+                      {f === "all" ? "All" : "My Orders"}
+                    </button>
+                  ))}
+                  <span className="mono text-[11px] ml-1" style={{ color: "var(--t3)" }}>{filteredRfqs.length}</span>
+                </div>
               </div>
               {filteredRfqs.length === 0 ? (
                 <div className="py-8 text-center text-[13px]" style={{ color: "var(--t3)" }}>{openRfqs.length === 0 ? "No open RFQs" : "No RFQs match your filters"}</div>
