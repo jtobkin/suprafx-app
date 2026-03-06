@@ -31,17 +31,7 @@ export default function KPIs({ trades, agents, rfqs }: { trades: Trade[]; agents
           </div>
         ))}
       </div>
-      {/* Supra Price Widget */}
-      <div className="rounded-md overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <iframe
-          src="https://supra.com/data/widgets?widgetType=horizontal&instrumentPairs=btc_usdt,eth_usdt,supra_usdt&x-api-key=f9c3e7b5d2a8f0c4e6b1d9a3f7c5e2d8b6a0f4c9e1d3b7a5c2e8f6d1a9c4t6a1"
-          width="100%"
-          height="400"
-          frameBorder="0"
-          scrolling="no"
-          style={{ display: "block" }}
-        />
-      </div>
+
     </div>
   );
 }
