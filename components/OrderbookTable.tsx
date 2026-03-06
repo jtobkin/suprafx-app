@@ -926,6 +926,35 @@ interface Props {
 export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate }: Props) {
   const { supraAddress, signAction } = useWallet();
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
+  const [usdPrices, setUsdPrices] = useState<Record<string, number>>({});
+
+  // Fetch USD prices for all tokens once
+  useEffect(() => {
+    const pairs = ["ETH/SUPRA", "fxUSDC/SUPRA", "fxAAVE/SUPRA", "fxLINK/SUPRA"];
+    Promise.all(pairs.map(p =>
+      fetch(`/api/oracle?pair=${encodeURIComponent(p)}`).then(r => r.json()).catch(() => null)
+    )).then(results => {
+      const prices: Record<string, number> = {};
+      for (const d of results) {
+        if (!d) continue;
+        if (d.base?.token && d.base?.price) prices[d.base.token.replace("fx", "")] = d.base.price;
+        if (d.quote?.token && d.quote?.price) prices[d.quote.token.replace("fx", "")] = d.quote.price;
+      }
+      // Stablecoins
+      if (!prices["USDC"]) prices["USDC"] = 1;
+      if (!prices["USDT"]) prices["USDT"] = 1;
+      setUsdPrices(prices);
+    });
+  }, []);
+
+  function toUsd(amount: number, token: string): string | null {
+    const clean = token.replace("fx", "");
+    const price = usdPrices[clean];
+    if (!price || amount <= 0) return null;
+    const total = amount * price;
+    if (total >= 1) return "$" + total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return "$" + total.toFixed(4);
+  }
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedCompleted, setExpandedCompleted] = useState<string | null>(null);
@@ -1152,6 +1181,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                       <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Asking </span>
                       <span className="mono text-[13px] font-semibold" style={{ color: "var(--t1)" }}>
                         {fmtRate(r.reference_price)} {quoteClean}/{baseClean}
+                        {(() => { const usd = toUsd(r.size * r.reference_price, r.pair.split("/")[1] || ""); return usd ? <span className="mono text-[11px] ml-2" style={{ color: "var(--t3)" }}>({usd} USD)</span> : null; })()}
                       </span>
                     </div>
                     {isMine && (
@@ -1199,6 +1229,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                               </div>
                               <span className="mono text-[13px] font-semibold w-36" style={{ color: "var(--t1)" }}>
                                 {fmtRate(q.rate)} {quoteClean}
+                              </span>
+                              <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>
+                                {(() => { const u = toUsd(r.size * q.rate, r.pair.split("/")[1] || ""); return u ? u + " USD" : ""; })()}
                               </span>
                               <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>
                                 {r.size > 0 ? (r.size * q.rate >= 1000 ? "$" + (r.size * q.rate).toLocaleString(undefined, {maximumFractionDigits: 0}) : "$" + (r.size * q.rate).toFixed(2)) : ""}
@@ -1258,6 +1291,19 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                               style={{ background: "var(--positive)", color: "#fff", border: "none" }}>
                               {quotingLoading ? "..." : "Submit Quote"}
                             </button>
+                            {parseFloat(quotePrice) > 0 && r.size > 0 && (() => {
+                              const sendAmt = r.size * parseFloat(quotePrice);
+                              const sendToken = r.pair.split("/")[1]?.replace("fx","") || "";
+                              const receiveToken = r.pair.split("/")[0]?.replace("fx","") || "";
+                              const sendUsd = toUsd(sendAmt, r.pair.split("/")[1] || "");
+                              const receiveUsd = toUsd(r.size, r.pair.split("/")[0] || "");
+                              return (
+                                <div className="text-[10px] mt-2 px-2 py-1.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t2)" }}>
+                                  <div>You send: <span className="font-semibold">{sendAmt.toLocaleString(undefined, {maximumFractionDigits: 4})} {sendToken}</span>{sendUsd && <span style={{ color: "var(--t3)" }}> ({sendUsd} USD)</span>}</div>
+                                  <div>You receive: <span className="font-semibold">{r.size} {receiveToken}</span>{receiveUsd && <span style={{ color: "var(--t3)" }}> ({receiveUsd} USD)</span>}</div>
+                                </div>
+                              );
+                            })()}
                             <button onClick={() => { setQuotingRfq(null); setQuotePrice(""); }}
                               className="text-[11px] hover:underline"
                               style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
