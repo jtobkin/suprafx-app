@@ -54,7 +54,7 @@ function CounterpartiesDashboard() {
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} initialTab={profileTab} />
       <div className="max-w-[1240px] mx-auto px-5 py-5">
         <div className="grid grid-cols-2 gap-4">
-          <AgentsPanel agents={agents} />
+          <AgentsPanel agents={agents} trades={trades} />
           <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} trades={trades} rfqs={rfqs} />
         </div>
       </div>
