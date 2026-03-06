@@ -540,21 +540,20 @@ function OrderbookDashboard() {
   const renderRfqRow = (r: RFQ) => {
     const isMine = r.taker_address === supraAddress;
     const rfqQuotes = quotes.filter(q => q.rfq_id === r.id && q.status !== "rejected" && q.status !== "withdrawn").sort((a, b) => b.rate - a.rate);
-    // Check if this RFQ has been matched into an active trade
-    const linkedTrade = trades.find(t => t.rfq_id === r.id && !terminalStatuses.includes(t.status));
-    const isMatched = r.status === "matched" || !!linkedTrade;
-    // Auto-expand if it's MY in-flight trade (I'm taker or maker on the linked trade)
-    const isMyInFlight = !!linkedTrade && !!supraAddress && (linkedTrade.taker_address === supraAddress || linkedTrade.maker_address === supraAddress);
-    const isExpanded = expandedRfq === r.id || isMyInFlight;
+    const isExpanded = expandedRfq === r.id;
     const baseClean = r.pair.split("/")[0]?.replace("fx", "") || "";
     const quoteClean = r.pair.split("/")[1]?.replace("fx", "") || "";
     const notionalUsd = toUsd(r.size * r.reference_price, r.pair.split("/")[1] || "");
     const myExistingQuote = supraAddress ? rfqQuotes.find(q => q.maker_address === supraAddress) : null;
+    const pendingQuotes = rfqQuotes.filter(q => q.status === "pending");
+    // Check if this RFQ has been matched into an active trade
+    const linkedTrade = trades.find(t => t.rfq_id === r.id && !terminalStatuses.includes(t.status));
+    const isMatched = r.status === "matched" || !!linkedTrade;
 
     return (
       <div key={r.id} style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-white/[0.01] transition-colors"
-          onClick={() => { if (!isMyInFlight) setExpandedRfq(isExpanded ? null : r.id); }}>
+          onClick={() => setExpandedRfq(isExpanded ? null : r.id)}>
           <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{generateTxId(r.display_id, r.taker_address)}</span>
           <span className="text-[13px] font-semibold w-24 shrink-0" style={{ color: "var(--t0)" }}>{displayPair(r.pair)}</span>
           <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t2)" }}>{r.size} {baseClean}</span>

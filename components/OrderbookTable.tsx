@@ -970,7 +970,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   };
 
   const filteredOpenRfqs = activeFilter === "mine" ? openRfqs.filter(r => r.taker_address === supraAddress) : openRfqs;
-  const filteredActiveTrades = activeFilter === "mine" ? activeTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress) : activeTrades;
+  const filteredActiveTrades = activeTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress);
   const filteredCompletedTrades = completedFilter === "mine" ? completedTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress) : completedTrades;
 
   return (
