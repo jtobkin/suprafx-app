@@ -769,7 +769,7 @@ function OrderbookDashboard() {
         </div>
 
         {/* MAIN: RFQ Feed + Sidebar */}
-        <div ref={containerRef} className="flex gap-0" style={{ alignItems: "flex-start" }}>
+        <div ref={containerRef} className="flex gap-0" style={{ alignItems: "stretch", minHeight: "400px" }}>
           {/* LEFT: RFQ Feed */}
           <div style={{ width: `${splitPercent}%`, minWidth: 0, overflow: "auto" }}>
 
@@ -856,7 +856,7 @@ function OrderbookDashboard() {
           </div>
 
           {/* RIGHT: My Active Quotes */}
-          <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, overflow: "auto", position: "sticky", top: "60px", maxHeight: "calc(100vh - 80px)" }}>
+          <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, overflow: "auto" }}>
             <div className="card">
               <div className="card-header">
                 <span className="text-[13px] font-semibold" style={{ color: "var(--t1)" }}>My Quotes</span>
