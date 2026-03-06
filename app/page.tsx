@@ -6,22 +6,15 @@ import ProfilePanel from "@/components/ProfilePanel";
 import KPIs from "@/components/KPIs";
 import OrderbookTable from "@/components/OrderbookTable";
 import MyTrades from "@/components/MyTrades";
-import CommitteePanel from "@/components/CommitteePanel";
-import AgentsPanel from "@/components/AgentsPanel";
+
 import SubmitRFQ from "@/components/SubmitRFQ";
 import Notifications from "@/components/Notifications";
 import { supabase } from "@/lib/supabase";
-import type { Trade, RFQ, Agent, CommitteeRequest, Quote } from "@/lib/types";
+import type { Trade, RFQ, Agent, Quote } from "@/lib/types";
 
 import { InteractiveGlobe } from "@/components/ui/interactive-globe";
 
-const COMMITTEE_NODES = [
-  { id: "N-1", status: "online" },
-  { id: "N-2", status: "online" },
-  { id: "N-3", status: "online" },
-  { id: "N-4", status: "online" },
-  { id: "N-5", status: "online" },
-];
+
 
 function Login() {
   const { connect, demo } = useWallet();
@@ -205,21 +198,18 @@ function Dashboard() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [requests, setRequests] = useState<CommitteeRequest[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
 
   const fetchAll = useCallback(async () => {
-    const [t, r, a, cr, q] = await Promise.all([
+    const [t, r, a, q] = await Promise.all([
       supabase.from("trades").select("*").order("created_at", { ascending: false }),
       supabase.from("rfqs").select("*").order("created_at", { ascending: false }),
       supabase.from("agents").select("*").order("created_at", { ascending: false }),
-      supabase.from("committee_requests").select("*").order("created_at", { ascending: false }),
       supabase.from("quotes").select("*").order("created_at", { ascending: false }),
     ]);
     if (t.data) setTrades(t.data);
     if (r.data) setRfqs(r.data);
     if (a.data) setAgents(a.data);
-    if (cr.data) setRequests(cr.data);
     if (q.data) setQuotes(q.data);
   }, []);
 
@@ -228,9 +218,7 @@ function Dashboard() {
     const channel = supabase.channel("rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => fetchAll())
       .on("postgres_changes", { event: "*", schema: "public", table: "rfqs" }, () => fetchAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "committee_requests" }, () => fetchAll())
       .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => fetchAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "committee_votes" }, () => fetchAll())
       .on("postgres_changes", { event: "*", schema: "public", table: "quotes" }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -264,7 +252,7 @@ function Dashboard() {
 
   return (
     <div>
-      <Header onProfileClick={() => { setProfileTab("profile"); setProfileOpen(true); }} />
+      <Header onProfileClick={() => { setProfileTab("profile"); setProfileOpen(true); }} activePage="rfq" />
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} initialTab={profileTab} />
       <Notifications trades={trades} quotes={quotes} />
       {/* Listen for vault tab open requests */}
@@ -274,10 +262,6 @@ function Dashboard() {
         <SubmitRFQ onSubmitted={fetchAll} />
         <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} />
         <MyTrades rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} />
-        <div className="grid grid-cols-2 gap-4">
-          <AgentsPanel agents={agents} />
-          <CommitteePanel nodes={COMMITTEE_NODES} requests={requests} trades={trades} rfqs={rfqs} />
-        </div>
       </div>
       <div className="text-center py-6 mono text-[11px] uppercase tracking-[2px] border-t mt-10"
         style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
