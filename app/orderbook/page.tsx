@@ -768,56 +768,58 @@ function OrderbookDashboard() {
           </div>
         </div>
 
-        {/* MAIN: RFQ Feed + Sidebar */}
-        <div ref={containerRef} className="flex gap-0" style={{ alignItems: "stretch", minHeight: "400px" }}>
-          {/* LEFT: RFQ Feed */}
-          <div style={{ width: `${splitPercent}%`, minWidth: 0, overflow: "auto" }}>
-
-            {/* In-Flight Trades (My Orders mode only) */}
-            {ownerFilter === "mine" && myInFlightTrades.length > 0 && (
-              <div className="card mb-4">
-                <div className="card-header">
-                  <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
-                  <span className="mono text-[11px]" style={{ color: "var(--warn)" }}>{myInFlightTrades.length} active</span>
+        {/* In-Flight Trades (My Orders mode only) — stays as its own card */}
+        {ownerFilter === "mine" && myInFlightTrades.length > 0 && (
+          <div className="card mb-4">
+            <div className="card-header">
+              <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
+              <span className="mono text-[11px]" style={{ color: "var(--warn)" }}>{myInFlightTrades.length} active</span>
+            </div>
+            {myInFlightTrades.map(t => {
+              const isOpen = expandedInFlight === t.id;
+              const pairClean = displayPair(t.pair);
+              const isTaker = t.taker_address === supraAddress;
+              return (
+                <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                  <div className="flex items-center gap-4 px-4 py-2.5 cursor-pointer hover:bg-white/[0.01]"
+                    onClick={() => setExpandedInFlight(isOpen ? null : t.id)}>
+                    <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{t.display_id}</span>
+                    <span className="text-[13px] font-semibold w-24 shrink-0">{pairClean}</span>
+                    <span className="mono text-[12px] w-16 shrink-0" style={{ color: "var(--t2)" }}>{t.size}</span>
+                    <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
+                    <span className="w-14 shrink-0"><span className={`tag tag-${isTaker ? "taker" : "maker"}`}>{isTaker ? "taker" : "maker"}</span></span>
+                    <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
+                    <div className="flex-1" />
+                    <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isOpen ? "^" : "v"}</span>
+                  </div>
+                  {isOpen && <InFlightTrade trade={t} onUpdate={fetchAll} agents={agents} />}
                 </div>
-                {myInFlightTrades.map(t => {
-                  const isOpen = expandedInFlight === t.id;
-                  const pairClean = displayPair(t.pair);
-                  const isTaker = t.taker_address === supraAddress;
-                  return (
-                    <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <div className="flex items-center gap-4 px-4 py-2.5 cursor-pointer hover:bg-white/[0.01]"
-                        onClick={() => setExpandedInFlight(isOpen ? null : t.id)}>
-                        <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{t.display_id}</span>
-                        <span className="text-[13px] font-semibold w-24 shrink-0">{pairClean}</span>
-                        <span className="mono text-[12px] w-16 shrink-0" style={{ color: "var(--t2)" }}>{t.size}</span>
-                        <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
-                        <span className="w-14 shrink-0"><span className={`tag tag-${isTaker ? "taker" : "maker"}`}>{isTaker ? "taker" : "maker"}</span></span>
-                        <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
-                        <div className="flex-1" />
-                        <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isOpen ? "^" : "v"}</span>
-                      </div>
-                      {isOpen && <InFlightTrade trade={t} onUpdate={fetchAll} agents={agents} />}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+              );
+            })}
+          </div>
+        )}
 
-            {/* Open RFQs */}
-            <div className="card mb-4">
-              <div className="card-header">
-                <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
-                <div className="flex items-center gap-2">
-                  {(["all", "mine"] as const).map(f => (
-                    <button key={f} onClick={() => setOwnerFilter(f)} className="px-2.5 py-0.5 rounded text-[11px] font-medium transition-all"
-                      style={{ background: ownerFilter === f ? "var(--accent)" : "transparent", color: ownerFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (ownerFilter === f ? "var(--accent)" : "var(--border)") }}>
-                      {f === "all" ? "All" : "My Orders"}
-                    </button>
-                  ))}
-                  <span className="mono text-[11px] ml-1" style={{ color: "var(--t3)" }}>{filteredRfqs.length}</span>
-                </div>
-              </div>
+        {/* Open RFQs card — contains the split panel */}
+        <div className="card mb-4">
+          {/* Card header */}
+          <div className="card-header">
+            <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
+            <div className="flex items-center gap-2">
+              {(["all", "mine"] as const).map(f => (
+                <button key={f} onClick={() => setOwnerFilter(f)} className="px-2.5 py-0.5 rounded text-[11px] font-medium transition-all"
+                  style={{ background: ownerFilter === f ? "var(--accent)" : "transparent", color: ownerFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (ownerFilter === f ? "var(--accent)" : "var(--border)") }}>
+                  {f === "all" ? "All" : "My Orders"}
+                </button>
+              ))}
+              <span className="mono text-[11px] ml-1" style={{ color: "var(--t3)" }}>{filteredRfqs.length}</span>
+            </div>
+          </div>
+
+          {/* Split panel inside the card */}
+          <div ref={containerRef} className="flex gap-0" style={{ alignItems: "stretch", minHeight: "300px" }}>
+
+            {/* LEFT: RFQ list */}
+            <div style={{ width: `${splitPercent}%`, minWidth: 0, overflow: "auto" }}>
               {filteredRfqs.length === 0 ? (
                 <div className="py-8 text-center text-[13px]" style={{ color: "var(--t3)" }}>{openRfqs.length === 0 ? "No open RFQs" : "No RFQs match your filters"}</div>
               ) : viewMode === "list" ? (
@@ -844,28 +846,26 @@ function OrderbookDashboard() {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Drag handle */}
-          <div onMouseDown={onMouseDown} className="shrink-0 flex items-center justify-center group" style={{ width: "12px", cursor: "col-resize", position: "relative" }}>
-            <div className="w-[2px] h-full rounded-full transition-colors group-hover:w-[3px]" style={{ background: "var(--border)" }} />
-            <div className="absolute w-5 h-10 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
-              <span className="mono text-[8px]" style={{ color: "var(--t3)" }}>||</span>
+            {/* Drag handle */}
+            <div onMouseDown={onMouseDown} className="shrink-0 flex items-center justify-center group" style={{ width: "12px", cursor: "col-resize", position: "relative", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+              <div className="w-[2px] h-full rounded-full transition-colors group-hover:w-[3px]" style={{ background: "var(--border)" }} />
+              <div className="absolute w-5 h-10 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
+                <span className="mono text-[8px]" style={{ color: "var(--t3)" }}>||</span>
+              </div>
             </div>
-          </div>
 
-          {/* RIGHT: My Active Quotes */}
-          <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, overflow: "auto" }}>
-            <div className="card">
-              <div className="card-header">
-                <span className="text-[13px] font-semibold" style={{ color: "var(--t1)" }}>My Quotes</span>
+            {/* RIGHT: My Quotes */}
+            <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, overflow: "auto" }}>
+              <div className="px-3 py-2 flex items-center justify-between" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+                <span className="mono text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>My Quotes</span>
                 <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{myQuotes.length}</span>
               </div>
               {myQuotes.length === 0 ? (
                 <div className="py-6 text-center text-[12px]" style={{ color: "var(--t3)" }}>No active quotes</div>
               ) : (
-                <div className="max-h-[calc(100vh-140px)] overflow-y-auto">
+                <div>
                   {myQuotes.map(q => {
                     const rfq = rfqs.find(r => r.id === q.rfq_id);
                     const baseClean = rfq ? rfq.pair.split("/")[0]?.replace("fx", "") || "" : "";
@@ -909,6 +909,7 @@ function OrderbookDashboard() {
                 </div>
               )}
             </div>
+
           </div>
         </div>
       </div>
