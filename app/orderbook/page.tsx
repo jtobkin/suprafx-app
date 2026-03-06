@@ -130,6 +130,7 @@ function OrderbookDashboard() {
   // Filters
   const [chainFilter, setChainFilter] = useState("All");
   const [assetFilter, setAssetFilter] = useState<string[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
   const [viewMode, setViewMode] = useState<"list" | "grouped">("list");
 
   // Quote placement
@@ -205,6 +206,12 @@ function OrderbookDashboard() {
       const pairClean = displayPair(r.pair);
       const hasAsset = assetFilter.some(a => pairClean.includes(a));
       if (!hasAsset) return false;
+    }
+    // Ownership filter
+    if (ownerFilter === "mine" && supraAddress) {
+      const myQuoteOnRfq = quotes.some(q => q.rfq_id === r.id && q.maker_address === supraAddress && (q.status === "pending" || q.status === "review"));
+      const isTaker = r.taker_address === supraAddress;
+      if (!myQuoteOnRfq && !isTaker) return false;
     }
     return true;
   });
@@ -395,6 +402,19 @@ function OrderbookDashboard() {
         {/* ── FILTER BAR ── */}
         <div className="card mb-4">
           <div className="px-4 py-3 flex items-center gap-4 flex-wrap">
+            {/* Ownership filter */}
+            <div className="flex items-center gap-1">
+              {(["all", "mine"] as const).map(f => (
+                <button key={f} onClick={() => setOwnerFilter(f)}
+                  className="px-2.5 py-0.5 rounded text-[11px] font-medium transition-all"
+                  style={{ background: ownerFilter === f ? "var(--accent)" : "transparent", color: ownerFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (ownerFilter === f ? "var(--accent)" : "var(--border)") }}>
+                  {f === "all" ? "All" : "My Orders"}
+                </button>
+              ))}
+            </div>
+
+            <div className="w-px h-5" style={{ background: "var(--border)" }} />
+
             {/* Chain filter */}
             <div className="flex items-center gap-1">
               <span className="text-[10px] uppercase tracking-wider mr-1" style={{ color: "var(--t3)" }}>Route</span>
