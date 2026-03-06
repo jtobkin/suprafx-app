@@ -113,6 +113,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const isVerified = !!(profile?.supraAddress && profile?.evmVerified);
 
+  // Restore wallet state from sessionStorage on mount (survives page navigation)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("suprafx_addr");
+      if (!saved || supraAddress) return; // already connected or nothing saved
+      const isDemo = sessionStorage.getItem("suprafx_demo") === "1";
+      setSupraAddress(saved);
+      if (isDemo) {
+        setIsDemo(true);
+        setProfile({
+          supraAddress: saved,
+          evmAddress: "0xdemo" + saved.slice(5),
+          evmVerified: true,
+          linkedAddresses: [{ chain: "sepolia", address: "0xdemo" + saved.slice(5), walletProvider: "demo", verifiedAt: new Date().toISOString() }],
+          evmSignature: null,
+        });
+      } else {
+        setIsDemo(false);
+        loadProfile(saved);
+      }
+    } catch {}
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Session signing wrapper — components call this to sign platform actions
   // Uses the session private key (ECDSA P-256). No wallet popup.
   // Chain of trust: StarKey signature → session authorization → session key signatures
@@ -251,6 +274,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const addr = acc[0];
         setSupraAddress(addr);
         setIsDemo(false);
+        try { sessionStorage.setItem("suprafx_addr", addr); sessionStorage.removeItem("suprafx_demo"); } catch {}
         try { await supra.changeNetwork({ chainId: SUPRA_TESTNET_CHAIN_ID }); } catch {}
         await loadProfile(addr);
 
@@ -274,6 +298,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const addr = "demo_" + Math.random().toString(16).slice(2, 14);
     setSupraAddress(addr);
     setIsDemo(true);
+    try { sessionStorage.setItem("suprafx_addr", addr); sessionStorage.setItem("suprafx_demo", "1"); } catch {}
     setProfile({
       supraAddress: addr,
       evmAddress: "0xdemo" + addr.slice(5),
@@ -291,6 +316,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const disconnect = useCallback(() => {
     clearSession();
     setSessionValid(false);
+    try { sessionStorage.removeItem("suprafx_addr"); sessionStorage.removeItem("suprafx_demo"); } catch {}
     const supra = getSupraProvider();
     if (supra) supra.disconnect?.();
     setSupraAddress(null);
