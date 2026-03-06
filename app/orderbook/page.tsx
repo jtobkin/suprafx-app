@@ -610,28 +610,31 @@ function OrderbookDashboard() {
             {/* Existing quotes with ACCEPT button for taker */}
             {rfqQuotes.length > 0 && (
               <div>
-                <div className="px-6 py-1 flex items-center gap-4" style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["Maker", "Rate", "USD", "vs Asking", "Status", ...(isMine && ownerFilter === "mine" ? ["Action"] : [])].map(h => (
-                    <span key={h} className={"mono text-[9px] uppercase tracking-wider font-medium " +
-                      (h === "Maker" ? "w-32" : h === "Rate" ? "w-28" : h === "USD" ? "w-24" : h === "vs Asking" ? "w-20" : h === "Action" ? "w-20" : "flex-1")}
-                      style={{ color: "var(--t3)" }}>{h}</span>
-                  ))}
+                <div className="px-6 py-1 flex items-center gap-3" style={{ borderBottom: "1px solid var(--border)" }}>
+                  <span className="mono text-[9px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Maker</span>
+                  <span className="mono text-[9px] uppercase tracking-wider font-medium w-20 shrink-0" style={{ color: "var(--t3)" }}>Vault</span>
+                  <span className="mono text-[9px] uppercase tracking-wider font-medium w-36 shrink-0" style={{ color: "var(--t3)" }}>Rate</span>
+                  <span className="mono text-[9px] uppercase tracking-wider font-medium w-20 shrink-0" style={{ color: "var(--t3)" }}>USD</span>
+                  <span className="mono text-[9px] uppercase tracking-wider font-medium w-16 shrink-0" style={{ color: "var(--t3)" }}>vs Ask</span>
+                  <span className="mono text-[9px] uppercase tracking-wider font-medium w-20 shrink-0" style={{ color: "var(--t3)" }}>Status</span>
+                  <span className="mono text-[9px] uppercase tracking-wider font-medium flex-1" style={{ color: "var(--t3)" }}></span>
                 </div>
                 {rfqQuotes.map(q => {
                   const diff = r.reference_price > 0 ? ((q.rate - r.reference_price) / r.reference_price) * 100 : 0;
                   const qUsd = toUsd(r.size * q.rate, r.pair.split("/")[1] || "");
                   return (
-                    <div key={q.id} className="px-6 py-2 flex items-center gap-4 hover:bg-white/[0.02]" style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                      <span className="mono text-[11px] w-32 shrink-0" style={{ color: q.maker_address === supraAddress ? "var(--accent)" : "var(--t2)" }}>
+                    <div key={q.id} className="px-6 py-2 flex items-center gap-3 hover:bg-white/[0.02]" style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
+                      <span className="mono text-[11px] w-28 shrink-0 truncate" style={{ color: q.maker_address === supraAddress ? "var(--accent)" : "var(--t2)" }}>
                         {q.maker_address === supraAddress ? "You" : shortAddr(q.maker_address)}
                       </span>
-                      <MakerVaultInline address={q.maker_address} />
-                      <span className="mono text-[12px] font-semibold w-28 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
-                      <span className="mono text-[10px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{qUsd || "--"}</span>
-                      <span className="mono text-[11px] w-20 shrink-0" style={{ color: diff >= 0 ? "var(--positive)" : "var(--negative)" }}>{diff >= 0 ? "+" : ""}{diff.toFixed(2)}%</span>
-                      <div className="flex-1 flex items-center gap-2">
+                      <span className="w-20 shrink-0"><MakerVaultInline address={q.maker_address} /></span>
+                      <span className="mono text-[12px] font-semibold w-36 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
+                      <span className="mono text-[10px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{qUsd || "--"}</span>
+                      <span className="mono text-[11px] w-16 shrink-0" style={{ color: diff >= 0 ? "var(--positive)" : "var(--negative)" }}>{diff >= 0 ? "+" : ""}{diff.toFixed(2)}%</span>
+                      <span className="w-20 shrink-0">
                         <span className="tag" style={q.status === "review" ? { background: "rgba(234,179,8,0.12)", color: "var(--warn)" } : {}}>{q.status === "review" ? "In Review" : q.status}</span>
-                        {/* Taker accept button (My Orders mode only) */}
+                      </span>
+                      <div className="flex-1 flex items-center gap-2 justify-end">
                         {isMine && ownerFilter === "mine" && q.status === "pending" && (
                           <button onClick={(e) => { e.stopPropagation(); acceptQuote(q.id); }} disabled={accepting === q.id}
                             className="px-3 py-1 rounded text-[11px] font-semibold hover:brightness-110 disabled:opacity-50"
@@ -639,16 +642,12 @@ function OrderbookDashboard() {
                             {accepting === q.id ? "..." : "Accept"}
                           </button>
                         )}
-                        {/* Maker withdraw */}
                         {q.maker_address === supraAddress && (q.status === "pending" || q.status === "review") && (
                           <button onClick={(e) => { e.stopPropagation(); withdrawQuote(q.id); }} disabled={withdrawing === q.id}
                             className="mono text-[10px] px-2 py-0.5 rounded hover:brightness-110 disabled:opacity-50"
                             style={{ background: "var(--negative-dim)", color: "var(--negative)", border: "none" }}>{withdrawing === q.id ? "..." : "withdraw"}</button>
                         )}
                       </div>
-                      {isMine && ownerFilter === "mine" && q.status === "pending" && (
-                        <span className="w-20 shrink-0" />
-                      )}
                     </div>
                   );
                 })}
