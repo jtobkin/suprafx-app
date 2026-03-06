@@ -462,8 +462,8 @@ function OrderbookDashboard() {
     document.body.style.userSelect = "none";
   }, []);
 
-  // Filtered RFQs
-  const openRfqs = rfqs.filter(r => r.status === "open");
+  // Filtered RFQs (include matched so in-flight trades are clickable)
+  const openRfqs = rfqs.filter(r => r.status === "open" || r.status === "matched");
   const filteredRfqs = openRfqs.filter(r => {
     if (chainFilter === "Cross-chain" && r.source_chain === r.dest_chain) return false;
     if (chainFilter === "Same-chain" && r.source_chain !== r.dest_chain) return false;
@@ -540,17 +540,21 @@ function OrderbookDashboard() {
   const renderRfqRow = (r: RFQ) => {
     const isMine = r.taker_address === supraAddress;
     const rfqQuotes = quotes.filter(q => q.rfq_id === r.id && q.status !== "rejected" && q.status !== "withdrawn").sort((a, b) => b.rate - a.rate);
-    const isExpanded = expandedRfq === r.id;
+    // Check if this RFQ has been matched into an active trade
+    const linkedTrade = trades.find(t => t.rfq_id === r.id && !terminalStatuses.includes(t.status));
+    const isMatched = r.status === "matched" || !!linkedTrade;
+    // Auto-expand if it's MY in-flight trade (I'm taker or maker on the linked trade)
+    const isMyInFlight = !!linkedTrade && !!supraAddress && (linkedTrade.taker_address === supraAddress || linkedTrade.maker_address === supraAddress);
+    const isExpanded = expandedRfq === r.id || isMyInFlight;
     const baseClean = r.pair.split("/")[0]?.replace("fx", "") || "";
     const quoteClean = r.pair.split("/")[1]?.replace("fx", "") || "";
     const notionalUsd = toUsd(r.size * r.reference_price, r.pair.split("/")[1] || "");
     const myExistingQuote = supraAddress ? rfqQuotes.find(q => q.maker_address === supraAddress) : null;
-    const pendingQuotes = rfqQuotes.filter(q => q.status === "pending");
 
     return (
       <div key={r.id} style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-white/[0.01] transition-colors"
-          onClick={() => setExpandedRfq(isExpanded ? null : r.id)}>
+          onClick={() => { if (!isMyInFlight) setExpandedRfq(isExpanded ? null : r.id); }}>
           <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{generateTxId(r.display_id, r.taker_address)}</span>
           <span className="text-[13px] font-semibold w-24 shrink-0" style={{ color: "var(--t0)" }}>{displayPair(r.pair)}</span>
           <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t2)" }}>{r.size} {baseClean}</span>
@@ -567,8 +571,9 @@ function OrderbookDashboard() {
           </div>
           <span className="mono text-[10px] w-12 shrink-0" style={{ color: "var(--t3)" }}>{timeAgo(r.created_at)}</span>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="tag tag-open">{rfqQuotes.length} qt{rfqQuotes.length !== 1 ? "s" : ""}</span>
-            {myExistingQuote && <span className="mono text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>quoted</span>}
+            {isMatched && <span className="tag tag-matched">in-flight</span>}
+            {!isMatched && <span className="tag tag-open">{rfqQuotes.length} qt{rfqQuotes.length !== 1 ? "s" : ""}</span>}
+            {myExistingQuote && !isMatched && <span className="mono text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>quoted</span>}
             <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "^" : "v"}</span>
           </div>
         </div>
@@ -663,6 +668,18 @@ function OrderbookDashboard() {
                 )}
               </div>
             )}
+
+            {/* In-flight trade details (shown inline when RFQ is matched) */}
+            {linkedTrade && (
+              <div style={{ borderTop: "1px solid var(--border)" }}>
+                <div className="px-6 py-2 flex items-center gap-3" style={{ background: "var(--surface-2)" }}>
+                  <span className="mono text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--warn)" }}>In-Flight</span>
+                  <span className="mono text-[11px]" style={{ color: "var(--t2)" }}>{linkedTrade.display_id}</span>
+                  <span className={`tag tag-${linkedTrade.status === "open" ? "open_trade" : linkedTrade.status}`}>{linkedTrade.status.replace(/_/g, " ")}</span>
+                </div>
+                <InFlightTrade trade={linkedTrade} onUpdate={fetchAll} agents={agents} />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -710,37 +727,6 @@ function OrderbookDashboard() {
             </div>
           </div>
         </div>
-
-        {/* In-Flight Trades (My Orders mode only) — stays as its own card */}
-        {ownerFilter === "mine" && myInFlightTrades.length > 0 && (
-          <div className="card mb-4">
-            <div className="card-header">
-              <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
-              <span className="mono text-[11px]" style={{ color: "var(--warn)" }}>{myInFlightTrades.length} active</span>
-            </div>
-            {myInFlightTrades.map(t => {
-              const isOpen = expandedInFlight === t.id;
-              const pairClean = displayPair(t.pair);
-              const isTaker = t.taker_address === supraAddress;
-              return (
-                <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <div className="flex items-center gap-4 px-4 py-2.5 cursor-pointer hover:bg-white/[0.01]"
-                    onClick={() => setExpandedInFlight(isOpen ? null : t.id)}>
-                    <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{t.display_id}</span>
-                    <span className="text-[13px] font-semibold w-24 shrink-0">{pairClean}</span>
-                    <span className="mono text-[12px] w-16 shrink-0" style={{ color: "var(--t2)" }}>{t.size}</span>
-                    <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
-                    <span className="w-14 shrink-0"><span className={`tag tag-${isTaker ? "taker" : "maker"}`}>{isTaker ? "taker" : "maker"}</span></span>
-                    <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
-                    <div className="flex-1" />
-                    <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isOpen ? "^" : "v"}</span>
-                  </div>
-                  {isOpen && <InFlightTrade trade={t} onUpdate={fetchAll} agents={agents} />}
-                </div>
-              );
-            })}
-          </div>
-        )}
 
         {/* Open RFQs card — contains the split panel */}
         <div className="card mb-4">
