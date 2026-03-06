@@ -33,7 +33,7 @@ export default function Header({ onProfileClick, activePage = "rfq" }: { onProfi
         </div>
         <a href="/" style={{ textDecoration: "none", transform: scrolling ? "scale(1.2)" : "scale(1)", transition: "transform 0.25s ease", transformOrigin: "left center", display: "inline-block" }}>
           <span className="mono text-[14px] font-bold tracking-tight" style={{ color: "var(--t0)" }}>SupraFX</span>
-          <span className="mono text-[9px] block" style={{ color: "var(--t3)", marginTop: "-2px" }}>{process.env.NEXT_PUBLIC_BUILD_ID || "dev"}</span>
+          <span className="mono text-[9px] block" style={{ color: "var(--t3)", marginTop: "-2px" }}>{(process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || "dev").slice(0, 7)}</span>
         </a>
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full"
           style={{ background: isDemo ? "var(--warn-dim)" : "var(--positive-dim)" }}>
