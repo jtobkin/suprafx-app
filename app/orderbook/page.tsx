@@ -6,7 +6,7 @@ import ProfilePanel from "@/components/ProfilePanel";
 import { supabase } from "@/lib/supabase";
 import { generateTxId } from "@/lib/tx-id";
 import type { RFQ, Quote, Agent, Trade } from "@/lib/types";
-import { MakerVaultInline, MakerVaultDetail } from "@/components/MakerVaultBadge";
+import { MakerVaultDetail } from "@/components/MakerVaultBadge";
 
 /* ══════════════════════════════════════════════════════
    HELPERS
@@ -417,6 +417,7 @@ function OrderbookDashboard() {
   const [quotingLoading, setQuotingLoading] = useState(false);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
+  const [inspectingVault, setInspectingVault] = useState<string | null>(null);
 
   // Sidebar
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null);
@@ -612,7 +613,6 @@ function OrderbookDashboard() {
               <div>
                 <div className="px-6 py-1 flex items-center gap-3" style={{ borderBottom: "1px solid var(--border)" }}>
                   <span className="mono text-[9px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Maker</span>
-                  <span className="mono text-[9px] uppercase tracking-wider font-medium w-20 shrink-0" style={{ color: "var(--t3)" }}>Vault</span>
                   <span className="mono text-[9px] uppercase tracking-wider font-medium w-36 shrink-0" style={{ color: "var(--t3)" }}>Rate</span>
                   <span className="mono text-[9px] uppercase tracking-wider font-medium w-20 shrink-0" style={{ color: "var(--t3)" }}>USD</span>
                   <span className="mono text-[9px] uppercase tracking-wider font-medium w-16 shrink-0" style={{ color: "var(--t3)" }}>vs Ask</span>
@@ -624,10 +624,16 @@ function OrderbookDashboard() {
                   const qUsd = toUsd(r.size * q.rate, r.pair.split("/")[1] || "");
                   return (
                     <div key={q.id} className="px-6 py-2 flex items-center gap-3 hover:bg-white/[0.02]" style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                      <span className="mono text-[11px] w-28 shrink-0 truncate" style={{ color: q.maker_address === supraAddress ? "var(--accent)" : "var(--t2)" }}>
-                        {q.maker_address === supraAddress ? "You" : shortAddr(q.maker_address)}
-                      </span>
-                      <span className="w-20 shrink-0"><MakerVaultInline address={q.maker_address} /></span>
+                      <div className="w-28 shrink-0">
+                        <span className="mono text-[11px] truncate block" style={{ color: q.maker_address === supraAddress ? "var(--accent)" : "var(--t2)" }}>
+                          {q.maker_address === supraAddress ? "You" : shortAddr(q.maker_address)}
+                        </span>
+                        <button onClick={(e) => { e.stopPropagation(); setInspectingVault(inspectingVault === q.maker_address ? null : q.maker_address); }}
+                          className="text-[9px] hover:underline mt-0.5"
+                          style={{ color: inspectingVault === q.maker_address ? "var(--accent)" : "var(--t3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                          {inspectingVault === q.maker_address ? "Hide deposit" : "Security deposit"}
+                        </button>
+                      </div>
                       <span className="mono text-[12px] font-semibold w-36 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
                       <span className="mono text-[10px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{qUsd || "--"}</span>
                       <span className="mono text-[11px] w-16 shrink-0" style={{ color: diff >= 0 ? "var(--positive)" : "var(--negative)" }}>{diff >= 0 ? "+" : ""}{diff.toFixed(2)}%</span>
@@ -651,6 +657,22 @@ function OrderbookDashboard() {
                     </div>
                   );
                 })}
+                {/* Vault inspection sub-panel */}
+                {inspectingVault && rfqQuotes.some(q => q.maker_address === inspectingVault) && (
+                  <div className="animate-slide-down px-6 py-3" style={{ background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="mono text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Security Deposit</span>
+                        <span className="mono text-[11px]" style={{ color: "var(--t2)" }}>
+                          {inspectingVault === "auto-maker-bot" ? "SupraFX Bot" : shortAddr(inspectingVault)}
+                        </span>
+                      </div>
+                      <button onClick={() => setInspectingVault(null)} className="text-[10px] hover:underline"
+                        style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>close</button>
+                    </div>
+                    <MakerVaultDetail address={inspectingVault} />
+                  </div>
+                )}
               </div>
             )}
 
