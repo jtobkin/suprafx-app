@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Agent, Trade } from "@/lib/types";
+import { MakerVaultDetail } from "@/components/MakerVaultBadge";
 
 const PAGE_SIZE = 15;
 
@@ -174,6 +175,12 @@ export default function AgentsPanel({ agents, trades = [] }: Props) {
                             </div>
                           ))}
                         </div>
+                      </div>
+
+                      {/* Security Deposit */}
+                      <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+                        <div className="mono text-[10px] uppercase tracking-wider font-medium mb-2" style={{ color: "var(--t3)" }}>Security Deposit</div>
+                        <MakerVaultDetail address={a.wallet_address} />
                       </div>
 
                       {/* Trade history */}

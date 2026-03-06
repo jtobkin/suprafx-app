@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
+import { MakerVaultInline } from "@/components/MakerVaultBadge";
 import { supabase } from "@/lib/supabase";
 import { generateTxId } from "@/lib/tx-id";
 
@@ -1115,6 +1116,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                               <div key={q.id} className="px-8 py-2.5 flex items-center gap-4 hover:bg-white/[0.02] transition-colors"
                                 style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
                                 <div className="w-40"><AddrWithRep addr={q.maker_address} chain={r.dest_chain} agents={agents} isMine={q.maker_address === supraAddress} /></div>
+                                <MakerVaultInline address={q.maker_address} />
                                 <span className="mono text-[13px] font-semibold w-36" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
                                 <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const u = toUsd(r.size * q.rate, r.pair.split("/")[1] || ""); return u || "—"; })()}</span>
                                 <span className="mono text-[13px] w-32" style={{ color: "var(--positive)" }}>

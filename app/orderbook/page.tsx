@@ -6,6 +6,7 @@ import ProfilePanel from "@/components/ProfilePanel";
 import { supabase } from "@/lib/supabase";
 import { generateTxId } from "@/lib/tx-id";
 import type { RFQ, Quote, Agent, Trade } from "@/lib/types";
+import { MakerVaultInline, MakerVaultDetail } from "@/components/MakerVaultBadge";
 
 /* ══════════════════════════════════════════════════════
    HELPERS
@@ -390,52 +391,6 @@ function OracleTicker() {
 }
 
 /* ══════════════════════════════════════════════════════
-   VAULT STRIP
-   ══════════════════════════════════════════════════════ */
-function VaultStrip({ addr }: { addr: string | null }) {
-  const [vault, setVault] = useState<any>(null);
-  useEffect(() => {
-    if (!addr) return;
-    Promise.all([
-      fetch(`/api/vault?address=${encodeURIComponent(addr)}`).then(r => r.json()).catch(() => null),
-      fetch(`/api/maker-capacity?address=${encodeURIComponent(addr)}`).then(r => r.json()).catch(() => null),
-    ]).then(([v, c]) => {
-      if (v?.balance) setVault({ ...v.balance, availableCapacity: c?.availableCapacity ?? Number(v.balance.matching_limit || 0), totalEarmarked: c?.totalEarmarked ?? 0 });
-    });
-  }, [addr]);
-  if (!vault) return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-      <span className="text-[11px]" style={{ color: "var(--t3)" }}>No vault deposit</span>
-      <button onClick={() => window.dispatchEvent(new Event("suprafx:open-vault"))} className="mono text-[10px] px-2 py-0.5 rounded hover:brightness-110"
-        style={{ background: "var(--accent)", color: "#fff", border: "none" }}>Deposit</button>
-    </div>
-  );
-  const usedPct = vault.total_deposited > 0 ? ((Number(vault.committed) + vault.totalEarmarked) / Number(vault.total_deposited)) * 100 : 0;
-  return (
-    <div className="flex items-center gap-4 px-3 py-1.5 rounded" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Vault</span>
-        <span className="mono text-[12px] font-semibold" style={{ color: "var(--t0)" }}>${Number(vault.total_deposited).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-      </div>
-      <div className="w-px h-4" style={{ background: "var(--border)" }} />
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Available</span>
-        <span className="mono text-[12px] font-semibold" style={{ color: "var(--positive)" }}>${vault.availableCapacity.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-      </div>
-      <div className="w-px h-4" style={{ background: "var(--border)" }} />
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Committed</span>
-        <span className="mono text-[12px]" style={{ color: "var(--warn)" }}>${Number(vault.committed).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-      </div>
-      <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
-        <div className="h-full rounded-full" style={{ width: `${Math.min(100, usedPct)}%`, background: usedPct > 80 ? "var(--negative)" : "var(--accent)" }} />
-      </div>
-      <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{usedPct.toFixed(0)}% used</span>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════
    MAIN DASHBOARD
    ══════════════════════════════════════════════════════ */
 function OrderbookDashboard() {
@@ -670,6 +625,7 @@ function OrderbookDashboard() {
                       <span className="mono text-[11px] w-32 shrink-0" style={{ color: q.maker_address === supraAddress ? "var(--accent)" : "var(--t2)" }}>
                         {q.maker_address === supraAddress ? "You" : shortAddr(q.maker_address)}
                       </span>
+                      <MakerVaultInline address={q.maker_address} />
                       <span className="mono text-[12px] font-semibold w-28 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
                       <span className="mono text-[10px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{qUsd || "--"}</span>
                       <span className="mono text-[11px] w-20 shrink-0" style={{ color: diff >= 0 ? "var(--positive)" : "var(--negative)" }}>{diff >= 0 ? "+" : ""}{diff.toFixed(2)}%</span>
@@ -732,8 +688,7 @@ function OrderbookDashboard() {
       <div className="max-w-[1440px] mx-auto px-5 py-5">
 
         {/* TOP STRIP */}
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <VaultStrip addr={supraAddress} />
+        <div className="flex items-center justify-end gap-4 mb-4">
           <OracleTicker />
         </div>
 
@@ -897,6 +852,10 @@ function OrderbookDashboard() {
                               <div><div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Route</div><div className="text-[11px]" style={{ color: "var(--t2)" }}>{rfq ? (rfq.source_chain === rfq.dest_chain ? "Same-chain" : rfq.source_chain.replace("-testnet", "") + " > " + rfq.dest_chain.replace("-testnet", "")) : "--"}</div></div>
                               <div><div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Taker</div><div className="mono text-[11px]" style={{ color: "var(--t2)" }}>{rfq ? shortAddr(rfq.taker_address) : "--"}</div></div>
                               <div><div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Quoted</div><div className="mono text-[11px]" style={{ color: "var(--t3)" }}>{timeAgo(q.created_at)}</div></div>
+                            </div>
+                            <div className="pt-1">
+                              <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Your Vault</div>
+                              <MakerVaultDetail address={supraAddress || ""} />
                             </div>
                             <button onClick={(e) => { e.stopPropagation(); withdrawQuote(q.id); }} disabled={withdrawing === q.id}
                               className="w-full py-1.5 rounded text-[11px] font-semibold hover:brightness-110 disabled:opacity-50"
