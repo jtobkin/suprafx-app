@@ -95,15 +95,15 @@ export function MakerVaultDetail({ address }: { address: string }) {
   if (address === "auto-maker-bot") return <div className="text-[11px]" style={{ color: "var(--positive)" }}>SupraFX Bot - always funded</div>;
   if (!vault) return <div className="text-[11px]" style={{ color: "var(--negative)" }}>No security deposit</div>;
 
-  const usedPct = vault.totalDeposited > 0 ? ((vault.committed + vault.totalEarmarked) / vault.totalDeposited) * 100 : 0;
+  const inUse = vault.committed + vault.totalEarmarked;
+  const usedPct = vault.totalDeposited > 0 ? (inUse / vault.totalDeposited) * 100 : 0;
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-4">
         {[
           { label: "Deposited", value: vault.totalDeposited, color: "var(--t0)" },
-          { label: "Committed", value: vault.committed, color: "var(--warn)" },
-          { label: "Earmarked", value: vault.totalEarmarked, color: "var(--accent-light)" },
+          { label: "In Use", value: inUse, color: "var(--warn)" },
           { label: "Available", value: vault.availableCapacity, color: "var(--positive)" },
           { label: "Match Limit", value: vault.matchingLimit, color: "var(--t2)" },
         ].map(item => (

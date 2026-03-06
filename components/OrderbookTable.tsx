@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
+import { MakerVaultDetail } from "@/components/MakerVaultBadge";
 import { supabase } from "@/lib/supabase";
 import { generateTxId } from "@/lib/tx-id";
 
@@ -857,6 +858,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const [accepting, setAccepting] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const [inspectingVault, setInspectingVault] = useState<string | null>(null);
   const [quotingRfq, setQuotingRfq] = useState<string | null>(null);
   const [quotePrice, setQuotePrice] = useState("");
   const [quotingLoading, setQuotingLoading] = useState(false);
@@ -1114,9 +1116,16 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                             return (
                               <div key={q.id} className="px-8 py-2.5 flex items-center gap-4 hover:bg-white/[0.02] transition-colors"
                                 style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                                <div className="w-40"><AddrWithRep addr={q.maker_address} chain={r.dest_chain} agents={agents} isMine={q.maker_address === supraAddress} /></div>
+                                <div className="w-40">
+                                  <AddrWithRep addr={q.maker_address} chain={r.dest_chain} agents={agents} isMine={q.maker_address === supraAddress} />
+                                  <button onClick={(e) => { e.stopPropagation(); setInspectingVault(inspectingVault === q.maker_address ? null : q.maker_address); }}
+                                    className="text-[9px] hover:underline block mt-0.5"
+                                    style={{ color: inspectingVault === q.maker_address ? "var(--accent)" : "var(--t3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                                    {inspectingVault === q.maker_address ? "Hide deposit" : "Security deposit"}
+                                  </button>
+                                </div>
                                 <span className="mono text-[13px] font-semibold w-36" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
-                                <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const u = toUsd(r.size * q.rate, r.pair.split("/")[1] || ""); return u || "—"; })()}</span>
+                                <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const u = toUsd(r.size * q.rate, r.pair.split("/")[1] || ""); return u || "--"; })()}</span>
                                 <span className="mono text-[13px] w-32" style={{ color: "var(--positive)" }}>
                                   {receive >= 1000 ? receive.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receive.toFixed(4)} {quoteClean}
                                 </span>
@@ -1143,6 +1152,22 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                               </div>
                             );
                           })}
+                          {/* Vault inspection sub-panel */}
+                          {inspectingVault && rfqQuotes.some(q => q.maker_address === inspectingVault) && (
+                            <div className="animate-slide-down px-8 py-3" style={{ background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="mono text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Security Deposit</span>
+                                  <span className="mono text-[11px]" style={{ color: "var(--t2)" }}>
+                                    {inspectingVault === "auto-maker-bot" ? "SupraFX Bot" : shortAddr(inspectingVault)}
+                                  </span>
+                                </div>
+                                <button onClick={() => setInspectingVault(null)} className="text-[10px] hover:underline"
+                                  style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>close</button>
+                              </div>
+                              <MakerVaultDetail address={inspectingVault} />
+                            </div>
+                          )}
                         </div>
                       )}
 
