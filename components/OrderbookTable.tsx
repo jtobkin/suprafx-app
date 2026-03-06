@@ -1024,6 +1024,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
               );
             })}
           </div>
+        )}
       </div>
       )}
 
