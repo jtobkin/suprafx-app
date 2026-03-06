@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { WalletProvider, useWallet } from "@/components/WalletProvider";
 import Header from "@/components/Header";
 import ProfilePanel from "@/components/ProfilePanel";
@@ -512,6 +512,33 @@ function OrderbookDashboard() {
     return total >= 1 ? "$" + total.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "$" + total.toFixed(4);
   }
 
+  // Draggable split panel
+  const [splitPercent, setSplitPercent] = useState(75);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!dragging.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      setSplitPercent(Math.min(90, Math.max(30, pct)));
+    };
+    const onMouseUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
   // Filtered RFQs
   const openRfqs = rfqs.filter(r => r.status === "open");
   const filteredRfqs = openRfqs.filter(r => {
@@ -742,8 +769,9 @@ function OrderbookDashboard() {
         </div>
 
         {/* MAIN: RFQ Feed + Sidebar */}
-        <div className="flex gap-4" style={{ alignItems: "flex-start" }}>
-          <div className="flex-1 min-w-0">
+        <div ref={containerRef} className="flex gap-0" style={{ alignItems: "flex-start" }}>
+          {/* LEFT: RFQ Feed */}
+          <div style={{ width: `${splitPercent}%`, minWidth: 0, overflow: "auto" }}>
 
             {/* In-Flight Trades (My Orders mode only) */}
             {ownerFilter === "mine" && myInFlightTrades.length > 0 && (
@@ -818,8 +846,17 @@ function OrderbookDashboard() {
             </div>
           </div>
 
-          {/* SIDEBAR: My Active Quotes */}
-          <div className="shrink-0" style={{ width: "300px", position: "sticky", top: "60px" }}>
+          {/* Drag handle */}
+          <div onMouseDown={onMouseDown} className="shrink-0 flex items-center justify-center group" style={{ width: "12px", cursor: "col-resize", position: "relative" }}>
+            <div className="w-[2px] h-full rounded-full transition-colors group-hover:w-[3px]" style={{ background: "var(--border)" }} />
+            <div className="absolute w-5 h-10 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
+              <span className="mono text-[8px]" style={{ color: "var(--t3)" }}>||</span>
+            </div>
+          </div>
+
+          {/* RIGHT: My Active Quotes */}
+          <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, overflow: "auto", position: "sticky", top: "60px", maxHeight: "calc(100vh - 80px)" }}>
             <div className="card">
               <div className="card-header">
                 <span className="text-[13px] font-semibold" style={{ color: "var(--t1)" }}>My Quotes</span>
