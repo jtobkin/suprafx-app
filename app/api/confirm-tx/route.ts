@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 import { verifySepoliaTx } from '@/lib/chains';
 import { updateReputation } from '@/lib/reputation';
-import { botSendSupraTokens, getBotAddresses, submitCommitteeAttestation, buildAttestationBundle } from '@/lib/bot-wallets';
+import { botSendSupraTokens, botSendSepoliaEth, getBotAddresses, submitCommitteeAttestation, buildAttestationBundle } from '@/lib/bot-wallets';
 import { getTradeActions } from '@/lib/signed-actions';
 import { generateMultisig, councilVerifyAndSign } from '@/lib/council-sign';
 import { processEvent, buildAttestation } from '@/lib/council-node';
@@ -136,12 +136,21 @@ export async function POST(req: NextRequest) {
 
           let makerTxHash: string;
           try {
-            const takerAddr = trade.taker_address;
-            const amountOctas = BigInt(100000); // 0.001 SUPRA
-            makerTxHash = await botSendSupraTokens(takerAddr, amountOctas);
+            if (trade.dest_chain === 'sepolia') {
+              // Bot sends ETH on Sepolia
+              // Resolve taker's EVM address for receiving
+              const { resolveSettlementAddress } = await import('@/lib/resolve-address');
+              const takerEvmAddr = trade.taker_settlement_address || await resolveSettlementAddress(trade.taker_address, 'sepolia');
+              if (!takerEvmAddr) throw new Error('Cannot resolve taker EVM address for Sepolia settlement');
+              makerTxHash = await botSendSepoliaEth(takerEvmAddr, 0.00001);
+            } else {
+              // Bot sends SUPRA on Supra Testnet
+              const takerAddr = trade.taker_address;
+              const amountOctas = BigInt(100000); // 0.001 SUPRA
+              makerTxHash = await botSendSupraTokens(takerAddr, amountOctas);
+            }
           } catch (e: any) {
-            console.error('Bot Supra send failed:', e.message);
-            // Update trade to failed state with reason
+            console.error('Bot send failed:', e.message);
             await db.from('trades').update({
               status: 'failed',
             }).eq('id', tradeId);
@@ -150,7 +159,7 @@ export async function POST(req: NextRequest) {
               success: false,
               status: 'failed',
               verified: true,
-              error: 'Maker bot Supra send failed: ' + (e.message || 'unknown error'),
+              error: 'Maker bot send failed: ' + (e.message || 'unknown error'),
             });
           }
 

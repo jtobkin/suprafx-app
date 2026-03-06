@@ -342,18 +342,7 @@ export async function processEvent(
 
     votes.push({ nodeId, decision, signature, reason });
 
-    // Update this node's view
-    await db.from('council_node_views').upsert({
-      node_id: nodeId,
-      rfq_id: rfqId,
-      trade_id: tradeId || null,
-      current_phase: eventType,
-      latest_event_hash: eventHash,
-      latest_sequence: sequence,
-      taker_deadline: deadlineType === 'taker_send' ? deadline : undefined,
-      maker_deadline: deadlineType === 'maker_send' ? deadline : undefined,
-      updated_at: now.toISOString(),
-    }, { onConflict: 'node_id,rfq_id' });
+    // Node view update batched after loop
   }
 
   // Check consensus — both approval and rejection require majority
@@ -370,23 +359,22 @@ export async function processEvent(
     }).eq('id', eventId);
   }
 
-  // Update node views with votes seen
+  // Batch update all node views at once
+  const approveNodes = votes.filter(v => v.decision === 'approve').map(v => v.nodeId);
   for (const nodeId of COUNCIL_NODES) {
-    const { data: view } = await db.from('council_node_views')
-      .select('votes_seen_per_event, consensus_confirmed_per_event')
-      .eq('node_id', nodeId).eq('rfq_id', rfqId).single();
-
-    const votesSeen = view?.votes_seen_per_event || {};
-    const consensusConfirmed = view?.consensus_confirmed_per_event || {};
-
-    // Each node "sees" all votes (simulated — in production they'd receive broadcasts)
-    votesSeen[eventHash] = votes.filter(v => v.decision === 'approve').map(v => v.nodeId);
-    consensusConfirmed[eventHash] = approvalConsensus;
-
-    await db.from('council_node_views').update({
-      votes_seen_per_event: votesSeen,
-      consensus_confirmed_per_event: consensusConfirmed,
-    }).eq('node_id', nodeId).eq('rfq_id', rfqId);
+    await db.from('council_node_views').upsert({
+      node_id: nodeId,
+      rfq_id: rfqId,
+      trade_id: tradeId || null,
+      current_phase: eventType,
+      latest_event_hash: eventHash,
+      latest_sequence: sequence,
+      taker_deadline: deadlineType === 'taker_send' ? deadline : undefined,
+      maker_deadline: deadlineType === 'maker_send' ? deadline : undefined,
+      votes_seen_per_event: { [eventHash]: approveNodes },
+      consensus_confirmed_per_event: { [eventHash]: approvalConsensus },
+      updated_at: now.toISOString(),
+    }, { onConflict: 'node_id,rfq_id' });
   }
 
   // Also write to legacy committee tables for backward compatibility
