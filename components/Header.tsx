@@ -18,7 +18,7 @@ export default function Header({ onProfileClick, activePage = "rfq" }: { onProfi
   }, []);
 
   const navItems = [
-    { key: "rfq", label: "Make Quote", href: "/rfq" },
+    { key: "rfq", label: "My Orders", href: "/" },
     { key: "orderbook", label: "Orderbook", href: "/orderbook" },
     { key: "counterparties", label: "Counterparties", href: "/counterparties" },
   ];
