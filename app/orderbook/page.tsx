@@ -139,8 +139,8 @@ function OrderbookDashboard() {
   const [quotingLoading, setQuotingLoading] = useState(false);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
 
-  // My quotes section
-  const [showMyQuotes, setShowMyQuotes] = useState(true);
+  // My quotes sidebar
+  const [expandedQuote, setExpandedQuote] = useState<string | null>(null);
 
   // Oracle prices for USD conversion
   const [usdPrices, setUsdPrices] = useState<Record<string, number>>({});
@@ -384,7 +384,7 @@ function OrderbookDashboard() {
       <Header onProfileClick={() => { setProfileTab("profile"); setProfileOpen(true); }} activePage="orderbook" />
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} initialTab={profileTab} />
 
-      <div className="max-w-[1240px] mx-auto px-5 py-5">
+      <div className="max-w-[1440px] mx-auto px-5 py-5">
 
         {/* ── TOP STRIP: Vault + Oracle ── */}
         <div className="flex items-center justify-between gap-4 mb-4">
@@ -442,103 +442,146 @@ function OrderbookDashboard() {
           </div>
         </div>
 
-        {/* ── RFQ FEED ── */}
-        <div className="card mb-4">
-          <div className="card-header">
-            <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
-          </div>
+        {/* ── MAIN CONTENT: RFQ Feed (left) + My Quotes sidebar (right) ── */}
+        <div className="flex gap-4" style={{ alignItems: "flex-start" }}>
 
-          {filteredRfqs.length === 0 ? (
-            <div className="py-8 text-center text-[13px]" style={{ color: "var(--t3)" }}>
-              {openRfqs.length === 0 ? "No open RFQs" : "No RFQs match your filters"}
-            </div>
-          ) : viewMode === "list" ? (
-            <div>
-              {/* Header row */}
-              <div className="flex items-center gap-3 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
-                {["TX ID", "Pair", "Size", "Asking", "Route", "Taker", "Age", "Quotes"].map(h => (
-                  <span key={h} className={"mono text-[9px] uppercase tracking-wider font-medium " +
-                    (h === "TX ID" ? "w-20" : h === "Pair" ? "w-24" : h === "Size" ? "w-20" : h === "Asking" ? "w-32" : h === "Route" ? "w-32" : h === "Taker" ? "w-24" : h === "Age" ? "w-12" : "shrink-0")}
-                    style={{ color: "var(--t3)" }}>{h}</span>
-                ))}
+          {/* LEFT: RFQ Feed */}
+          <div className="flex-1 min-w-0">
+            <div className="card mb-4">
+              <div className="card-header">
+                <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
               </div>
-              {filteredRfqs.map(renderRfqRow)}
-            </div>
-          ) : (
-            /* Grouped by pair */
-            <div>
-              {Object.entries(groupedByPair).sort(([, a], [, b]) => b.length - a.length).map(([pair, pairRfqs]) => (
-                <div key={pair}>
-                  <div className="px-4 py-2 flex items-center gap-3" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)", borderTop: "1px solid var(--border)" }}>
-                    <span className="text-[13px] font-semibold" style={{ color: "var(--t0)" }}>{pair}</span>
-                    <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{pairRfqs.length} RFQ{pairRfqs.length !== 1 ? "s" : ""}</span>
-                    {usdPrices[pair.split("/")[0]] && (
-                      <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>
-                        Oracle: ${usdPrices[pair.split("/")[0]].toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                      </span>
-                    )}
-                  </div>
-                  {pairRfqs.map(renderRfqRow)}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* ── MY ACTIVE QUOTES ── */}
-        <div className="card mb-4">
-          <div className="card-header cursor-pointer" onClick={() => setShowMyQuotes(!showMyQuotes)}>
-            <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>My Active Quotes</span>
-            <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
-              {myQuotes.length} quote{myQuotes.length !== 1 ? "s" : ""} {showMyQuotes ? "^" : "v"}
-            </span>
-          </div>
-          {showMyQuotes && (
-            myQuotes.length === 0 ? (
-              <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No active quotes</div>
-            ) : (
-              <div>
-                <div className="flex items-center gap-3 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
-                  {["Pair", "Your Rate", "RFQ Asking", "vs Ask", "Status", "Action"].map(h => (
-                    <span key={h} className={"mono text-[9px] uppercase tracking-wider font-medium " +
-                      (h === "Pair" ? "w-24" : h === "Your Rate" ? "w-28" : h === "RFQ Asking" ? "w-28" : h === "vs Ask" ? "w-20" : h === "Status" ? "w-20" : "flex-1")}
-                      style={{ color: "var(--t3)" }}>{h}</span>
+              {filteredRfqs.length === 0 ? (
+                <div className="py-8 text-center text-[13px]" style={{ color: "var(--t3)" }}>
+                  {openRfqs.length === 0 ? "No open RFQs" : "No RFQs match your filters"}
+                </div>
+              ) : viewMode === "list" ? (
+                <div>
+                  {/* Header row */}
+                  <div className="flex items-center gap-3 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+                    {["TX ID", "Pair", "Size", "Asking", "Route", "Taker", "Age", "Quotes"].map(h => (
+                      <span key={h} className={"mono text-[9px] uppercase tracking-wider font-medium " +
+                        (h === "TX ID" ? "w-20" : h === "Pair" ? "w-24" : h === "Size" ? "w-20" : h === "Asking" ? "w-32" : h === "Route" ? "w-32" : h === "Taker" ? "w-24" : h === "Age" ? "w-12" : "shrink-0")}
+                        style={{ color: "var(--t3)" }}>{h}</span>
+                    ))}
+                  </div>
+                  {filteredRfqs.map(renderRfqRow)}
+                </div>
+              ) : (
+                /* Grouped by pair */
+                <div>
+                  {Object.entries(groupedByPair).sort(([, a], [, b]) => b.length - a.length).map(([pair, pairRfqs]) => (
+                    <div key={pair}>
+                      <div className="px-4 py-2 flex items-center gap-3" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)", borderTop: "1px solid var(--border)" }}>
+                        <span className="text-[13px] font-semibold" style={{ color: "var(--t0)" }}>{pair}</span>
+                        <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{pairRfqs.length} RFQ{pairRfqs.length !== 1 ? "s" : ""}</span>
+                        {usdPrices[pair.split("/")[0]] && (
+                          <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>
+                            Oracle: ${usdPrices[pair.split("/")[0]].toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
+                      {pairRfqs.map(renderRfqRow)}
+                    </div>
                   ))}
                 </div>
-                {myQuotes.map(q => {
-                  const rfq = rfqs.find(r => r.id === q.rfq_id);
-                  const pairClean = rfq ? displayPair(rfq.pair) : "--";
-                  const quoteClean = rfq ? rfq.pair.split("/")[1]?.replace("fx", "") || "" : "";
-                  const diff = rfq && rfq.reference_price > 0 ? ((q.rate - rfq.reference_price) / rfq.reference_price) * 100 : 0;
-                  return (
-                    <div key={q.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.01]"
-                      style={{ borderBottom: "1px solid var(--border)" }}>
-                      <span className="text-[12px] font-semibold w-24 shrink-0">{pairClean}</span>
-                      <span className="mono text-[12px] font-semibold w-28 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
-                      <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>
-                        {rfq ? fmtRate(rfq.reference_price) + " " + quoteClean : "--"}
-                      </span>
-                      <span className="mono text-[11px] w-20 shrink-0" style={{ color: diff >= 0 ? "var(--positive)" : "var(--negative)" }}>
-                        {diff >= 0 ? "+" : ""}{diff.toFixed(2)}%
-                      </span>
-                      <span className="w-20 shrink-0">
-                        <span className="tag" style={q.status === "review" ? { background: "rgba(234,179,8,0.12)", color: "var(--warn)" } : {}}>
-                          {q.status === "review" ? "In Review" : q.status}
-                        </span>
-                      </span>
-                      <div className="flex-1">
-                        <button onClick={() => withdrawQuote(q.id)} disabled={withdrawing === q.id}
-                          className="px-3 py-1 rounded text-[11px] font-semibold transition-all hover:brightness-110 disabled:opacity-50"
-                          style={{ background: "var(--negative)", color: "#fff", border: "none" }}>
-                          {withdrawing === q.id ? "..." : "Withdraw"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: My Active Quotes sidebar */}
+          <div className="shrink-0" style={{ width: "300px", position: "sticky", top: "60px" }}>
+            <div className="card">
+              <div className="card-header">
+                <span className="text-[13px] font-semibold" style={{ color: "var(--t1)" }}>My Quotes</span>
+                <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>{myQuotes.length}</span>
               </div>
-            )
-          )}
+              {myQuotes.length === 0 ? (
+                <div className="py-6 text-center text-[12px]" style={{ color: "var(--t3)" }}>No active quotes</div>
+              ) : (
+                <div className="max-h-[calc(100vh-140px)] overflow-y-auto">
+                  {myQuotes.map(q => {
+                    const rfq = rfqs.find(r => r.id === q.rfq_id);
+                    const pairClean = rfq ? displayPair(rfq.pair) : "--";
+                    const baseClean = rfq ? rfq.pair.split("/")[0]?.replace("fx", "") || "" : "";
+                    const quoteClean = rfq ? rfq.pair.split("/")[1]?.replace("fx", "") || "" : "";
+                    const diff = rfq && rfq.reference_price > 0 ? ((q.rate - rfq.reference_price) / rfq.reference_price) * 100 : 0;
+                    const isQExpanded = expandedQuote === q.id;
+                    const notionalUsd = rfq ? toUsd(rfq.size * q.rate, rfq.pair.split("/")[1] || "") : null;
+                    const takerAgent = rfq ? agents.find(a => a.wallet_address === rfq.taker_address) : null;
+
+                    return (
+                      <div key={q.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        {/* Collapsed card */}
+                        <div className="px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                          onClick={() => setExpandedQuote(isQExpanded ? null : q.id)}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[13px] font-semibold" style={{ color: "var(--t0)" }}>{pairClean}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="tag" style={q.status === "review" ? { background: "rgba(234,179,8,0.12)", color: "var(--warn)" } : {}}>
+                                {q.status === "review" ? "review" : q.status}
+                              </span>
+                              <span className="text-[9px]" style={{ color: "var(--t3)" }}>{isQExpanded ? "^" : "v"}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="mono text-[12px] font-semibold" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
+                            <span className="mono text-[10px]" style={{ color: diff >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                              {diff >= 0 ? "+" : ""}{diff.toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Expanded details */}
+                        {isQExpanded && (
+                          <div className="animate-slide-down px-3 pb-3 space-y-2" style={{ background: "var(--bg-raised)", borderTop: "1px solid var(--border)" }}>
+                            <div className="grid grid-cols-2 gap-2 pt-2">
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Size</div>
+                                <div className="mono text-[12px]" style={{ color: "var(--t1)" }}>{rfq ? rfq.size : "--"} {baseClean}</div>
+                              </div>
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Notional</div>
+                                <div className="mono text-[12px]" style={{ color: "var(--t1)" }}>{notionalUsd || "--"}</div>
+                              </div>
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>RFQ Asking</div>
+                                <div className="mono text-[12px]" style={{ color: "var(--t2)" }}>{rfq ? fmtRate(rfq.reference_price) : "--"} {quoteClean}</div>
+                              </div>
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Route</div>
+                                <div className="text-[11px]" style={{ color: "var(--t2)" }}>
+                                  {rfq ? (rfq.source_chain === rfq.dest_chain ? "Same-chain" : rfq.source_chain.replace("-testnet", "") + " > " + rfq.dest_chain.replace("-testnet", "")) : "--"}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Taker</div>
+                                <div className="mono text-[11px]" style={{ color: "var(--t2)" }}>
+                                  {rfq ? shortAddr(rfq.taker_address) : "--"}
+                                  {takerAgent && <span className="ml-1" style={{ color: Number(takerAgent.rep_total) >= 4 ? "var(--positive)" : "var(--t3)" }}>* {Number(takerAgent.rep_total).toFixed(1)}</span>}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Quoted</div>
+                                <div className="mono text-[11px]" style={{ color: "var(--t3)" }}>{timeAgo(q.created_at)}</div>
+                              </div>
+                            </div>
+                            <button onClick={(e) => { e.stopPropagation(); withdrawQuote(q.id); }} disabled={withdrawing === q.id}
+                              className="w-full py-1.5 rounded text-[11px] font-semibold transition-all hover:brightness-110 disabled:opacity-50"
+                              style={{ background: "var(--negative)", color: "#fff", border: "none" }}>
+                              {withdrawing === q.id ? "Withdrawing..." : "Withdraw Quote"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
 
       </div>
