@@ -969,7 +969,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
     setWithdrawing(null);
   };
 
-  const filteredOpenRfqs = activeFilter === "mine" ? openRfqs.filter(r => r.taker_address === supraAddress) : openRfqs;
+  const filteredOpenRfqs = openRfqs.filter(r => r.taker_address === supraAddress);
   const filteredActiveTrades = activeTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress);
   const filteredCompletedTrades = completedFilter === "mine" ? completedTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress) : completedTrades;
 
@@ -1031,13 +1031,13 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       {/* SECTION 2: OPEN RFQs (visible by default, collapsible) */}
       <div className="card mb-4 animate-in" style={{ order: 2 }}>
         <div className="card-header cursor-pointer" onClick={() => setShowRfqs(!showRfqs)}>
-          <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
+          <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>My Opened RFQs</span>
           <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
             {openRfqs.length} RFQ{openRfqs.length !== 1 ? "s" : ""} {showRfqs ? "^" : "v"}
           </span>
         </div>
         {showRfqs && (openRfqs.length === 0 ? (
-          <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No open RFQs</div>
+          <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No open RFQs from you</div>
         ) : (
           <div>
             <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
