@@ -269,7 +269,7 @@ async function handleSubmitRFQ(body: any) {
 
   // Bot auto-quotes at 0.3% below reference — same signing process as humans
   const makerAddress = 'auto-maker-bot';
-  const botRate = refPrice * (1 - SPREAD_BPS / 10000);
+  const botRate = userPrice * (1 - SPREAD_BPS / 10000);
 
   await db.from('agents').upsert({
     wallet_address: makerAddress,
