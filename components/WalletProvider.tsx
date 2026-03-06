@@ -106,35 +106,34 @@ function getEvmProvider(): any {
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [supraAddress, setSupraAddress] = useState<string | null>(null);
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [isDemo, setIsDemo] = useState(false);
+  // Initialize state synchronously from sessionStorage to avoid auth flash on navigation
+  const [supraAddress, setSupraAddress] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("suprafx_addr"); } catch { return null; }
+  });
+  const [profile, setProfile] = useState<ProfileData | null>(() => {
+    try {
+      const addr = sessionStorage.getItem("suprafx_addr");
+      if (!addr) return null;
+      if (sessionStorage.getItem("suprafx_demo") === "1") {
+        return {
+          supraAddress: addr,
+          evmAddress: "0xdemo" + addr.slice(5),
+          evmVerified: true,
+          linkedAddresses: [{ chain: "sepolia", address: "0xdemo" + addr.slice(5), walletProvider: "demo", verifiedAt: new Date().toISOString() }],
+          evmSignature: null,
+        };
+      }
+      return null; // real wallet — profile will be loaded async below
+    } catch { return null; }
+  });
+  const [isDemo, setIsDemo] = useState(() => {
+    try { return sessionStorage.getItem("suprafx_demo") === "1"; } catch { return false; }
+  });
   const [sessionValid, setSessionValid] = useState(false);
 
   const isVerified = !!(profile?.supraAddress && profile?.evmVerified);
 
-  // Restore wallet state from sessionStorage on mount (survives page navigation)
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem("suprafx_addr");
-      if (!saved || supraAddress) return; // already connected or nothing saved
-      const isDemo = sessionStorage.getItem("suprafx_demo") === "1";
-      setSupraAddress(saved);
-      if (isDemo) {
-        setIsDemo(true);
-        setProfile({
-          supraAddress: saved,
-          evmAddress: "0xdemo" + saved.slice(5),
-          evmVerified: true,
-          linkedAddresses: [{ chain: "sepolia", address: "0xdemo" + saved.slice(5), walletProvider: "demo", verifiedAt: new Date().toISOString() }],
-          evmSignature: null,
-        });
-      } else {
-        setIsDemo(false);
-        loadProfile(saved);
-      }
-    } catch {}
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // (real wallet profile loaded after loadProfile is defined below)
 
   // Session signing wrapper — components call this to sign platform actions
   // Uses the session private key (ECDSA P-256). No wallet popup.
@@ -258,6 +257,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setProfile({ supraAddress: addr, evmAddress: null, evmVerified: false, evmSignature: null, linkedAddresses: [] });
     }
   }, []);
+
+  // For real wallets restored from sessionStorage, load profile from API on mount
+  useEffect(() => {
+    if (supraAddress && !isDemo && !profile) {
+      loadProfile(supraAddress);
+    }
+  }, [loadProfile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Connect StarKey (Supra only)
   const connect = useCallback(async () => {
