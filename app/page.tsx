@@ -10,6 +10,7 @@ import MyTrades from "@/components/MyTrades";
 import SubmitRFQ from "@/components/SubmitRFQ";
 import Notifications from "@/components/Notifications";
 import AutoTaker from "@/components/AutoTaker";
+import OracleTicker from "@/components/OracleTicker";
 import { supabase } from "@/lib/supabase";
 import type { Trade, RFQ, Agent, Quote } from "@/lib/types";
 
@@ -259,6 +260,9 @@ function Dashboard() {
       {/* Listen for vault tab open requests */}
       <VaultTabListener onOpen={() => { setProfileTab("vault"); setProfileOpen(true); }} />
       <div className="max-w-[1240px] mx-auto px-5 py-5">
+        <div className="mb-4">
+          <OracleTicker />
+        </div>
         <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <SubmitRFQ onSubmitted={fetchAll} />
         <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} />
