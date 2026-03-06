@@ -326,7 +326,7 @@ function AuditTrail({ tradeId, supraAddr }: { tradeId: string; supraAddr?: strin
                                       <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold" style={{ background: vote.decision === "approve" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: vote.decision === "approve" ? "var(--positive)" : "var(--negative)" }}>{vote.decision.toUpperCase()}</span>
                                       <span className="mono text-[10px] truncate flex-1" style={{ color: "var(--t3)" }}>sig: {vote.signature.slice(0, 20)}...</span>
                                       <span className="mono text-[10px] shrink-0" style={{ color: "var(--t3)" }}>{new Date(vote.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-                                    </>
+                                    </div>
                                   ) : (
                                     <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>pending</span>
                                   )}
@@ -1132,18 +1132,75 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const activeCount = filteredOpenRfqs.length + filteredActiveTrades.length;
 
   return (
-    <>
-      <div className="card mb-4 animate-in">
-      <div className="card-header">
-        <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Active Trades</span>
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* === SECTION 1: IN-FLIGHT TRADES (always visible, top) === */}
+      <div className="card mb-4 animate-in" style={{ order: 1 }}>
+        <div className="card-header">
+          <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
+          <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>{activeTrades.length} active</span>
+        </div>
+        {filteredActiveTrades.length === 0 ? (
+          <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No in-flight trades</div>
+        ) : (
+          <div>
+              <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+                <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>TX ID</span>
+                <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Pair</span>
+                <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>Size</span>
+                <span className="mono text-[10px] uppercase tracking-wider font-medium flex-1" style={{ color: "var(--t3)" }}>Rate</span>
+                <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Route</span>
+                <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Taker</span>
+                <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Maker</span>
+                <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Status</span>
+              </div>
+            {filteredActiveTrades.map(t => {
+                const isMine = t.taker_address === supraAddress;
+                const pairClean = displayPair(t.pair);
+                const isTradeExpanded = expandedTrade === t.id;
+                return (
+                  <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
+                      onClick={() => setExpandedTrade(isTradeExpanded ? null : t.id)}>
+                      <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const rfqForTrade = rfqs.find(r => r.id === t.rfq_id); return rfqForTrade ? generateTxId(rfqForTrade.display_id, rfqForTrade.taker_address) : t.display_id; })()}</span>
+                      <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
+                      <span className="mono text-[13px] w-24 shrink-0">{t.size}</span>
+                      <span className="mono text-[13px] flex-1" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
+                      <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} → {t.dest_chain}</span>
+                      <span className="shrink-0"><AddrWithRep addr={t.taker_address} chain={t.source_chain} agents={agents} isMine={t.taker_address === supraAddress} /></span>
+                      <span className="shrink-0">{t.maker_address === "auto-maker-bot" ? <span className="mono text-[11px]" style={{ color: "var(--accent)" }}>SupraFX Bot</span> : <AddrWithRep addr={t.maker_address} chain={t.dest_chain} agents={agents} isMine={t.maker_address === supraAddress} />}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!isTradeExpanded && t.status === "taker_verified" && t.maker_deadline && (
+                          <InlineTimer deadline={t.maker_deadline} />
+                        )}
+                        {!isTradeExpanded && t.status === "open" && t.taker_deadline && (
+                          <InlineTimer deadline={t.taker_deadline} />
+                        )}
+                        <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
+                        <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "▲" : "▼"}</span>
+                      </div>
+                    </div>
+                    {isTradeExpanded && (
+                      <ActiveTrade trade={t} onUpdate={onUpdate} rfq={rfqs.find(r => r.id === t.rfq_id)} tradeQuotes={quotes.filter(q => q.rfq_id === t.rfq_id)} agents={agents} supraAddr={supraAddress || undefined} />
+                    )}
+                  </div>
+                );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* === SECTION 2: OPEN RFQs (visible by default, collapsible) === */}
+      <div className="card mb-4 animate-in" style={{ order: 2 }}>
+      <div className="card-header cursor-pointer" onClick={() => setShowRfqs(!showRfqs)}>
+        <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
         <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
-          {openRfqs.length} RFQ{openRfqs.length !== 1 ? "s" : ""} {"·"} {activeTrades.length} in-flight
+          {openRfqs.length} RFQ{openRfqs.length !== 1 ? "s" : ""} {showRfqs ? "▲" : "▼"}
         </span>
       </div>
 
-      {activeCount === 0 ? (
-        <div className="py-8 text-center text-[14px]" style={{ color: "var(--t3)" }}>
-          No active trades
+      {showRfqs && (openRfqs.length === 0 ? (
+        <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>
+          No open RFQs
         </div>
       ) : (
         <div>
@@ -1170,7 +1227,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             return (
               <div key={r.id} style={{ borderBottom: "1px solid var(--border)" }}>
                 <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
-                  onClick={() => setExpandedRfq(isExpanded ? null : r.id)}>
+                  onClick={() => { setExpandedRfq(isExpanded ? null : r.id); if (!isExpanded) setTrackedRfqId(r.id); }}>
                   <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>
                       {generateTxId(r.display_id, r.taker_address)}
                     </span>
@@ -1359,65 +1416,13 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             );
           })}
 
-          {filteredActiveTrades.length > 0 && (
-            <>
-              <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
-                <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>TX ID</span>
-                <span className="mono text-[10px] uppercase tracking-wider font-medium w-28 shrink-0" style={{ color: "var(--t3)" }}>Pair</span>
-                <span className="mono text-[10px] uppercase tracking-wider font-medium w-24 shrink-0" style={{ color: "var(--t3)" }}>Size</span>
-                <span className="mono text-[10px] uppercase tracking-wider font-medium flex-1" style={{ color: "var(--t3)" }}>Rate</span>
-                <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Route</span>
-                <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Taker</span>
-                <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Maker</span>
-                <span className="mono text-[10px] uppercase tracking-wider font-medium shrink-0" style={{ color: "var(--t3)" }}>Status</span>
-              </div>
-            {filteredActiveTrades.map(t => {
-                const isMine = t.taker_address === supraAddress;
-                const pairClean = displayPair(t.pair);
-                const isTradeExpanded = expandedTrade === t.id;
-                return (
-                  <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
-                      onClick={() => setExpandedTrade(isTradeExpanded ? null : t.id)}>
-                      <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const rfqForTrade = rfqs.find(r => r.id === t.rfq_id); return rfqForTrade ? generateTxId(rfqForTrade.display_id, rfqForTrade.taker_address) : t.display_id; })()}</span>
-                      <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
-                      <span className="mono text-[13px] w-24 shrink-0">{t.size}</span>
-                      <span className="mono text-[13px] flex-1" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)}</span>
-                      <span className="text-[12px] shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} → {t.dest_chain}</span>
-                      <div className="shrink-0">
-                        <AddrWithRep addr={t.taker_address} chain={t.source_chain} agents={agents} isMine={isMine} />
-                      </div>
-                      <span className="mono text-[11px]" style={{ color: "var(--t3)" }}>↔</span>
-                      <div className="shrink-0">
-                        <AddrWithRep addr={t.maker_address} chain={t.dest_chain} agents={agents} isMine={t.maker_address === supraAddress} />
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
-                        {/* Inline deadline display on collapsed row */}
-                        {!isTradeExpanded && t.status === "open" && t.taker_deadline && (
-                          <InlineTimer deadline={t.taker_deadline} />
-                        )}
-                        {!isTradeExpanded && t.status === "taker_verified" && t.maker_deadline && (
-                          <InlineTimer deadline={t.maker_deadline} />
-                        )}
-                        <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "▲" : "▼"}</span>
-                      </div>
-                    </div>
-                    {isTradeExpanded && onUpdate && (
-                      <div style={{ background: "var(--bg-raised)" }}>
-                        <ActiveTrade trade={t} onUpdate={onUpdate} rfq={rfqs.find(r => r.id === t.rfq_id)} tradeQuotes={quotes.filter(q => q.rfq_id === t.rfq_id)} agents={agents} supraAddr={supraAddress || undefined} />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </>
-          )}
+
         </div>
-      )}
+      ))}
 
       </div>
 
+      {/* === SECTION 3: COMPLETED TRADES === */}
       {completedTrades.length > 0 && (
         <div className="card mb-4 animate-in">
           <div className="card-header">
