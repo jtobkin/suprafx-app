@@ -81,6 +81,7 @@ export default function Header({ onProfileClick, activePage = "rfq" }: { onProfi
         <span className="mono text-[8px] font-semibold uppercase" style={{
           color: isDemo ? "var(--warn)" : "var(--positive)",
           letterSpacing: "1px",
+          marginLeft: 12,
         }}>
           {isDemo ? "DEMO" : "TESTNET"}
         </span>
