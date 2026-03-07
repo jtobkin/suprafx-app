@@ -10,13 +10,13 @@ interface Candle {
   close: number;
 }
 
-const TIMEFRAMES = ["1H", "4H", "1D", "1W"] as const;
+const TIMEFRAMES = ["Live", "1H", "24H"] as const;
 
 function formatTime(ts: number, tf: string): string {
   const d = new Date(ts);
-  if (tf === "1H" || tf === "4H") return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-  if (tf === "1D") return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (tf === "Live") return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  if (tf === "1H") return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function formatPrice(p: number): string {
@@ -27,7 +27,7 @@ function formatPrice(p: number): string {
 }
 
 function SingleChart({ token, onRemove }: { token: string; onRemove: () => void }) {
-  const [timeframe, setTimeframe] = useState<typeof TIMEFRAMES[number]>("1D");
+  const [timeframe, setTimeframe] = useState<typeof TIMEFRAMES[number]>("Live");
   const [data, setData] = useState<Candle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,8 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/oracle/history?token=${encodeURIComponent(token)}&timeframe=${timeframe}`);
+      const apiTf = timeframe === "Live" ? "Live" : timeframe === "1H" ? "1H" : "24H";
+      const res = await fetch(`/api/oracle/history?token=${encodeURIComponent(token)}&timeframe=${apiTf}`);
       const d = await res.json();
       if (d.error) { setError(d.error); setData([]); }
       else if (d.candles?.length > 0) {
@@ -52,7 +53,12 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
   }, [token, timeframe]);
 
   useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
-  useEffect(() => { const iv = setInterval(fetchData, 2000); return () => clearInterval(iv); }, [fetchData]);
+  useEffect(() => {
+    // Live = 2s, 1H = 10s, 24H = 30s
+    const interval = timeframe === "Live" ? 2000 : timeframe === "1H" ? 10000 : 30000;
+    const iv = setInterval(fetchData, interval);
+    return () => clearInterval(iv);
+  }, [fetchData, timeframe]);
 
   const isUp = priceChange >= 0;
   const accentColor = isUp ? "#22c55e" : "#ef4444";

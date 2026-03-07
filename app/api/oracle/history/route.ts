@@ -14,10 +14,13 @@ const TOKEN_TO_ORACLE: Record<string, string> = {
 
 // Interval presets in seconds
 const INTERVALS: Record<string, { seconds: number; points: number }> = {
-  '1H': { seconds: 60, points: 60 },       // 1-min candles, 60 points
-  '4H': { seconds: 300, points: 48 },      // 5-min candles, 48 points
-  '1D': { seconds: 3600, points: 24 },     // 1-hour candles, 24 points
-  '1W': { seconds: 14400, points: 42 },    // 4-hour candles, 42 points
+  'Live': { seconds: 15, points: 60 },       // 15-sec candles, last 15 min
+  '1H': { seconds: 60, points: 60 },         // 1-min candles, 60 points
+  '24H': { seconds: 3600, points: 24 },      // 1-hour candles, 24 points
+  // Legacy support
+  '4H': { seconds: 300, points: 48 },
+  '1D': { seconds: 3600, points: 24 },
+  '1W': { seconds: 14400, points: 42 },
 };
 
 export async function GET(req: NextRequest) {
