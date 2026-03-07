@@ -1,6 +1,6 @@
 "use client";
 // BUILD_VERSION: ui-restructure-v2
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
 import { MakerVaultDetail } from "@/components/MakerVaultBadge";
@@ -852,9 +852,25 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   }
 
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
-  const [showRfqs, setShowRfqs] = useState(true); // FIX: was missing - Open RFQs visible by default
+  const [showRfqs, setShowRfqs] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedCompleted, setExpandedCompleted] = useState<string | null>(null);
+  const prevCompletedCount = useRef(0);
+
+  // Auto-expand Completed Trades when a new trade settles/times out
+  const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
+  const activeTrades = (trades || []).filter(t => !terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  useEffect(() => {
+    if (completedTrades.length > prevCompletedCount.current && prevCompletedCount.current > 0) {
+      // A new trade just completed — auto-expand the section and the latest trade
+      setShowCompleted(true);
+      const latest = completedTrades[0];
+      if (latest) setExpandedCompleted(latest.id);
+    }
+    prevCompletedCount.current = completedTrades.length;
+  }, [completedTrades.length]);
   const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
   const [completedFilter, setCompletedFilter] = useState<"all" | "mine">("all");
   const [accepting, setAccepting] = useState<string | null>(null);
@@ -880,9 +896,6 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   }, [supraAddress]);
 
   const openRfqs = rfqs.filter(r => r.status === "open").sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
-  const activeTrades = (trades || []).filter(t => !terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   useEffect(() => {
     const settledIds = completedTrades.filter(t => t.status === "settled").map(t => t.id);
