@@ -992,12 +992,10 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             </div>
             {filteredActiveTrades.map(t => {
               const pairClean = displayPair(t.pair);
-              const isTradeExpanded = expandedTrade === t.id;
               const txIdDisplay = (() => { const rfqForTrade = rfqs.find(r => r.id === t.rfq_id); return rfqForTrade ? generateTxId(rfqForTrade.display_id, rfqForTrade.taker_address) : t.display_id; })();
               return (
                 <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
-                    onClick={() => setExpandedTrade(isTradeExpanded ? null : t.id)}>
+                  <div className="flex items-center gap-4 px-4 py-3 transition-colors">
                     <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{txIdDisplay}</span>
                     <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                     <span className="mono text-[13px] w-24 shrink-0">{t.size}</span>
@@ -1010,16 +1008,13 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                         : <AddrWithRep addr={t.maker_address} chain={t.dest_chain} agents={agents} isMine={t.maker_address === supraAddress} />}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
-                      {!isTradeExpanded && t.status === "taker_verified" && t.maker_deadline && <InlineTimer deadline={t.maker_deadline} />}
-                      {!isTradeExpanded && (t.status === "open" || t.status === "matched") && t.taker_deadline && !t.maker_deadline && <InlineTimer deadline={t.taker_deadline} />}
+                      {t.status === "taker_verified" && t.maker_deadline && <InlineTimer deadline={t.maker_deadline} />}
+                      {(t.status === "open" || t.status === "matched") && t.taker_deadline && !t.maker_deadline && <InlineTimer deadline={t.taker_deadline} />}
                       <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
-                      <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "^" : "v"}</span>
                     </div>
                   </div>
-                  {isTradeExpanded && (
-                    <ActiveTrade trade={t} onUpdate={onUpdate || (() => {})} rfq={rfqs.find(r => r.id === t.rfq_id)}
-                      tradeQuotes={quotes.filter(q => q.rfq_id === t.rfq_id)} agents={agents} supraAddr={supraAddress || undefined} />
-                  )}
+                  <ActiveTrade trade={t} onUpdate={onUpdate || (() => {})} rfq={rfqs.find(r => r.id === t.rfq_id)}
+                    tradeQuotes={quotes.filter(q => q.rfq_id === t.rfq_id)} agents={agents} supraAddr={supraAddress || undefined} />
                 </div>
               );
             })}
