@@ -2,6 +2,7 @@
 // BUILD_VERSION: ui-restructure-v2
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
+import { useLoading } from "./LoadingOverlay";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
 import { MakerVaultDetail } from "@/components/MakerVaultBadge";
 import { supabase } from "@/lib/supabase";
@@ -843,6 +844,7 @@ interface Props {
 
 export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate, hideInFlight, onlyInFlight }: Props) {
   const { supraAddress, signAction } = useWallet();
+  const { showLoading, hideLoading } = useLoading();
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
   const [trackedRfqId, setTrackedRfqId] = useState<string | null>(null); // FIX: was missing
   const [usdPrices, setUsdPrices] = useState<Record<string, number>>({});
@@ -883,6 +885,15 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
   const activeTrades = (trades || []).filter(t => !terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // Dismiss loading overlay when a new active trade appears (after accept)
+  const prevActiveCount = useRef(activeTrades.length);
+  useEffect(() => {
+    if (activeTrades.length > prevActiveCount.current) {
+      hideLoading();
+    }
+    prevActiveCount.current = activeTrades.length;
+  }, [activeTrades.length, hideLoading]);
 
   useEffect(() => {
     const currentIds = new Set(completedTrades.map(t => t.id));
@@ -956,6 +967,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const acceptQuote = async (quoteId: string) => {
     if (!supraAddress) return;
     setAccepting(quoteId);
+    showLoading("Matching trade...");
     try {
       const body: any = { action: "accept_quote", quoteId, agentAddress: supraAddress };
       try {
@@ -966,12 +978,13 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       } catch (e) { console.warn("[SupraFX] Signing failed:", e); }
       const res = await fetch("/api/skill/suprafx", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
-      if (data.error) alert(data.error);
+      if (data.error) { alert(data.error); hideLoading(); }
       else {
         if (data.trade?.id) setExpandedTrade(data.trade.id);
         onAcceptQuote?.();
+        // Loader will be dismissed by the useEffect below when the trade appears in activeTrades
       }
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { alert(e.message); hideLoading(); }
     setAccepting(null);
   };
 
