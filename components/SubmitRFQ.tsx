@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useWallet } from "./WalletProvider";
+import { useLoading } from "./LoadingOverlay";
 import OraclePrice from "./OraclePrice";
 
 const COIN_LOGOS: Record<string, string> = {
@@ -120,6 +121,7 @@ function ChainTokenSelector({
 
 export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void }) {
  const { supraAddress, signAction } = useWallet();
+ const { showLoading, hideLoading } = useLoading();
  const [sellChain, setSellChain] = useState("sepolia");
  const [sellToken, setSellToken] = useState("ETH");
  const [buyChain, setBuyChain] = useState("supra-testnet");
@@ -187,6 +189,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
  const submit = async () => {
   if (!supraAddress || parsedAmount <= 0 || parsedPrice <= 0) return;
   setLoading(true); setResult(null);
+  showLoading("Submitting RFQ...");
   try {
    const res = await fetch("/api/skill/suprafx", {
     method: "POST",
@@ -214,14 +217,15 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
     })(),
    });
    const data = await res.json();
-   if (data.error) { setResult({ ok: false, msg: data.error }); }
+   if (data.error) { setResult({ ok: false, msg: data.error }); hideLoading(); }
    else {
     setResult({ ok: true, msg: (data.rfq?.displayId || "RFQ") + " created" });
     setAmount("");
     setPriceEdited(false);
     onSubmitted?.();
+    // Loader will dismiss when My Opened RFQs section renders with the new RFQ
    }
-  } catch (e: any) { setResult({ ok: false, msg: e.message }); }
+  } catch (e: any) { setResult({ ok: false, msg: e.message }); hideLoading(); }
   setLoading(false);
  };
 

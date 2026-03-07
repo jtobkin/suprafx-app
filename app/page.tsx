@@ -270,9 +270,19 @@ function Dashboard() {
         <div className="mb-2">
           <OracleTicker />
         </div>
+
+        {/* PRIORITY STACK: attention follows urgency */}
+        {/* 1. In-Flight Trades (highest urgency — deadline ticking) */}
         <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} onlyInFlight />
+
+        {/* 2. My Opened RFQs (shown above New RFQ when user has open RFQs) */}
+        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} onlyOpenRfqs />
+
+        {/* 3. New RFQ (default focus when nothing active) */}
         <SubmitRFQ onSubmitted={fetchAll} />
-        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} hideInFlight />
+
+        {/* 4. Completed Trades (lowest priority — historical) */}
+        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} hideInFlight onlyCompletedTrades />
       </div>
       <div className="text-center py-4 mono text-[9px] uppercase tracking-[2px] border-t"
         style={{ color: "var(--t3)", borderColor: "var(--border)" }}>

@@ -844,9 +844,11 @@ interface Props {
   onUpdate?: () => void;
   hideInFlight?: boolean;
   onlyInFlight?: boolean;
+  onlyOpenRfqs?: boolean;
+  onlyCompletedTrades?: boolean;
 }
 
-export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate, hideInFlight, onlyInFlight }: Props) {
+export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate, hideInFlight, onlyInFlight, onlyOpenRfqs, onlyCompletedTrades }: Props) {
   const { supraAddress, signAction } = useWallet();
   const { showLoading, hideLoading } = useLoading();
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
@@ -890,14 +892,22 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const activeTrades = (trades || []).filter(t => !terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-  // Dismiss loading overlay when a new active trade appears (after accept)
+  // Dismiss loading overlay when a new active trade or new open RFQ appears
   const prevActiveCount = useRef(activeTrades.length);
+  const prevOpenRfqCount = useRef(myOpenRfqs.length);
   useEffect(() => {
     if (activeTrades.length > prevActiveCount.current) {
       hideLoading();
     }
     prevActiveCount.current = activeTrades.length;
   }, [activeTrades.length, hideLoading]);
+
+  useEffect(() => {
+    if (myOpenRfqs.length > prevOpenRfqCount.current) {
+      hideLoading();
+    }
+    prevOpenRfqCount.current = myOpenRfqs.length;
+  }, [myOpenRfqs.length, hideLoading]);
 
   useEffect(() => {
     const currentIds = new Set(completedTrades.map(t => t.id));
@@ -1042,7 +1052,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
     <div style={{ display: "flex", flexDirection: "column" }}>
 
       {/* SECTION 1: IN-FLIGHT TRADES (only visible when you have active trades) */}
-      {!hideInFlight && filteredActiveTrades.length > 0 && (
+      {!hideInFlight && !onlyOpenRfqs && !onlyCompletedTrades && filteredActiveTrades.length > 0 && (
       <div className="card mb-2 animate-in" style={{ order: 1 }}>
         <div className="card-header">
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
@@ -1088,7 +1098,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       )}
 
       {/* SECTION 2: OPEN RFQs (always open when RFQs exist) */}
-      {!onlyInFlight && (
+      {(onlyOpenRfqs || (!onlyInFlight && !onlyCompletedTrades)) && !(onlyOpenRfqs && myOpenRfqs.length === 0) && (
       <div className="card mb-2 animate-in" style={{ order: 2 }}>
         <div className={`card-header${myOpenRfqs.length === 0 ? " cursor-pointer" : ""}`} onClick={() => { if (myOpenRfqs.length === 0) setShowRfqs(!showRfqs); }}>
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>My Opened RFQs</span>
@@ -1302,7 +1312,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       )}
 
       {/* SECTION 3: COMPLETED TRADES */}
-      {!onlyInFlight && completedTrades.length > 0 && (
+      {(onlyCompletedTrades || (!onlyInFlight && !onlyOpenRfqs)) && completedTrades.length > 0 && (
         <div className="card mb-2 animate-in" style={{ order: 3 }}>
           <div className="card-header cursor-pointer" onClick={() => setShowCompleted(!showCompleted)}>
             <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>
