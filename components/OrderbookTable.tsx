@@ -481,9 +481,30 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
 
   useEffect(() => {
     if (!isTaker && !isMaker) return;
+    // Check if settlement address is stored directly on the trade
     const storedAddr = isTaker ? (trade as any).maker_settlement_address : (trade as any).taker_settlement_address;
     if (storedAddr && storedAddr.length > 10) { setResolvedRecipient(storedAddr); return; }
+
     const counterpartySupraAddr = isTaker ? trade.maker_address : trade.taker_address;
+
+    // Known bot addresses — resolve immediately without API call
+    const KNOWN_BOT_ADDRESSES: Record<string, { sepolia: string; supra: string }> = {
+      "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a": {
+        sepolia: "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
+        supra: "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a",
+      },
+      "0x8622e15E71DdfBCF25721B7D82B729D235201EE3": {
+        sepolia: "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
+        supra: "0x8622e15E71DdfBCF25721B7D82B729D235201EE3",
+      },
+    };
+    const knownBot = KNOWN_BOT_ADDRESSES[counterpartySupraAddr];
+    if (knownBot) {
+      const addr = isEvmChain ? knownBot.sepolia : knownBot.supra;
+      setResolvedRecipient(addr);
+      return;
+    }
+
     setRecipientLoading(true);
     fetch(`/api/link-address?supra=${encodeURIComponent(counterpartySupraAddr)}`)
       .then(r => r.json())

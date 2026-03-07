@@ -311,6 +311,15 @@ function InFlightTrade({ trade, onUpdate, agents }: { trade: Trade; onUpdate: ()
     const storedAddr = isTaker ? (trade as any).maker_settlement_address : (trade as any).taker_settlement_address;
     if (storedAddr && storedAddr.length > 10) { setResolvedRecipient(storedAddr); return; }
     const counterparty = isTaker ? trade.maker_address : trade.taker_address;
+
+    // Known bot addresses — resolve immediately
+    const KNOWN_BOTS: Record<string, string> = {
+      "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a": "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
+      "0x8622e15E71DdfBCF25721B7D82B729D235201EE3": "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
+    };
+    if (KNOWN_BOTS[counterparty] && isEvmChain) { setResolvedRecipient(KNOWN_BOTS[counterparty]); return; }
+    if (KNOWN_BOTS[counterparty] && isSupraChain) { setResolvedRecipient(counterparty); return; }
+
     setRecipientLoading(true);
     fetch(`/api/link-address?supra=${encodeURIComponent(counterparty)}`)
       .then(r => r.json()).then(data => {
@@ -318,6 +327,7 @@ function InFlightTrade({ trade, onUpdate, agents }: { trade: Trade; onUpdate: ()
         const match = links.find((l: any) => l.chain === myChain);
         if (match) setResolvedRecipient(match.linked_address);
         else if (links.length > 0 && isEvmChain) setResolvedRecipient(links[0].linked_address);
+        else if (data.link?.evm_address && isEvmChain) setResolvedRecipient(data.link.evm_address);
         else if (isSupraChain) setResolvedRecipient(counterparty);
       }).catch(() => {}).finally(() => setRecipientLoading(false));
   }, [trade.id]);
