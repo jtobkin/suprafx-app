@@ -1371,7 +1371,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                 const pairCleanKey = t.pair.replace(/fx/g, "");
                 const currentRate = currentOracleRates[pairCleanKey];
                 const sinceFill = currentRate && t.rate > 0 ? ((currentRate - t.rate) / t.rate) * 100 : null;
-                const borderColor = sinceFill !== null ? (sinceFill >= 0 ? "var(--positive)" : "var(--negative)") : t.status === "settled" ? "var(--positive)" : "var(--negative)";
+                const borderColor = t.status === "settled" ? "var(--positive)" : "var(--negative)";
 
                 return (
                   <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
@@ -1406,7 +1406,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                     </div>
 
                     {isExpanded && (
-                      <div className="px-6 pb-4 pt-1" style={{ background: "var(--bg-raised)", borderLeft: "3px solid " + borderColor }}>
+                      <div className="px-6 pb-4 pt-1" style={{ background: "var(--bg-raised)", borderLeft: "2px solid " + borderColor }}>
 
                         {/* Fill vs Current price comparison */}
                         {sinceFill !== null && currentRate && (
