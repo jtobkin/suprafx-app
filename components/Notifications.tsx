@@ -78,8 +78,20 @@ export default function Notifications({
       return;
     }
 
-    const prevTrades = prevTradesRef.current;
-    const prevQuotes = prevQuotesRef.current;
+    // Snapshot prev state BEFORE updating refs
+    // This prevents re-detection on rapid re-renders from realtime + polling
+    const prevTrades = new Map(prevTradesRef.current);
+    const prevQuotes = new Map(prevQuotesRef.current);
+
+    // Update refs IMMEDIATELY so the next render sees current state
+    // (prevents the same transition being detected 3x across rapid re-renders)
+    const newTradeMap = new Map<string, Trade>();
+    trades.forEach(t => newTradeMap.set(t.id, t));
+    prevTradesRef.current = newTradeMap;
+
+    const newQuoteMap = new Map<string, Quote>();
+    quotes.forEach(q => newQuoteMap.set(q.id, q));
+    prevQuotesRef.current = newQuoteMap;
 
     for (const trade of trades) {
       const prev = prevTrades.get(trade.id);
@@ -102,9 +114,6 @@ export default function Notifications({
       }
 
       if (!prev) continue;
-
-      // Deadline warnings — fire ONCE per trade (tracked by notification dedup)
-      // Skip: with 1-min test deadlines these would fire constantly
 
       // Status transitions
       if (prev.status !== trade.status) {
@@ -213,26 +222,17 @@ export default function Notifications({
         });
       }
     }
-
-    // Update refs
-    const tradeMap = new Map<string, Trade>();
-    trades.forEach(t => tradeMap.set(t.id, t));
-    prevTradesRef.current = tradeMap;
-
-    const quoteMap = new Map<string, Quote>();
-    quotes.forEach(q => quoteMap.set(q.id, q));
-    prevQuotesRef.current = quoteMap;
   }, [trades, quotes, supraAddress, addNotification]);
 
   const active = notifications.filter(n => !n.dismissed);
   if (active.length === 0) return null;
 
   const typeStyles: Record<string, { bg: string; border: string; icon: string; iconColor: string }> = {
-    info: { bg: "rgba(37,99,235,0.06)", border: "rgba(37,99,235,0.15)", icon: "ℹ", iconColor: "var(--accent-light)" },
-    action: { bg: "rgba(234,179,8,0.06)", border: "rgba(234,179,8,0.2)", icon: "⚡", iconColor: "var(--warn)" },
-    success: { bg: "rgba(34,197,94,0.06)", border: "rgba(34,197,94,0.15)", icon: "✓", iconColor: "var(--positive)" },
-    warning: { bg: "rgba(234,179,8,0.06)", border: "rgba(234,179,8,0.2)", icon: "⚠", iconColor: "var(--warn)" },
-    error: { bg: "rgba(239,68,68,0.06)", border: "rgba(239,68,68,0.15)", icon: "✕", iconColor: "var(--negative)" },
+    info: { bg: "rgba(37,99,235,0.06)", border: "rgba(37,99,235,0.15)", icon: "\u2139", iconColor: "var(--accent-light)" },
+    action: { bg: "rgba(234,179,8,0.06)", border: "rgba(234,179,8,0.2)", icon: "\u26A1", iconColor: "var(--warn)" },
+    success: { bg: "rgba(34,197,94,0.06)", border: "rgba(34,197,94,0.15)", icon: "\u2713", iconColor: "var(--positive)" },
+    warning: { bg: "rgba(234,179,8,0.06)", border: "rgba(234,179,8,0.2)", icon: "\u26A0", iconColor: "var(--warn)" },
+    error: { bg: "rgba(239,68,68,0.06)", border: "rgba(239,68,68,0.15)", icon: "\u2715", iconColor: "var(--negative)" },
   };
 
   return (
@@ -268,7 +268,7 @@ export default function Notifications({
                     onClick={() => dismiss(n.id)}
                     className="text-[11px] px-1 ml-2 shrink-0"
                     style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
-                    ✕
+                    {"\u2715"}
                   </button>
                 </div>
                 <div className="text-[12px] mt-0.5" style={{ color: "var(--t2)" }}>{n.message}</div>
