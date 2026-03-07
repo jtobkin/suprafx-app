@@ -907,6 +907,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   }, [supraAddress]);
 
   const openRfqs = rfqs.filter(r => r.status === "open").sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const myOpenRfqs = supraAddress ? openRfqs.filter(r => r.taker_address === supraAddress) : [];
 
   useEffect(() => {
     const settledIds = completedTrades.filter(t => t.status === "settled").map(t => t.id);
@@ -1048,16 +1049,16 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       </div>
       )}
 
-      {/* SECTION 2: OPEN RFQs (visible by default, collapsible) */}
+      {/* SECTION 2: OPEN RFQs (always open when RFQs exist) */}
       {!onlyInFlight && (
       <div className="card mb-2 animate-in" style={{ order: 2 }}>
-        <div className="card-header cursor-pointer" onClick={() => setShowRfqs(!showRfqs)}>
+        <div className={`card-header${myOpenRfqs.length === 0 ? " cursor-pointer" : ""}`} onClick={() => { if (myOpenRfqs.length === 0) setShowRfqs(!showRfqs); }}>
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>My Opened RFQs</span>
           <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
-            {openRfqs.length} RFQ{openRfqs.length !== 1 ? "s" : ""} {showRfqs ? "^" : "v"}
+            {myOpenRfqs.length} RFQ{myOpenRfqs.length !== 1 ? "s" : ""}{myOpenRfqs.length === 0 ? (showRfqs ? " ^" : " v") : ""}
           </span>
         </div>
-        {showRfqs && (openRfqs.length === 0 ? (
+        {(myOpenRfqs.length > 0 || showRfqs) && (openRfqs.length === 0 ? (
           <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No open RFQs from you</div>
         ) : (
           <div>
