@@ -48,15 +48,16 @@ export default function OracleTicker() {
     walletAddr.current = addr;
     if (!addr) { setPrefsLoaded(true); return; }
 
-    supabase.from("oracle_preferences").select("ticker_feeds, chart_feeds").eq("wallet_address", addr).single()
-      .then(({ data }) => {
+    (async () => {
+      try {
+        const { data } = await supabase.from("oracle_preferences").select("ticker_feeds, chart_feeds").eq("wallet_address", addr).single();
         if (data) {
           if (Array.isArray(data.ticker_feeds) && data.ticker_feeds.length > 0) setSelectedFeeds(data.ticker_feeds);
           if (Array.isArray(data.chart_feeds)) setChartFeeds(data.chart_feeds);
         }
-        setPrefsLoaded(true);
-      })
-      .catch(() => setPrefsLoaded(true));
+      } catch {}
+      setPrefsLoaded(true);
+    })();
   }, []);
 
   // Save preferences to Supabase
