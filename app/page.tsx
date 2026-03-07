@@ -223,17 +223,18 @@ function Dashboard() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchAll]);
-  useEffect(() => { const iv = setInterval(fetchAll, 2000); return () => clearInterval(iv); }, [fetchAll]);
+  useEffect(() => { const iv = setInterval(fetchAll, 5000); return () => clearInterval(iv); }, [fetchAll]);
 
   // === COUNCIL DEADLINE ENFORCEMENT ===
   // Periodically ask the council to check for expired deadlines (server-side)
-  const lastDeadlineCheck = useRef(0);
+  const deadlineCheckInFlight = useRef(false);
   const processedDeadlines = useRef<Set<string>>(new Set());
+  const lastDeadlineCheck = useRef(0);
   useEffect(() => {
-    if (!trades?.length) return;
+    if (!trades?.length || deadlineCheckInFlight.current) return;
     const now = Date.now();
-    // Only check every 10 seconds to avoid hammering the server
-    if (now - lastDeadlineCheck.current < 10000) return;
+    // Only check every 30 seconds to avoid duplicate processing
+    if (now - lastDeadlineCheck.current < 30000) return;
     // Check if any trade has an expired deadline that we haven't already processed
     const expiredTrades = trades.filter(t =>
       !processedDeadlines.current.has(t.id) && (
@@ -242,6 +243,7 @@ function Dashboard() {
       )
     );
     if (expiredTrades.length > 0) {
+      deadlineCheckInFlight.current = true;
       lastDeadlineCheck.current = now;
       // Mark as processed immediately to prevent duplicate calls
       expiredTrades.forEach(t => processedDeadlines.current.add(t.id));
@@ -249,7 +251,8 @@ function Dashboard() {
       fetch('/api/council-process').then(r => r.json()).then(d => {
         console.log('[SupraFX] Council process result:', JSON.stringify(d));
         if (d.processed?.length > 0) fetchAll();
-      }).catch(e => console.error('[SupraFX] Council process error:', e));
+      }).catch(e => console.error('[SupraFX] Council process error:', e))
+        .finally(() => { deadlineCheckInFlight.current = false; });
     }
   }, [trades, fetchAll]);
 
