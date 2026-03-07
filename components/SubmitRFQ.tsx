@@ -297,13 +297,13 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
           </div>
 
           {/* You Receive */}
-          <div style={{ width: 160 }}>
+          <div style={{ width: 220 }}>
             <label className="block mono text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: "var(--t3)" }}>You Receive</label>
-            <div className="flex items-center rounded-md px-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", height: 46 }}>
-              <span className="mono text-[14px] font-semibold flex-1" style={{ color: receiveAmount > 0 ? "var(--positive)" : "var(--t3)" }}>
-                {receiveAmount > 0 ? (receiveAmount >= 1000 ? receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receiveAmount.toFixed(4)) : "—"}
+            <div className="flex items-center rounded-md px-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", height: 46, overflow: "hidden" }}>
+              <span className="mono text-[13px] font-semibold flex-1 truncate" style={{ color: receiveAmount > 0 ? "var(--positive)" : "var(--t3)" }}>
+                {receiveAmount > 0 ? (receiveAmount >= 1000 ? receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receiveAmount >= 1 ? receiveAmount.toFixed(4) : receiveAmount.toFixed(8)) : "—"}
               </span>
-              <div className="flex items-center gap-1 ml-2">
+              <div className="flex items-center gap-1 ml-2 shrink-0">
                 <CoinIcon token={buyToken} size={14} />
                 <span className="mono text-[11px]" style={{ color: "var(--t2)" }}>{buyToken}</span>
               </div>
