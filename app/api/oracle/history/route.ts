@@ -45,22 +45,25 @@ export async function GET(req: NextRequest) {
     });
     const data = await res.json();
 
-    if (data.status === 'success' && Array.isArray(data.data)) {
-      const candles = data.data.map((d: any) => ({
-        time: d.timestamp,
-        open: d.open,
-        high: d.high,
-        low: d.low,
-        close: d.close,
-        volume: d.volume,
-      }));
+    // Supra returns a plain array of candles (not nested under data.data)
+    const rawCandles = Array.isArray(data) ? data : (data.data && Array.isArray(data.data)) ? data.data : [];
+
+    if (rawCandles.length > 0) {
+      const candles = rawCandles.map((d: any) => ({
+        time: parseInt(d.time || d.timestamp) || 0,
+        open: parseFloat(d.open) || 0,
+        high: parseFloat(d.high) || 0,
+        low: parseFloat(d.low) || 0,
+        close: parseFloat(d.close) || 0,
+        volume: parseFloat(d.volume) || 0,
+      })).filter((c: any) => c.time > 0);
 
       const response = NextResponse.json({ token, oraclePair, timeframe, candles });
       response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return response;
     }
 
-    return NextResponse.json({ token, oraclePair, timeframe, candles: [], raw: data });
+    return NextResponse.json({ token, oraclePair, timeframe, candles: [] });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
