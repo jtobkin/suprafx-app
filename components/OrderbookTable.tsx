@@ -846,9 +846,10 @@ interface Props {
   onlyInFlight?: boolean;
   onlyOpenRfqs?: boolean;
   onlyCompletedTrades?: boolean;
+  glowPriority?: "urgent" | "active";
 }
 
-export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate, hideInFlight, onlyInFlight, onlyOpenRfqs, onlyCompletedTrades }: Props) {
+export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate, hideInFlight, onlyInFlight, onlyOpenRfqs, onlyCompletedTrades, glowPriority }: Props) {
   const { supraAddress, signAction } = useWallet();
   const { showLoading, hideLoading } = useLoading();
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
@@ -1054,7 +1055,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
 
       {/* SECTION 1: IN-FLIGHT TRADES (only visible when you have active trades) */}
       {!hideInFlight && !onlyOpenRfqs && !onlyCompletedTrades && filteredActiveTrades.length > 0 && (
-      <div className="card mb-2 animate-in" style={{ order: 1 }}>
+      <div className={`card mb-2 animate-in${glowPriority === "urgent" ? " glow-priority-urgent" : ""}`} style={{ order: 1 }}>
         <div className="card-header">
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
           <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>{filteredActiveTrades.length} active</span>
@@ -1100,7 +1101,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
 
       {/* SECTION 2: OPEN RFQs (always open when RFQs exist) */}
       {(onlyOpenRfqs || (!onlyInFlight && !onlyCompletedTrades)) && !(onlyOpenRfqs && myOpenRfqs.length === 0) && (
-      <div className="card mb-2 animate-in" style={{ order: 2 }}>
+      <div className={`card mb-2 animate-in${glowPriority === "active" ? " glow-priority-active" : ""}`} style={{ order: 2 }}>
         <div className={`card-header${myOpenRfqs.length === 0 ? " cursor-pointer" : ""}`} onClick={() => { if (myOpenRfqs.length === 0) setShowRfqs(!showRfqs); }}>
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>My Opened RFQs</span>
           <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>

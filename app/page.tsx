@@ -193,6 +193,7 @@ function VaultTabListener({ onOpen }: { onOpen: () => void }) {
 }
 
 function Dashboard() {
+  const { supraAddress } = useWallet();
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileTab, setProfileTab] = useState<"profile" | "vault">("profile");
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -299,11 +300,22 @@ function Dashboard() {
         </div>
 
         {/* PRIORITY STACK: attention follows urgency */}
-        {/* 1. In-Flight Trades (highest urgency — deadline ticking) */}
-        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} onlyInFlight />
+        {/* Compute which section gets the glow */}
+        {(() => {
+          const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
+          const myActiveTrades = supraAddress ? trades.filter(t => !terminalStatuses.includes(t.status) && (t.taker_address === supraAddress || t.maker_address === supraAddress)) : [];
+          const myOpenRfqs = supraAddress ? rfqs.filter(r => r.status === "open" && r.taker_address === supraAddress) : [];
+          const topPriority = myActiveTrades.length > 0 ? "inflight" : myOpenRfqs.length > 0 ? "openrfqs" : "none";
+          return (
+            <>
+              {/* 1. In-Flight Trades (highest urgency — deadline ticking) */}
+              <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} onlyInFlight glowPriority={topPriority === "inflight" ? "urgent" : undefined} />
 
-        {/* 2. My Opened RFQs (shown above New RFQ when user has open RFQs) */}
-        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} onlyOpenRfqs />
+              {/* 2. My Opened RFQs (shown above New RFQ when user has open RFQs) */}
+              <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} onlyOpenRfqs glowPriority={topPriority === "openrfqs" ? "active" : undefined} />
+            </>
+          );
+        })()}
 
         {/* 3. New RFQ (default focus when nothing active) */}
         <SubmitRFQ onSubmitted={fetchAll} />
