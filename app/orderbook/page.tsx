@@ -544,6 +544,7 @@ function OrderbookDashboard() {
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
   const [inspectingVault, setInspectingVault] = useState<string | null>(null);
+  const [inspectingTaker, setInspectingTaker] = useState<string | null>(null);
 
   // Sidebar
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null);
@@ -735,13 +736,22 @@ function OrderbookDashboard() {
               const rep = takerAgent ? Number(takerAgent.rep_total || 0).toFixed(1) : null;
               return (
                 <div>
-                  <span className="mono text-[11px]" style={{ color: isMine ? "var(--accent)" : "var(--t2)" }}>{isMine ? "You" : shortAddr(r.taker_address)}</span>
+                  <button onClick={(e) => { e.stopPropagation(); setInspectingTaker(inspectingTaker === r.taker_address ? null : r.taker_address); }}
+                    className="text-left hover:underline"
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    <span className="mono text-[11px]" style={{ color: isMine ? "var(--accent)" : "var(--t2)" }}>{isMine ? "You" : shortAddr(r.taker_address)}</span>
+                  </button>
                   {rep !== null && (
                     <div className="flex items-center gap-1 mt-0.5">
                       <span className="mono text-[9px]" style={{ color: Number(rep) >= 4 ? "var(--positive)" : Number(rep) >= 2 ? "var(--warn)" : "var(--negative)" }}>{"*"} {rep}</span>
                       {takerAgent && <span className="mono text-[9px]" style={{ color: "var(--t3)" }}>{(takerAgent as any).trades_completed || 0} trades</span>}
                     </div>
                   )}
+                  <button onClick={(e) => { e.stopPropagation(); setInspectingTaker(inspectingTaker === r.taker_address ? null : r.taker_address); }}
+                    className="text-[8px] hover:underline mt-0.5 block"
+                    style={{ color: inspectingTaker === r.taker_address ? "var(--accent)" : "var(--t3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    {inspectingTaker === r.taker_address ? "Hide profile" : "View profile"}
+                  </button>
                 </div>
               );
             })()}
@@ -770,6 +780,80 @@ function OrderbookDashboard() {
 
         {isExpanded && (
           <div className="animate-slide-down" style={{ background: "var(--bg-raised)", borderLeft: "3px solid var(--accent)" }}>
+
+            {/* Taker profile inspection panel */}
+            {inspectingTaker === r.taker_address && (() => {
+              const takerAgent = agents.find(a => a.wallet_address === r.taker_address);
+              const takerTrades = trades.filter(t => t.taker_address === r.taker_address || t.maker_address === r.taker_address);
+              const settled = takerTrades.filter(t => t.status === "settled");
+              const timedOut = takerTrades.filter(t => t.status === "taker_timed_out" || t.status === "maker_defaulted");
+              return (
+                <div className="px-6 py-3" style={{ background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="mono text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Taker Profile</span>
+                      <span className="mono text-[11px] select-all" style={{ color: "var(--t2)" }}>{r.taker_address}</span>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); setInspectingTaker(null); }} className="text-[10px] hover:underline"
+                      style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>close</button>
+                  </div>
+
+                  {takerAgent ? (
+                    <div className="space-y-3">
+                      {/* Rep breakdown */}
+                      <div className="flex items-center gap-4">
+                        {[
+                          { label: "Base", value: Number(takerAgent.rep_deposit_base || 0), color: "var(--t2)" },
+                          { label: "Performance", value: Number((takerAgent as any).rep_performance || 0), color: "var(--positive)" },
+                          { label: "Speed", value: Number((takerAgent as any).rep_speed || 0), color: "var(--accent-light)" },
+                          { label: "Penalties", value: Number(takerAgent.rep_penalties || 0), color: "var(--negative)" },
+                          { label: "Total", value: Number(takerAgent.rep_total || 0), color: "var(--t0)" },
+                        ].map(item => (
+                          <div key={item.label} className="text-center">
+                            <div className="mono text-[13px] font-bold" style={{ color: item.color }}>{item.value.toFixed(1)}</div>
+                            <div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>{item.label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Trade summary */}
+                      <div className="flex items-center gap-4 text-[11px]">
+                        <div><span style={{ color: "var(--t3)" }}>Role:</span> <span style={{ color: "var(--t1)" }}>{takerAgent.role || "taker"}</span></div>
+                        <div><span style={{ color: "var(--t3)" }}>Settled:</span> <span style={{ color: "var(--positive)" }}>{settled.length}</span></div>
+                        <div><span style={{ color: "var(--t3)" }}>Failed:</span> <span style={{ color: timedOut.length > 0 ? "var(--negative)" : "var(--t2)" }}>{timedOut.length}</span></div>
+                        <div><span style={{ color: "var(--t3)" }}>Chains:</span> <span style={{ color: "var(--t2)" }}>{(takerAgent.chains || []).join(", ") || "—"}</span></div>
+                      </div>
+
+                      {/* Recent trade history */}
+                      {takerTrades.length > 0 && (
+                        <div>
+                          <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Recent Trades ({takerTrades.length})</span>
+                          <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)", maxHeight: 120, overflowY: "auto" }}>
+                            {takerTrades.slice(0, 8).map((t, i) => (
+                              <div key={t.id} className="flex items-center gap-3 px-2 py-1 text-[10px] mono"
+                                style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
+                                <span style={{ color: "var(--t3)" }}>{new Date(t.created_at).toLocaleDateString()}</span>
+                                <span style={{ color: "var(--t1)" }}>{(t.pair || "").replace(/fx/g, "")}</span>
+                                <span style={{ color: "var(--t2)" }}>{t.size}</span>
+                                <span className="flex-1" />
+                                <span style={{ color:
+                                  t.status === "settled" ? "var(--positive)" :
+                                  t.status === "taker_timed_out" || t.status === "maker_defaulted" ? "var(--negative)" :
+                                  "var(--warn)"
+                                }}>{t.status.replace(/_/g, " ")}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-[11px]" style={{ color: "var(--t3)" }}>No agent profile found for this address.</div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Existing quotes with ACCEPT button for taker */}
             {rfqQuotes.length > 0 && (
               <div>
