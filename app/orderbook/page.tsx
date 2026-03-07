@@ -1155,8 +1155,8 @@ function OrderbookDashboard() {
               </div>
             </div>
 
-            {/* RIGHT: My Quotes */}
-            <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, overflow: "auto" }}>
+            {/* RIGHT: My Quotes — sticky so it follows scroll */}
+            <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, alignSelf: "flex-start", position: "sticky", top: 46, maxHeight: "calc(100vh - 54px)", overflow: "auto" }}>
               <div className="px-3 py-2 flex items-center justify-between" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
                 <div className="flex items-center gap-1">
                   {(["live", "past"] as const).map(v => (
