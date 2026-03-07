@@ -3,24 +3,48 @@ import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 
 function SupraFXLogo({ scale = 1, scrollProgress = 0 }: { scale?: number; scrollProgress?: number }) {
-  // Bars animate outward as user scrolls — staggered widths shift
-  const barBaseWidths = [16, 11, 6];
-  const barMaxWidths = [22, 16, 10];
-  const barColors = ["var(--accent)", "var(--accent-light)", "var(--warn)"];
+  // 3F Exchange Bars: F descends left (blue), X ascends right (amber)
+  // Both sides animate outward on scroll
+  const fBaseWidths = [16, 11, 6];
+  const fMaxWidths = [22, 16, 10];
+  const xBaseWidths = [6, 11, 16];
+  const xMaxWidths = [10, 16, 22];
+  const fColors = ["var(--accent)", "var(--accent-light)", "var(--accent)"];
+  const xOpacities = [0.3, 0.6, 1];
 
   return (
     <div className="flex items-center gap-2" style={{ transform: `scale(${scale})`, transformOrigin: "left center", transition: "transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)" }}>
-      <div className="flex flex-col" style={{ gap: 2 }}>
-        {barBaseWidths.map((base, i) => {
-          const max = barMaxWidths[i];
+      <div style={{ position: "relative", width: 30, height: 22 }}>
+        {/* F bars — descend from left */}
+        {fBaseWidths.map((base, i) => {
+          const max = fMaxWidths[i];
           const width = base + (max - base) * scrollProgress;
-          const delay = i * 0.05;
           return (
-            <div key={i} style={{
+            <div key={`f${i}`} style={{
+              position: "absolute",
+              top: i * 9,
+              left: 0,
               height: 3,
               width,
-              background: barColors[i],
-              transition: `width 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`,
+              background: fColors[i],
+              transition: `width 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${i * 0.05}s`,
+            }} />
+          );
+        })}
+        {/* X bars — ascend from right */}
+        {xBaseWidths.map((base, i) => {
+          const max = xMaxWidths[i];
+          const width = base + (max - base) * scrollProgress;
+          return (
+            <div key={`x${i}`} style={{
+              position: "absolute",
+              top: i * 9,
+              right: 0,
+              height: 3,
+              width,
+              background: "var(--warn)",
+              opacity: xOpacities[i],
+              transition: `width 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${i * 0.05}s`,
             }} />
           );
         })}
