@@ -127,33 +127,150 @@ function CountdownTimer({ deadline, label, penaltyWarning }: { deadline: string 
 
 function AuditTrail({ tradeId }: { tradeId: string }) {
   const [events, setEvents] = useState<any[]>([]);
+  const [votes, setVotes] = useState<any[]>([]);
+  const [signedActions, setSignedActions] = useState<any[]>([]);
+  const [attestation, setAttestation] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || loaded) return;
-    fetch(`/api/council-events?tradeId=${tradeId}`).then(r => r.json())
-      .then(data => { setEvents(data.events || []); setLoaded(true); })
+    fetch(`/api/council-events?tradeId=${tradeId}`)
+      .then(r => r.json())
+      .then(data => {
+        setEvents(data.events || []);
+        setVotes(data.votes || []);
+        setSignedActions(data.signedActions || []);
+        setAttestation(data.attestation || null);
+        setLoaded(true);
+      })
       .catch(() => setLoaded(true));
   }, [open, loaded, tradeId]);
 
+  const eventLabel: Record<string, string> = {
+    rfq_registered: "RFQ Registered", quote_registered: "Quote Registered",
+    quote_withdrawn: "Quote Withdrawn", rfq_cancelled: "RFQ Cancelled",
+    match_confirmed: "Match Confirmed", taker_tx_verified: "Taker TX Verified",
+    maker_tx_verified: "Maker TX Verified", taker_timed_out: "Taker Timed Out",
+    maker_defaulted: "Maker Defaulted", settlement_attested: "Settlement Attested",
+  };
+
+  const eventColor: Record<string, string> = {
+    rfq_registered: "var(--accent-light)", quote_registered: "var(--warn)",
+    quote_withdrawn: "var(--t3)", rfq_cancelled: "var(--negative)",
+    match_confirmed: "var(--positive)", taker_tx_verified: "#8b5cf6",
+    maker_tx_verified: "#8b5cf6", taker_timed_out: "var(--negative)",
+    maker_defaulted: "var(--negative)", settlement_attested: "var(--positive)",
+  };
+
+  const getVotesForEvent = (eventId: string) => votes.filter((v: any) => v.event_id === eventId);
+  const nodes = ["N-1", "N-2", "N-3", "N-4", "N-5"];
+
   return (
-    <div className="mt-2">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 text-[11px] mono"
+    <div className="mt-3">
+      <button onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 text-[12px] mono transition-colors"
         style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
         <span style={{ fontSize: 8 }}>{open ? "v" : ">"}</span>
-        Event Chain {loaded ? `(${events.length})` : ""}
+        Event Chain {loaded ? `(${events.length} events)` : "(click to load)"}
       </button>
-      {open && loaded && events.length > 0 && (
-        <div className="mt-1 rounded overflow-hidden text-[10px] mono" style={{ border: "1px solid var(--border)" }}>
-          {events.map((evt: any, i: number) => (
-            <div key={evt.id} className="flex items-center gap-2 px-2 py-1" style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
-              <span style={{ color: "var(--t3)" }}>#{evt.sequence_number}</span>
-              <span style={{ color: "var(--accent-light)" }}>{evt.event_type.replace(/_/g, " ")}</span>
-              <span className="flex-1" />
-              <span style={{ color: evt.consensus_reached ? "var(--positive)" : "var(--warn)" }}>{evt.consensus_reached ? "ok" : "pending"}</span>
+      {open && (
+        <div className="mt-2 rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          {!loaded ? (
+            <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>Loading...</div>
+          ) : events.length === 0 ? (
+            <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>No council events recorded.</div>
+          ) : (
+            <div>
+              {events.map((evt: any, i: number) => {
+                const timeStr = new Date(evt.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                const evtVotes = getVotesForEvent(evt.id);
+                const approvals = evtVotes.filter((v: any) => v.decision === "approve").length;
+                const isExpanded = expandedEvent === evt.id;
+                const isTerminal = ["taker_timed_out", "maker_defaulted", "settlement_attested", "rfq_cancelled"].includes(evt.event_type);
+                return (
+                  <div key={evt.id} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
+                    <div
+                      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                      onClick={() => setExpandedEvent(isExpanded ? null : evt.id)}
+                      style={{ background: isTerminal ? "rgba(239,68,68,0.03)" : "transparent" }}>
+                      <span className="mono text-[10px] w-6 shrink-0 text-center font-bold" style={{ color: "var(--t3)" }}>#{evt.sequence_number}</span>
+                      <span className="mono text-[11px] w-20 shrink-0" style={{ color: "var(--t3)" }}>{timeStr}</span>
+                      <span className="text-[12px] w-40 shrink-0 font-semibold" style={{ color: eventColor[evt.event_type] || "var(--t2)" }}>
+                        {eventLabel[evt.event_type] || evt.event_type.replace(/_/g, " ")}
+                      </span>
+                      <div className="flex items-center gap-2 flex-1 justify-end">
+                        {evt.consensus_reached ? (
+                          <span className="mono text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ background: "rgba(34,197,94,0.1)", color: "var(--positive)" }}>{approvals}/5 ok</span>
+                        ) : (
+                          <span className="mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(234,179,8,0.1)", color: "var(--warn)" }}>{approvals}/5 pending</span>
+                        )}
+                        {evt.deadline_type && (
+                          <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: "var(--surface-2)", color: "var(--t3)" }}>
+                            {evt.deadline_type === "taker_send" ? "taker timer" : "maker timer"}
+                          </span>
+                        )}
+                        <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "^" : "v"}</span>
+                      </div>
+                    </div>
+                    {isExpanded && (
+                      <div className="px-4 py-3 space-y-3" style={{ background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <span className="mono text-[9px] uppercase tracking-wider" style={{ color: "var(--t3)" }}>Event Hash:</span>
+                            <span className="mono text-[10px] select-all" style={{ color: "var(--t2)" }}>{evt.event_hash.slice(0, 24)}...</span>
+                          </div>
+                          {evt.previous_event_hash && (
+                            <div className="flex items-center gap-1">
+                              <span className="mono text-[9px]" style={{ color: "var(--t3)" }}>prev:</span>
+                              <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{evt.previous_event_hash.slice(0, 16)}...</span>
+                            </div>
+                          )}
+                        </div>
+                        {evt.payload && (
+                          <div>
+                            <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Payload</span>
+                            <div className="text-[11px] mono px-2 py-1.5 rounded break-all" style={{ background: "var(--surface-2)", color: "var(--t2)" }}>
+                              {(Object.entries(evt.payload) as Array<[string, any]>)
+                                .filter(([k]) => !k.includes("signature") && !k.includes("SessionKey"))
+                                .map(([k, v]) => (
+                                  <div key={k}>
+                                    <span style={{ color: "var(--t3)" }}>{k}:</span>{" "}
+                                    {typeof v === "string" && v.length > 40 ? v.slice(0, 20) + "..." + v.slice(-8) : String(v)}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                        {evt.deadline && (
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span style={{ color: "var(--t3)" }}>Deadline set:</span>
+                            <span className="mono" style={{ color: "var(--warn)" }}>{new Date(evt.deadline).toLocaleTimeString()}</span>
+                            <span style={{ color: "var(--t3)" }}>({evt.deadline_type})</span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Council Node Votes</span>
+                          <div className="flex items-center gap-1">
+                            {nodes.map((nodeId) => {
+                              const vote = evtVotes.find((v: any) => v.node_id === nodeId);
+                              return (
+                                <div key={nodeId} className="px-1.5 py-0.5 rounded text-[9px] mono"
+                                  style={{ background: vote ? (vote.decision === "approve" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)") : "var(--surface-2)", color: vote ? (vote.decision === "approve" ? "var(--positive)" : "var(--negative)") : "var(--t3)" }}>
+                                  {nodeId.split("-")[1]}:{vote ? (vote.decision === "approve" ? "ok" : "rej") : "--"}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
@@ -342,8 +459,50 @@ function InFlightTrade({ trade, onUpdate, agents }: { trade: Trade; onUpdate: ()
         </div>
       )}
 
-      {(trade.status === "taker_timed_out" || trade.status === "maker_defaulted") && (
-        <div className="text-[13px]" style={{ color: "var(--negative)" }}>{trade.status.replace(/_/g, " ").toUpperCase()}</div>
+      {(trade.status === "taker_timed_out" || trade.status === "maker_defaulted" || trade.status === "failed") && (
+        <div className="rounded-lg px-4 py-3 space-y-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full" style={{ background: "var(--negative)" }} />
+            <span className="text-[14px] font-bold" style={{ color: "var(--negative)" }}>
+              {trade.status === "taker_timed_out" ? "Taker Timed Out" : trade.status === "maker_defaulted" ? "Maker Defaulted" : "Trade Failed"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div>
+              <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Status</span>
+              <span style={{ color: "var(--negative)" }}>{trade.status.replace(/_/g, " ").toUpperCase()}</span>
+            </div>
+            <div>
+              <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Duration</span>
+              <span style={{ color: "var(--t2)" }}>{trade.settle_ms ? (trade.settle_ms / 1000).toFixed(1) + "s" : "N/A"}</span>
+            </div>
+            <div>
+              <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Defaulting Party</span>
+              <span style={{ color: "var(--negative)" }}>
+                {trade.status === "taker_timed_out" ? "Taker" : "Maker"}{" "}
+                ({trade.status === "taker_timed_out" ? shortAddr(trade.taker_address) : shortAddr(trade.maker_address)})
+              </span>
+            </div>
+            <div>
+              <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Penalty</span>
+              <span style={{ color: "var(--negative)" }}>
+                {trade.status === "taker_timed_out" ? "-33% reputation" : "-67% reputation + vault liquidation"}
+              </span>
+            </div>
+            {trade.taker_deadline && (
+              <div>
+                <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Taker Deadline</span>
+                <span className="mono" style={{ color: "var(--t3)" }}>{new Date(trade.taker_deadline).toLocaleString()}</span>
+              </div>
+            )}
+            {trade.maker_deadline && (
+              <div>
+                <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Maker Deadline</span>
+                <span className="mono" style={{ color: "var(--t3)" }}>{new Date(trade.maker_deadline).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       <AuditTrail tradeId={trade.id} />
