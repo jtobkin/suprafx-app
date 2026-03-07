@@ -739,7 +739,7 @@ function OrderbookDashboard() {
                   {rep !== null && (
                     <div className="flex items-center gap-1 mt-0.5">
                       <span className="mono text-[9px]" style={{ color: Number(rep) >= 4 ? "var(--positive)" : Number(rep) >= 2 ? "var(--warn)" : "var(--negative)" }}>{"*"} {rep}</span>
-                      {takerAgent && <span className="mono text-[9px]" style={{ color: "var(--t3)" }}>{takerAgent.trades_completed || 0} trades</span>}
+                      {takerAgent && <span className="mono text-[9px]" style={{ color: "var(--t3)" }}>{(takerAgent as any).trades_completed || 0} trades</span>}
                     </div>
                   )}
                 </div>
