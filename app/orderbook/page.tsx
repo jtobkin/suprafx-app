@@ -1153,12 +1153,18 @@ function OrderbookDashboard() {
           {/* End of Open RFQs card */}
 
           {/* RIGHT: My Quotes — page-level sticky sidebar */}
-          <div className="card" style={{ width: 300, minWidth: 280, flexShrink: 0, position: "sticky", top: 46, maxHeight: "calc(100vh - 54px)", overflow: "auto", marginLeft: -1 }}>
-              <div className="px-3 py-2 flex items-center justify-between" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+          <div className="card" style={{ width: 340, minWidth: 320, flexShrink: 0, position: "sticky", top: 46, maxHeight: "calc(100vh - 54px)", overflow: "auto", marginLeft: 4, background: "var(--bg-raised)", boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}>
+              <div className="px-3 py-2" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[12px] font-semibold" style={{ color: "var(--t1)" }}>My Quotes</span>
+                  <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>
+                    {quotesView === "live" ? myQuotes.length : myPastQuotes.length}
+                  </span>
+                </div>
                 <div className="flex items-center gap-1">
                   {(["live", "past"] as const).map(v => (
                     <button key={v} onClick={() => { setQuotesView(v); setExpandedQuote(null); }}
-                      className="px-2 py-0.5 rounded text-[10px] font-medium transition-all"
+                      className="px-2 py-0.5 text-[10px] font-medium transition-all"
                       style={{ background: quotesView === v ? "var(--accent)" : "transparent", color: quotesView === v ? "#fff" : "var(--t3)", border: "1px solid " + (quotesView === v ? "var(--accent)" : "var(--border)") }}>
                       {v === "live" ? "Live" : "Past"}
                     </button>
