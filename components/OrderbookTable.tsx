@@ -855,7 +855,8 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const [showRfqs, setShowRfqs] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedCompleted, setExpandedCompleted] = useState<string | null>(null);
-  const prevCompletedCount = useRef(0);
+  const prevCompletedIds = useRef<Set<string>>(new Set());
+  const initializedCompleted = useRef(false);
 
   // Auto-expand Completed Trades when a new trade settles/times out
   const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
@@ -863,14 +864,24 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   useEffect(() => {
-    if (completedTrades.length > prevCompletedCount.current && prevCompletedCount.current > 0) {
-      // A new trade just completed — auto-expand the section and the latest trade
-      setShowCompleted(true);
-      const latest = completedTrades[0];
-      if (latest) setExpandedCompleted(latest.id);
+    const currentIds = new Set(completedTrades.map(t => t.id));
+
+    if (!initializedCompleted.current) {
+      // First render — just record current state, don't auto-expand
+      prevCompletedIds.current = currentIds;
+      initializedCompleted.current = true;
+      return;
     }
-    prevCompletedCount.current = completedTrades.length;
-  }, [completedTrades.length]);
+
+    // Check if any NEW trade appeared in completed that wasn't there before
+    const newCompletions = completedTrades.filter(t => !prevCompletedIds.current.has(t.id));
+    if (newCompletions.length > 0) {
+      setShowCompleted(true);
+      setExpandedCompleted(newCompletions[0].id);
+    }
+
+    prevCompletedIds.current = currentIds;
+  }, [completedTrades]);
   const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
   const [completedFilter, setCompletedFilter] = useState<"all" | "mine">("all");
   const [accepting, setAccepting] = useState<string | null>(null);
