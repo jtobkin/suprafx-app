@@ -855,6 +855,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
   const [trackedRfqId, setTrackedRfqId] = useState<string | null>(null); // FIX: was missing
   const [usdPrices, setUsdPrices] = useState<Record<string, number>>({});
+  const [currentOracleRates, setCurrentOracleRates] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const pairs = ["ETH/SUPRA", "fxUSDC/SUPRA", "fxAAVE/SUPRA", "fxLINK/SUPRA"];
@@ -894,6 +895,23 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   // Dismiss loading overlay when a new active trade appears
+
+  // Fetch current oracle rates for completed trade pairs (for "since fill" %)
+  useEffect(() => {
+    if (completedTrades.length === 0) return;
+    const uniquePairs = Array.from(new Set(completedTrades.map(t => t.pair)));
+    Promise.all(uniquePairs.map(p => {
+      const normalized = p.replace(/fx/g, "");
+      return fetch("/api/oracle?pair=" + encodeURIComponent(p)).then(r => r.json()).then(d => {
+        if (d.rate) return { pair: normalized, rate: d.rate };
+        return null;
+      }).catch(() => null);
+    })).then(results => {
+      const rates: Record<string, number> = {};
+      for (const r of results) { if (r) rates[r.pair] = r.rate; }
+      setCurrentOracleRates(rates);
+    });
+  }, [completedTrades.length]);
   const prevActiveCount = useRef(activeTrades.length);
   useEffect(() => {
     if (activeTrades.length > prevActiveCount.current) {
