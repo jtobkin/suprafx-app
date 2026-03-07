@@ -228,11 +228,11 @@ export default function Notifications({
   if (active.length === 0) return null;
 
   const typeStyles: Record<string, { bg: string; border: string; icon: string; iconColor: string }> = {
-    info: { bg: "rgba(37,99,235,0.06)", border: "rgba(37,99,235,0.15)", icon: "\u2139", iconColor: "var(--accent-light)" },
-    action: { bg: "rgba(234,179,8,0.06)", border: "rgba(234,179,8,0.2)", icon: "\u26A1", iconColor: "var(--warn)" },
-    success: { bg: "rgba(34,197,94,0.06)", border: "rgba(34,197,94,0.15)", icon: "\u2713", iconColor: "var(--positive)" },
-    warning: { bg: "rgba(234,179,8,0.06)", border: "rgba(234,179,8,0.2)", icon: "\u26A0", iconColor: "var(--warn)" },
-    error: { bg: "rgba(239,68,68,0.06)", border: "rgba(239,68,68,0.15)", icon: "\u2715", iconColor: "var(--negative)" },
+    info: { bg: "rgba(37,99,235,0.06)", border: "rgba(37,99,235,0.15)", icon: "i", iconColor: "var(--accent-light)" },
+    action: { bg: "rgba(234,179,8,0.06)", border: "rgba(234,179,8,0.2)", icon: "!", iconColor: "var(--warn)" },
+    success: { bg: "rgba(34,197,94,0.06)", border: "rgba(34,197,94,0.15)", icon: "*", iconColor: "var(--positive)" },
+    warning: { bg: "rgba(234,179,8,0.06)", border: "rgba(234,179,8,0.2)", icon: "!", iconColor: "var(--warn)" },
+    error: { bg: "rgba(239,68,68,0.06)", border: "rgba(239,68,68,0.15)", icon: "x", iconColor: "var(--negative)" },
   };
 
   return (
@@ -268,7 +268,7 @@ export default function Notifications({
                     onClick={() => dismiss(n.id)}
                     className="text-[11px] px-1 ml-2 shrink-0"
                     style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
-                    {"\u2715"}
+                    x
                   </button>
                 </div>
                 <div className="text-[12px] mt-0.5" style={{ color: "var(--t2)" }}>{n.message}</div>
