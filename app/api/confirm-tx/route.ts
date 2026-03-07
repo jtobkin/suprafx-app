@@ -123,7 +123,8 @@ export async function POST(req: NextRequest) {
         } catch (e: any) { console.error('[Council] taker_tx_verified error:', e.message); }
 
         // === AUTO MAKER BOT: Send SUPRA to taker ===
-        if (trade.maker_address === 'auto-maker-bot') {
+        const BOT_MAKER_ADDRS = ['auto-maker-bot', process.env.DEMO_MAKER_SUPRA_ADDRESS || '', '0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a'];
+        if (BOT_MAKER_ADDRS.includes(trade.maker_address)) {
           if (!process.env.BOT_SUPRA_PRIVATE_KEY) {
             // Stay at taker_verified — maker can't send without key
             return NextResponse.json({
