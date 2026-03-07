@@ -701,9 +701,11 @@ function OrderbookDashboard() {
   const renderRfqRow = (r: RFQ) => {
     const isMine = r.taker_address === supraAddress;
     const rfqQuotes = quotes.filter(q => q.rfq_id === r.id && q.status !== "rejected" && q.status !== "withdrawn").sort((a, b) => b.rate - a.rate);
-    // Check if this RFQ has been matched into an active trade
+    // Check if this RFQ has a linked trade (active or terminal)
     const linkedTrade = trades.find(t => t.rfq_id === r.id && !terminalStatuses.includes(t.status));
-    const isMatched = r.status === "matched" || !!linkedTrade;
+    const terminalTrade = !linkedTrade ? trades.find(t => t.rfq_id === r.id && terminalStatuses.includes(t.status)) : null;
+    const isMatched = !!linkedTrade || (r.status === "matched" && !terminalTrade);
+    const isFailed = !!terminalTrade && !linkedTrade;
     // Auto-expand if it's MY in-flight trade (I'm taker or maker on the linked trade)
     const isMyInFlight = !!linkedTrade && !!supraAddress && (linkedTrade.taker_address === supraAddress || linkedTrade.maker_address === supraAddress);
     const isExpanded = expandedRfq === r.id || isMyInFlight;
@@ -733,8 +735,21 @@ function OrderbookDashboard() {
           <span className="mono text-[10px] w-12 shrink-0" style={{ color: "var(--t3)" }}>{timeAgo(r.created_at)}</span>
           <div className="flex items-center gap-2 shrink-0">
             {isMatched && <span className="tag tag-matched">in-flight</span>}
-            {!isMatched && <span className="tag tag-open">{rfqQuotes.length} qt{rfqQuotes.length !== 1 ? "s" : ""}</span>}
-            {myExistingQuote && !isMatched && <span className="mono text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>quoted</span>}
+            {isFailed && terminalTrade && (
+              <span className={`tag tag-${terminalTrade.status}`} style={
+                terminalTrade.status === "settled" ? { background: "rgba(34,197,94,0.12)", color: "var(--positive)" } :
+                { background: "rgba(239,68,68,0.12)", color: "var(--negative)" }
+              }>
+                {terminalTrade.status === "settled" ? "settled" :
+                 terminalTrade.status === "taker_timed_out" ? "taker timed out" :
+                 terminalTrade.status === "maker_defaulted" ? "maker defaulted" :
+                 terminalTrade.status === "failed" ? "failed" :
+                 terminalTrade.status === "cancelled" ? "cancelled" :
+                 terminalTrade.status.replace(/_/g, " ")}
+              </span>
+            )}
+            {!isMatched && !isFailed && <span className="tag tag-open">{rfqQuotes.length} qt{rfqQuotes.length !== 1 ? "s" : ""}</span>}
+            {myExistingQuote && !isMatched && !isFailed && <span className="mono text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>quoted</span>}
             <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isExpanded ? "^" : "v"}</span>
           </div>
         </div>
@@ -839,6 +854,73 @@ function OrderbookDashboard() {
                   <span className={`tag tag-${linkedTrade.status === "open" ? "open_trade" : linkedTrade.status}`}>{linkedTrade.status.replace(/_/g, " ")}</span>
                 </div>
                 <InFlightTrade trade={linkedTrade} onUpdate={fetchAll} agents={agents} />
+              </div>
+            )}
+
+            {/* Terminal trade details (shown when trade settled, failed, or timed out) */}
+            {terminalTrade && !linkedTrade && (
+              <div style={{ borderTop: "1px solid var(--border)" }}>
+                <div className="px-6 py-2 flex items-center gap-3" style={{ background: terminalTrade.status === "settled" ? "rgba(34,197,94,0.04)" : "rgba(239,68,68,0.04)" }}>
+                  <span className="mono text-[10px] uppercase tracking-wider font-medium" style={{ color: terminalTrade.status === "settled" ? "var(--positive)" : "var(--negative)" }}>
+                    {terminalTrade.status === "settled" ? "Settled" : "Failed"}
+                  </span>
+                  <span className="mono text-[11px]" style={{ color: "var(--t2)" }}>{terminalTrade.display_id}</span>
+                  <span className={`tag tag-${terminalTrade.status}`} style={
+                    terminalTrade.status === "settled" ? { background: "rgba(34,197,94,0.12)", color: "var(--positive)" } :
+                    { background: "rgba(239,68,68,0.12)", color: "var(--negative)" }
+                  }>{terminalTrade.status.replace(/_/g, " ")}</span>
+                </div>
+                <div className="px-6 py-3" style={{ background: "var(--bg-raised)" }}>
+                  {terminalTrade.status === "settled" && (
+                    <div className="text-[13px] font-semibold" style={{ color: "var(--positive)" }}>
+                      Settled {terminalTrade.settle_ms ? "in " + (terminalTrade.settle_ms / 1000).toFixed(1) + "s" : ""}
+                    </div>
+                  )}
+                  {(terminalTrade.status === "taker_timed_out" || terminalTrade.status === "maker_defaulted" || terminalTrade.status === "failed") && (
+                    <div className="rounded-lg px-4 py-3 space-y-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ background: "var(--negative)" }} />
+                        <span className="text-[14px] font-bold" style={{ color: "var(--negative)" }}>
+                          {terminalTrade.status === "taker_timed_out" ? "Taker Timed Out" : terminalTrade.status === "maker_defaulted" ? "Maker Defaulted" : "Trade Failed"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Defaulting Party</span>
+                          <span style={{ color: "var(--negative)" }}>
+                            {terminalTrade.status === "taker_timed_out" ? "Taker" : "Maker"}{" "}
+                            ({terminalTrade.status === "taker_timed_out" ? shortAddr(terminalTrade.taker_address) : shortAddr(terminalTrade.maker_address)})
+                          </span>
+                        </div>
+                        <div>
+                          <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Penalty</span>
+                          <span style={{ color: "var(--negative)" }}>
+                            {terminalTrade.status === "taker_timed_out" ? "-33% reputation" : "-67% reputation + vault liquidation"}
+                          </span>
+                        </div>
+                        {terminalTrade.taker_deadline && (
+                          <div>
+                            <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Taker Deadline</span>
+                            <span className="mono" style={{ color: "var(--t3)" }}>{new Date(terminalTrade.taker_deadline).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {terminalTrade.maker_deadline && (
+                          <div>
+                            <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Maker Deadline</span>
+                            <span className="mono" style={{ color: "var(--t3)" }}>{new Date(terminalTrade.maker_deadline).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {terminalTrade.settle_ms && (
+                          <div>
+                            <span className="mono text-[9px] uppercase tracking-wider block" style={{ color: "var(--t3)" }}>Duration</span>
+                            <span style={{ color: "var(--t2)" }}>{(terminalTrade.settle_ms / 1000).toFixed(1)}s</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <AuditTrail tradeId={terminalTrade.id} />
+                </div>
               </div>
             )}
           </div>
