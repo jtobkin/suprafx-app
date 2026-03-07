@@ -5,7 +5,6 @@ import Header from "@/components/Header";
 import ProfilePanel from "@/components/ProfilePanel";
 import KPIs from "@/components/KPIs";
 import OrderbookTable from "@/components/OrderbookTable";
-import MyTrades from "@/components/MyTrades";
 
 import SubmitRFQ from "@/components/SubmitRFQ";
 import Notifications from "@/components/Notifications";
@@ -265,7 +264,6 @@ function Dashboard() {
         <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <SubmitRFQ onSubmitted={fetchAll} />
         <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} />
-        <MyTrades rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} />
       </div>
       <div className="text-center py-6 mono text-[11px] uppercase tracking-[2px] border-t mt-10"
         style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
