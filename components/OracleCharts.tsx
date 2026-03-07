@@ -168,7 +168,7 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
               <Tooltip
                 contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 11 }}
                 labelFormatter={t => new Date(t).toLocaleString()}
-                formatter={(v: any, name: string) => ["$" + formatPrice(Number(v)), name.charAt(0).toUpperCase() + name.slice(1)]}
+                formatter={(v: any, name: any) => ["$" + formatPrice(Number(v)), String(name).charAt(0).toUpperCase() + String(name).slice(1)]}
               />
               <Bar dataKey="high" fill="transparent" />
               {data.map((d, i) => {
