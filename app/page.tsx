@@ -271,7 +271,6 @@ function Dashboard() {
         style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
         SupraFX Protocol · Sepolia ↔ Supra Testnet · Committee-Verified Settlement
       </div>
-      </div>
     </div>
   );
 }
