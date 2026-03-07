@@ -95,8 +95,8 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
   }, [token, timeframe]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  // Refresh every 30s
-  useEffect(() => { const iv = setInterval(fetchData, 30000); return () => clearInterval(iv); }, [fetchData]);
+  // Real-time: refresh every 5 seconds
+  useEffect(() => { const iv = setInterval(fetchData, 5000); return () => clearInterval(iv); }, [fetchData]);
 
   const chartColor = priceChange >= 0 ? "var(--positive)" : "var(--negative)";
   const minPrice = data.length > 0 ? Math.min(...data.map(d => d.low)) * 0.999 : 0;
@@ -191,7 +191,7 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
 export default function OracleCharts({ activeCharts, onRemoveChart }: { activeCharts: string[]; onRemoveChart: (token: string) => void }) {
   if (activeCharts.length === 0) return null;
 
-  const gridCols = activeCharts.length === 1 ? "grid-cols-1" : activeCharts.length === 2 ? "grid-cols-2" : activeCharts.length === 3 ? "grid-cols-3" : "grid-cols-2";
+  const gridCols = "grid-cols-4";
 
   return (
     <div className="mb-4 animate-slide-down">
