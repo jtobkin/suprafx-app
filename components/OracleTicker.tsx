@@ -121,59 +121,62 @@ export default function OracleTicker() {
 
   return (
     <div>
-      {/* Scrolling ticker strip */}
-      <div className="relative overflow-hidden mb-1" style={{ maskImage: "linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%)" }}>
-        <style dangerouslySetInnerHTML={{ __html: `
-          @keyframes ticker-scroll {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-          }
-          .ticker-track { display: flex; gap: 12px; width: max-content; animation: ticker-scroll 40s linear infinite; align-items: center; }
-          .ticker-track:hover { animation-play-state: paused; }
-        `}} />
-        <div className="ticker-track" style={{ paddingRight: 12 }}>
-          {/* Render items twice for seamless loop */}
-          {[...selectedFeeds, ...selectedFeeds].map((token, idx) => {
-            const d = prices[token];
-            const flash = flashes[token];
-            const isCharted = chartFeeds.includes(token);
-            const flashBg = flash === "up" ? "rgba(34,197,94,0.15)" : flash === "down" ? "rgba(239,68,68,0.15)" : isCharted ? "rgba(37,99,235,0.1)" : "var(--surface-2)";
-            const flashBorder = flash === "up" ? "rgba(34,197,94,0.3)" : flash === "down" ? "rgba(239,68,68,0.3)" : isCharted ? "rgba(37,99,235,0.4)" : "var(--border)";
-            return (
-              <button key={`${token}-${idx}`} onClick={() => toggleChart(token)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded shrink-0 transition-all duration-300 hover:brightness-110"
-                style={{ background: flashBg, border: `1px solid ${flashBorder}`, cursor: "pointer" }}>
-                <span className="mono text-[11px] font-semibold" style={{ color: isCharted ? "var(--accent)" : "var(--t1)" }}>{token}</span>
-                {d ? (
-                  <>
-                    <span className="mono text-[12px] font-semibold tabular-nums" style={{ color: flash === "up" ? "var(--positive)" : flash === "down" ? "var(--negative)" : "var(--t0)" }}>
-                      ${d.price >= 1 ? d.price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : d.price.toFixed(6)}
-                    </span>
-                    <span className="mono text-[10px]" style={{ color: d.change >= 0 ? "var(--positive)" : "var(--negative)" }}>
-                      {d.change >= 0 ? "+" : ""}{d.change.toFixed(2)}%
-                    </span>
-                  </>
-                ) : (
-                  <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>--</span>
-                )}
-                {isCharted && <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />}
-              </button>
-            );
-          })}
+      {/* Ticker strip with fixed controls */}
+      <div className="flex items-center gap-2 mb-1">
+        {/* Scrolling ticker */}
+        <div className="flex-1 relative overflow-hidden" style={{ maskImage: "linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%)" }}>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes ticker-scroll {
+              0% { transform: translateX(0); }
+              100% { transform: translateX(-50%); }
+            }
+            .ticker-track { display: flex; gap: 12px; width: max-content; animation: ticker-scroll 40s linear infinite; align-items: center; }
+            .ticker-track:hover { animation-play-state: paused; }
+          `}} />
+          <div className="ticker-track" style={{ paddingRight: 12 }}>
+            {/* Render items twice for seamless loop */}
+            {[...selectedFeeds, ...selectedFeeds].map((token, idx) => {
+              const d = prices[token];
+              const flash = flashes[token];
+              const isCharted = chartFeeds.includes(token);
+              const flashBg = flash === "up" ? "rgba(34,197,94,0.15)" : flash === "down" ? "rgba(239,68,68,0.15)" : isCharted ? "rgba(37,99,235,0.1)" : "var(--surface-2)";
+              const flashBorder = flash === "up" ? "rgba(34,197,94,0.3)" : flash === "down" ? "rgba(239,68,68,0.3)" : isCharted ? "rgba(37,99,235,0.4)" : "var(--border)";
+              return (
+                <button key={`${token}-${idx}`} onClick={() => toggleChart(token)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded shrink-0 transition-all duration-300 hover:brightness-110"
+                  style={{ background: flashBg, border: `1px solid ${flashBorder}`, cursor: "pointer" }}>
+                  <span className="mono text-[11px] font-semibold" style={{ color: isCharted ? "var(--accent)" : "var(--t1)" }}>{token}</span>
+                  {d ? (
+                    <>
+                      <span className="mono text-[12px] font-semibold tabular-nums" style={{ color: flash === "up" ? "var(--positive)" : flash === "down" ? "var(--negative)" : "var(--t0)" }}>
+                        ${d.price >= 1 ? d.price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : d.price.toFixed(6)}
+                      </span>
+                      <span className="mono text-[10px]" style={{ color: d.change >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                        {d.change >= 0 ? "+" : ""}{d.change.toFixed(2)}%
+                      </span>
+                    </>
+                  ) : (
+                    <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>--</span>
+                  )}
+                  {isCharted && <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-          {/* Customize button (only in first half) */}
-          <button onClick={() => setShowCustomizer(true)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded shrink-0 transition-all hover:brightness-110"
-            style={{ background: "transparent", color: "var(--accent)", border: "1px dashed var(--accent)", cursor: "pointer", fontSize: 10 }}>
-            <span className="text-[12px]">+</span> Customize
-          </button>
-
+        {/* Fixed controls */}
+        <div className="flex items-center gap-2 shrink-0">
           {chartFeeds.length > 0 && (
-            <button onClick={() => updateCharts([])} className="text-[9px] mono px-2 py-1 rounded shrink-0 hover:underline"
-              style={{ color: "var(--t3)", background: "none", border: "1px solid var(--border)", cursor: "pointer" }}>
+            <button onClick={() => updateCharts([])} className="text-[9px] mono hover:underline"
+              style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>
               Clear charts
             </button>
           )}
+          <button onClick={() => setShowCustomizer(true)} className="text-[10px] hover:underline"
+            style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>
+            Customize
+          </button>
         </div>
       </div>
 
