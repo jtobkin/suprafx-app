@@ -23,10 +23,11 @@ const DEMO_PAIRS = [
   { pair: "iUSDC/iUSDT", sizes: [100, 500, 1000] },
 ];
 
+const DEMO_MAKER_ADDR = "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a";
+const DEMO_MAKER_NAME = "SupraFX Bot";
+
 const MAKER_NAMES = [
-  "demo-maker-alpha", "demo-maker-bravo", "demo-maker-charlie",
-  "demo-maker-delta", "demo-maker-echo", "demo-maker-foxtrot",
-  "demo-maker-golf", "demo-maker-hotel",
+  "SupraFX Bot",
 ];
 
 function randomHexAddr(): string {
@@ -86,8 +87,8 @@ export default function AutoTaker() {
 
     try {
       const takerAddr = randomHexAddr();
-      const makerAddr = randomHexAddr();
-      const makerName = pick(MAKER_NAMES);
+      const makerAddr = DEMO_MAKER_ADDR;
+      const makerName = DEMO_MAKER_NAME;
       const pairConfig = pick(DEMO_PAIRS);
       const size = pick(pairConfig.sizes);
 
@@ -158,9 +159,10 @@ export default function AutoTaker() {
               addLog(`Trade ${acceptData.trade?.displayId} (${cycleCountRef.current}/${MAX_CYCLES})`, "var(--positive)");
 
               const tradeId = acceptData.trade?.id;
+              const tradeChain = acceptData.trade?.dest_chain || "sepolia";
               if (!tradeId) return;
 
-              // Step 4: Taker sends after 3s
+              // Step 4: Taker sends after 3s (simulated)
               addTimer(async () => {
                 try {
                   addLog("Taker sending...");
@@ -176,22 +178,32 @@ export default function AutoTaker() {
                     addLog(`Settled in ${(confirmData.settleMs / 1000).toFixed(1)}s`, "var(--positive)");
                   } else if (confirmData.verified) {
                     addLog("Taker verified", "var(--accent-light)");
-                    // Step 5: Demo maker sends after 3s
-                    if (bestQuote.maker_address === makerAddr) {
-                      addTimer(async () => {
-                        try {
-                          addLog(`${makerName} sending...`);
-                          const makerTx = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
-                          const makerData = await fetch("/api/confirm-tx", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ tradeId, txHash: makerTx, side: "maker" }),
-                          }).then(r => r.json());
-                          if (makerData.status === "settled") addLog(`Settled in ${(makerData.settleMs / 1000).toFixed(1)}s`, "var(--positive)");
-                          else addLog("Maker: " + (makerData.status || "submitted"), "var(--t2)");
-                        } catch (e: any) { addLog("Maker error: " + e.message, "var(--negative)"); }
-                      }, 3000);
-                    }
+                    // Step 5: Maker settles via bot-settle API (real TX on Sepolia)
+                    addTimer(async () => {
+                      try {
+                        addLog(`${DEMO_MAKER_NAME} settling on ${tradeChain}...`);
+                        const botRes = await fetch("/api/bot-settle", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            tradeId,
+                            side: "maker",
+                            chain: tradeChain,
+                            recipientAddress: takerAddr,
+                          }),
+                        }).then(r => r.json());
+
+                        if (botRes.error) {
+                          addLog("Maker settle error: " + botRes.error, "var(--negative)");
+                        } else if (botRes.confirm?.status === "settled") {
+                          addLog(`Settled in ${(botRes.confirm.settleMs / 1000).toFixed(1)}s`, "var(--positive)");
+                        } else if (botRes.confirm?.verified) {
+                          addLog(`Maker TX verified: ${botRes.txHash.slice(0, 16)}...`, "var(--accent-light)");
+                        } else {
+                          addLog(`Maker TX: ${botRes.txHash?.slice(0, 16)}... (${botRes.confirm?.status || "submitted"})`, "var(--t2)");
+                        }
+                      } catch (e: any) { addLog("Maker settle error: " + e.message, "var(--negative)"); }
+                    }, 3000);
                   } else {
                     addLog("TX: " + (confirmData.status || "pending"), "var(--t2)");
                   }
@@ -211,9 +223,16 @@ export default function AutoTaker() {
     if (active) {
       cycleCountRef.current = 0;
       setCycleCount(0);
-      addLog("Demo started (max " + MAX_CYCLES + " trades)", "var(--positive)");
-      runCycle();
-      intervalRef.current = setInterval(runCycle, 30000);
+      addLog("Initializing bot...", "var(--t2)");
+      // Ensure bot maker is registered with linked addresses + vault
+      fetch("/api/bot-init", { method: "POST" }).then(r => r.json()).then(d => {
+        addLog("Bot ready: " + (d.results || []).join(", "), "var(--accent-light)");
+        addLog("Demo started (max " + MAX_CYCLES + " trades)", "var(--positive)");
+        runCycle();
+        intervalRef.current = setInterval(runCycle, 30000);
+      }).catch(e => {
+        addLog("Bot init failed: " + e.message, "var(--negative)");
+      });
     } else {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       clearTimers();
