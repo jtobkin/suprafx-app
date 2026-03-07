@@ -971,7 +971,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
 
   const filteredOpenRfqs = openRfqs.filter(r => r.taker_address === supraAddress);
   const filteredActiveTrades = activeTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress);
-  const filteredCompletedTrades = completedFilter === "mine" ? completedTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress) : completedTrades;
+  const filteredCompletedTrades = completedTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress);
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
@@ -1244,20 +1244,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
         <div className="card mb-4 animate-in" style={{ order: 3 }}>
           <div className="card-header cursor-pointer" onClick={() => setShowCompleted(!showCompleted)}>
             <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1">
-                {(["all", "mine"] as const).map(f => (
-                  <button key={f} onClick={(e) => { e.stopPropagation(); setCompletedFilter(f); }}
-                    className="px-2 py-0.5 rounded text-[11px] font-medium transition-all"
-                    style={{ background: completedFilter === f ? "var(--accent)" : "transparent", color: completedFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (completedFilter === f ? "var(--accent)" : "var(--border)") }}>
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
-                  </button>
-                ))}
-              </div>
-              <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
-                {completedTrades.length} execution{completedTrades.length !== 1 ? "s" : ""} {showCompleted ? "^" : "v"}
-              </span>
-            </div>
+            <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
+              {filteredCompletedTrades.length} execution{filteredCompletedTrades.length !== 1 ? "s" : ""} {showCompleted ? "^" : "v"}
+            </span>
           </div>
 
           {showCompleted && (
