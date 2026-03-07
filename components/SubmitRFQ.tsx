@@ -10,11 +10,15 @@ const COIN_LOGOS: Record<string, string> = {
   LINK: "https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png",
   USDC: "https://assets.coingecko.com/coins/images/6319/small/usdc.png",
   USDT: "https://assets.coingecko.com/coins/images/325/small/Tether.png",
+  iUSDC: "https://assets.coingecko.com/coins/images/6319/small/usdc.png",
+  iUSDT: "https://assets.coingecko.com/coins/images/325/small/Tether.png",
+  iETH: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+  iBTC: "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
 };
 
 const CHAINS: Record<string, { name: string; tokens: string[] }> = {
   sepolia: { name: "Sepolia", tokens: ["ETH", "AAVE", "LINK", "USDC", "USDT"] },
-  "supra-testnet": { name: "Supra Testnet", tokens: ["SUPRA"] },
+  "supra-testnet": { name: "Supra Testnet", tokens: ["SUPRA", "iUSDC", "iUSDT", "iETH", "iBTC"] },
 };
 
 // Map display tokens to internal pair format
