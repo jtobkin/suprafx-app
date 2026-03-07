@@ -228,18 +228,23 @@ function Dashboard() {
   // === COUNCIL DEADLINE ENFORCEMENT ===
   // Periodically ask the council to check for expired deadlines (server-side)
   const lastDeadlineCheck = useRef(0);
+  const processedDeadlines = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!trades?.length) return;
     const now = Date.now();
-    // Only check every 5 seconds to avoid hammering the server
-    if (now - lastDeadlineCheck.current < 5000) return;
-    // Check if any trade has an expired deadline
-    const hasExpired = trades.some(t =>
-      (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline).getTime() < now) ||
-      (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline).getTime() < now)
+    // Only check every 10 seconds to avoid hammering the server
+    if (now - lastDeadlineCheck.current < 10000) return;
+    // Check if any trade has an expired deadline that we haven't already processed
+    const expiredTrades = trades.filter(t =>
+      !processedDeadlines.current.has(t.id) && (
+        (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline).getTime() < now) ||
+        (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline).getTime() < now)
+      )
     );
-    if (hasExpired) {
+    if (expiredTrades.length > 0) {
       lastDeadlineCheck.current = now;
+      // Mark as processed immediately to prevent duplicate calls
+      expiredTrades.forEach(t => processedDeadlines.current.add(t.id));
       console.log('[SupraFX] Expired deadlines detected, calling council-process');
       fetch('/api/council-process').then(r => r.json()).then(d => {
         console.log('[SupraFX] Council process result:', JSON.stringify(d));
