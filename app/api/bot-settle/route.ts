@@ -59,6 +59,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to generate TX" }, { status: 500 });
     }
 
+    // Store the bot's settlement address directly on the trade
+    // This bypasses the linked_addresses lookup entirely
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const db = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+      const settlementAddr = chain === "sepolia" ? EVM_BOT_ADDRESS : SUPRA_MAKER_ADDRESS;
+      const addrField = side === "maker" ? "maker_settlement_address" : "taker_settlement_address";
+      await db.from("trades").update({ [addrField]: settlementAddr }).eq("id", tradeId);
+    } catch (e: any) {
+      console.warn("[bot-settle] Could not store settlement address:", e.message);
+    }
+
     // Submit to confirm-tx
     const origin = request.headers.get("origin") || request.headers.get("host") || "";
     const protocol = origin.startsWith("http") ? "" : "https://";
