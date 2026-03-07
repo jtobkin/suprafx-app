@@ -322,9 +322,11 @@ async function handleSubmitRFQ(body: any) {
   // Bot auto-quotes at 0.3% below reference — same signing process as humans
   // Skip if no reference price available (e.g. iAssets without oracle)
   const makerAddress = process.env.DEMO_MAKER_SUPRA_ADDRESS || 'auto-maker-bot';
+  const botEvmAddress = process.env.DEMO_BOT_EVM_ADDRESS || '0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE';
   const botRate = userPrice * (1 - SPREAD_BPS / 10000);
 
   if (userPrice > 0) {
+  // Ensure bot agent exists
   await db.from('agents').upsert({
     wallet_address: makerAddress,
     name: 'SupraFX Bot',
@@ -334,6 +336,43 @@ async function handleSubmitRFQ(body: any) {
     rep_deposit_base: 5.0,
     rep_total: 5.0,
   }, { onConflict: 'wallet_address' });
+
+  // Ensure bot vault exists with sufficient capacity for council checks
+  await db.from('vault_balances').upsert({
+    maker_address: makerAddress,
+    total_deposited: 100000,
+    available: 100000,
+    committed: 0,
+    matching_limit: 90000,
+    pending_withdrawal: 0,
+  }, { onConflict: 'maker_address' });
+
+  // Ensure bot linked addresses exist for settlement resolution
+  try {
+    await db.from('address_links').upsert({
+      supra_address: makerAddress,
+      evm_address: botEvmAddress,
+      evm_verified_at: new Date().toISOString(),
+    }, { onConflict: 'supra_address' });
+  } catch {}
+  try {
+    await db.from('linked_addresses').upsert({
+      supra_address: makerAddress,
+      linked_address: botEvmAddress,
+      chain: 'sepolia',
+      wallet_provider: 'bot',
+      verified_at: new Date().toISOString(),
+    }, { onConflict: 'supra_address,chain' });
+  } catch {}
+  try {
+    await db.from('linked_addresses').upsert({
+      supra_address: makerAddress,
+      linked_address: makerAddress,
+      chain: 'supra-testnet',
+      wallet_provider: 'bot',
+      verified_at: new Date().toISOString(),
+    }, { onConflict: 'supra_address,chain' });
+  } catch {}
 
   // Bot signs its quote the same way a human maker would
   const botQuoteSig = await botSignAction('place_quote', { rfqId: rfq.id, rate: botRate });
