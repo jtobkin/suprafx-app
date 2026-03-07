@@ -949,10 +949,14 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const myOpenRfqs = supraAddress ? openRfqs.filter(r => r.taker_address === supraAddress) : [];
 
   // Dismiss loading overlay when a new open RFQ appears (after submit)
+  // Also force the section open and expand the new RFQ
   const prevOpenRfqCount = useRef(myOpenRfqs.length);
   useEffect(() => {
     if (myOpenRfqs.length > prevOpenRfqCount.current) {
       hideLoading();
+      setShowRfqs(true);
+      // Auto-expand the newest RFQ (first in the sorted list)
+      if (myOpenRfqs[0]) setExpandedRfq(myOpenRfqs[0].id);
     }
     prevOpenRfqCount.current = myOpenRfqs.length;
   }, [myOpenRfqs.length, hideLoading]);
