@@ -140,6 +140,24 @@ const PAIRS: Record<string, { source: string; dest: string }> = {
   'ETH/iBTC': { source: 'sepolia', dest: 'supra-testnet' },
   'iBTC/fxUSDC': { source: 'supra-testnet', dest: 'sepolia' },
   'fxUSDC/iBTC': { source: 'sepolia', dest: 'supra-testnet' },
+  // ETH <-> iStables cross-chain
+  'ETH/iUSDC': { source: 'sepolia', dest: 'supra-testnet' },
+  'ETH/iUSDT': { source: 'sepolia', dest: 'supra-testnet' },
+  'iUSDC/ETH': { source: 'supra-testnet', dest: 'sepolia' },
+  'iUSDT/ETH': { source: 'supra-testnet', dest: 'sepolia' },
+  // iAssets <-> EVM ERC-20 cross-chain
+  'iETH/fxUSDC': { source: 'supra-testnet', dest: 'sepolia' },
+  'iETH/fxUSDT': { source: 'supra-testnet', dest: 'sepolia' },
+  'fxUSDC/iETH': { source: 'sepolia', dest: 'supra-testnet' },
+  'fxUSDT/iETH': { source: 'sepolia', dest: 'supra-testnet' },
+  'iBTC/fxUSDT': { source: 'supra-testnet', dest: 'sepolia' },
+  'fxUSDT/iBTC': { source: 'sepolia', dest: 'supra-testnet' },
+  'iETH/fxAAVE': { source: 'supra-testnet', dest: 'sepolia' },
+  'iETH/fxLINK': { source: 'supra-testnet', dest: 'sepolia' },
+  'fxAAVE/iUSDC': { source: 'sepolia', dest: 'supra-testnet' },
+  'fxAAVE/iUSDT': { source: 'sepolia', dest: 'supra-testnet' },
+  'fxLINK/iUSDC': { source: 'sepolia', dest: 'supra-testnet' },
+  'fxLINK/iUSDT': { source: 'sepolia', dest: 'supra-testnet' },
 };
 // All bot settlements capped at 0.001 SUPRA (100000 octas)
 const SETTLEMENT_CAP_OCTAS = 100000;
