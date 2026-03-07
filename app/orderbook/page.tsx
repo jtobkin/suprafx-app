@@ -923,7 +923,7 @@ function OrderbookDashboard() {
             )}
 
             {/* Place quote (only for open RFQs, not your own, not already matched) */}
-            {!isMine && !isMatched && supraAddress && !myExistingQuote && (
+            {!isMine && !isMatched && !isFailed && supraAddress && !myExistingQuote && (
               <div className="px-6 py-3" style={{ borderTop: rfqQuotes.length > 0 ? "1px solid var(--border)" : "none" }}>
                 {quotingRfq === r.id ? (
                   <div className="flex items-center gap-3 flex-wrap">
