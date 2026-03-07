@@ -44,7 +44,7 @@ export default function OracleTicker() {
         const { data } = await supabase.from("oracle_preferences").select("ticker_feeds, chart_feeds").eq("wallet_address", addr).single();
         if (data) {
           if (Array.isArray(data.ticker_feeds) && data.ticker_feeds.length > 0) setSelectedFeeds(data.ticker_feeds);
-          if (Array.isArray(data.chart_feeds)) setChartFeeds(data.chart_feeds);
+          if (Array.isArray(data.chart_feeds) && data.chart_feeds.length > 0) setChartFeeds(data.chart_feeds);
         }
       } catch {}
       setPrefsLoaded(true);
