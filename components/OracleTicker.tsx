@@ -27,7 +27,7 @@ export default function OracleTicker() {
   const [prices, setPrices] = useState<Record<string, { price: number; change: number }>>({});
   const [flashes, setFlashes] = useState<Record<string, "up" | "down" | null>>({});
   const [selectedFeeds, setSelectedFeeds] = useState<string[]>(DEFAULT_TICKER_FEEDS);
-  const [chartFeeds, setChartFeeds] = useState<string[]>([]);
+  const [chartFeeds, setChartFeeds] = useState<string[]>(["ETH", "SOL", "AAVE", "SUPRA"]);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const prevPrices = useRef<Record<string, number>>({});
