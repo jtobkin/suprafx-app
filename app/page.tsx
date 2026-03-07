@@ -258,6 +258,33 @@ function Dashboard() {
 
   // Timeout enforcement: client-side CountdownTimer is primary trigger, Vercel cron is backup
 
+  // === BOT MAKER AUTO-SETTLEMENT ===
+  // When a trade reaches taker_verified and the maker is the bot, trigger bot settlement
+  const botWatchInFlight = useRef(false);
+  const botProcessedTrades = useRef<Set<string>>(new Set());
+  const BOT_ADDRS = [
+    "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a",
+    "auto-maker-bot",
+  ];
+  useEffect(() => {
+    if (!trades?.length || botWatchInFlight.current) return;
+    const botTrades = trades.filter(t =>
+      t.status === "taker_verified" &&
+      BOT_ADDRS.includes(t.maker_address) &&
+      !botProcessedTrades.current.has(t.id)
+    );
+    if (botTrades.length > 0) {
+      botWatchInFlight.current = true;
+      botTrades.forEach(t => botProcessedTrades.current.add(t.id));
+      console.log('[SupraFX] Bot maker needs to settle:', botTrades.map(t => t.display_id || t.id.slice(0, 8)));
+      fetch('/api/bot-watch').then(r => r.json()).then(d => {
+        console.log('[SupraFX] Bot-watch result:', JSON.stringify(d));
+        if (d.results?.length > 0) fetchAll();
+      }).catch(e => console.error('[SupraFX] Bot-watch error:', e))
+        .finally(() => { botWatchInFlight.current = false; });
+    }
+  }, [trades, fetchAll]);
+
   return (
     <div>
       <Header onProfileClick={() => { setProfileTab("profile"); setProfileOpen(true); }} activePage="rfq" />

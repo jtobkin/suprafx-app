@@ -589,6 +589,24 @@ function OrderbookDashboard() {
   }, [fetchAll]);
   useEffect(() => { const iv = setInterval(fetchAll, 3000); return () => clearInterval(iv); }, [fetchAll]);
 
+  // === BOT MAKER AUTO-SETTLEMENT ===
+  const botWatchInFlight = useRef(false);
+  const botProcessedTrades = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!trades?.length || botWatchInFlight.current) return;
+    const BOT_ADDRS = ["0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a", "auto-maker-bot"];
+    const botTrades = trades.filter(t =>
+      t.status === "taker_verified" && BOT_ADDRS.includes(t.maker_address) && !botProcessedTrades.current.has(t.id)
+    );
+    if (botTrades.length > 0) {
+      botWatchInFlight.current = true;
+      botTrades.forEach(t => botProcessedTrades.current.add(t.id));
+      fetch("/api/bot-watch").then(r => r.json()).then(d => {
+        if (d.results?.length > 0) fetchAll();
+      }).catch(() => {}).finally(() => { botWatchInFlight.current = false; });
+    }
+  }, [trades, fetchAll]);
+
   useEffect(() => {
     const pairs = ["ETH/SUPRA", "fxUSDC/SUPRA", "fxAAVE/SUPRA", "fxLINK/SUPRA"];
     Promise.all(pairs.map(p => fetch(`/api/oracle?pair=${encodeURIComponent(p)}`).then(r => r.json()).catch(() => null)))
