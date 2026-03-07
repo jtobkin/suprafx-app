@@ -1348,8 +1348,8 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
           {showCompleted && (
             <div>
               <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
-                {["TX ID", "Pair", "Size", "Rate", "Route", "Time", "", "Status"].map((h, i) => (
-                  <span key={i} className={"mono text-[10px] uppercase tracking-wider font-medium " + (h === "TX ID" ? "w-24 shrink-0" : h === "Pair" ? "w-28 shrink-0" : h === "Size" ? "w-24 shrink-0" : h === "Rate" ? "w-28 shrink-0" : h === "Route" ? "w-36 shrink-0" : h === "Time" ? "w-16 shrink-0" : h === "" ? "flex-1" : "shrink-0")}
+                {["TX ID", "Pair", "Size", "Rate", "Route", "Time", "Since Fill", "Status"].map((h, i) => (
+                  <span key={i} className={"mono text-[10px] uppercase tracking-wider font-medium " + (h === "TX ID" ? "w-24 shrink-0" : h === "Pair" ? "w-28 shrink-0" : h === "Size" ? "w-24 shrink-0" : h === "Rate" ? "w-28 shrink-0" : h === "Route" ? "w-32 shrink-0" : h === "Time" ? "w-16 shrink-0" : h === "Since Fill" ? "w-20 shrink-0" : "shrink-0")}
                     style={{ color: "var(--t3)" }}>{h}</span>
                 ))}
               </div>
@@ -1367,19 +1367,35 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                 const priceDiff = askingPrice && askingPrice > 0 ? ((t.rate - askingPrice) / askingPrice) * 100 : null;
                 const txIdDisplay = (() => { const rfqForTrade = rfqs.find(r => r.id === t.rfq_id); return rfqForTrade ? generateTxId(rfqForTrade.display_id, rfqForTrade.taker_address) : t.display_id; })();
 
+                // Price change since fill
+                const pairCleanKey = t.pair.replace(/fx/g, "");
+                const currentRate = currentOracleRates[pairCleanKey];
+                const sinceFill = currentRate && t.rate > 0 ? ((currentRate - t.rate) / t.rate) * 100 : null;
+                const borderColor = sinceFill !== null ? (sinceFill >= 0 ? "var(--positive)" : "var(--negative)") : t.status === "settled" ? "var(--positive)" : "var(--negative)";
+
                 return (
                   <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
                     <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
+                      style={{ borderLeft: "2px solid " + borderColor }}
                       onClick={() => setExpandedCompleted(isExpanded ? null : t.id)}>
                       <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{txIdDisplay}</span>
                       <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                       <span className="mono text-[13px] w-24 shrink-0">{t.size} {baseClean}</span>
                       <span className="mono text-[13px] w-28 shrink-0" style={{ color: "var(--t1)" }}>{fmtRate(t.rate)} {quoteClean}</span>
-                      <span className="text-[12px] w-36 shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} to {t.dest_chain}</span>
+                      <span className="text-[12px] w-32 shrink-0" style={{ color: "var(--t3)" }}>{t.source_chain} to {t.dest_chain}</span>
                       <span className="mono text-[13px] w-16 shrink-0" style={{ color: t.settle_ms ? "var(--positive)" : t.status === "taker_timed_out" || t.status === "maker_defaulted" ? "var(--negative)" : "var(--t3)" }}>
                         {t.settle_ms ? (t.settle_ms / 1000).toFixed(1) + "s" : t.status === "taker_timed_out" ? "T/O" : t.status === "maker_defaulted" ? "DEF" : "--"}
                       </span>
-                      <div className="flex-1" />
+                      <span className="w-20 shrink-0">
+                        {sinceFill !== null ? (
+                          <span className="mono text-[10px] font-semibold px-1.5 py-0.5 inline-flex items-center gap-1"
+                            style={{ background: sinceFill >= 0 ? "var(--positive-dim)" : "var(--negative-dim)", color: sinceFill >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                            {sinceFill >= 0 ? "+" : ""}{sinceFill.toFixed(2)}%
+                          </span>
+                        ) : (
+                          <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>--</span>
+                        )}
+                      </span>
                       <span className={`tag tag-${t.status}`} style={
                         t.status === "taker_timed_out" || t.status === "maker_defaulted" ? { background: "rgba(239,68,68,0.15)", color: "var(--negative)", fontWeight: 600 } :
                         t.status === "settled" ? { background: "rgba(34,197,94,0.15)", color: "var(--positive)", fontWeight: 600 } : {}
@@ -1390,7 +1406,25 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                     </div>
 
                     {isExpanded && (
-                      <div className="px-6 pb-4 pt-1" style={{ background: "var(--bg-raised)", borderLeft: "3px solid var(--border)" }}>
+                      <div className="px-6 pb-4 pt-1" style={{ background: "var(--bg-raised)", borderLeft: "3px solid " + borderColor }}>
+
+                        {/* Fill vs Current price comparison */}
+                        {sinceFill !== null && currentRate && (
+                          <div className="flex items-center gap-3 px-3 py-2 mb-3" style={{ background: "var(--surface-2)", fontSize: 11 }}>
+                            <span style={{ color: "var(--t3)" }}>Filled at</span>
+                            <span className="mono font-semibold">{fmtRate(t.rate)}</span>
+                            <span style={{ color: "var(--t3)" }}>{String.fromCharCode(8594)}</span>
+                            <span style={{ color: "var(--t3)" }}>Now</span>
+                            <span className="mono font-semibold" style={{ color: "var(--accent-light)" }}>{fmtRate(currentRate)}</span>
+                            <span className="mono text-[10px] font-semibold px-1.5 py-0.5 inline-flex items-center gap-1"
+                              style={{ background: sinceFill >= 0 ? "var(--positive-dim)" : "var(--negative-dim)", color: sinceFill >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                              {sinceFill >= 0 ? "+" : ""}{sinceFill.toFixed(2)}%
+                            </span>
+                            <div className="flex-1" />
+                            {t.settle_ms && <span style={{ color: "var(--t3)" }}>Settled in <span className="mono">{(t.settle_ms / 1000).toFixed(1)}s</span></span>}
+                          </div>
+                        )}
+
                         {t.status === "taker_timed_out" && (
                           <div className="px-3 py-2 rounded mb-3 flex items-center gap-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
                             <div>
