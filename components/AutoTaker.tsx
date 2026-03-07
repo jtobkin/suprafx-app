@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 
+const MAX_CYCLES = 10;
+
 const DEMO_PAIRS = [
   { pair: "ETH/SUPRA", sizes: [0.5, 1, 2, 5, 10] },
   { pair: "SUPRA/ETH", sizes: [100, 500, 1000, 2500] },
@@ -14,7 +16,6 @@ const DEMO_PAIRS = [
   { pair: "LINK/USDC", sizes: [10, 25, 50, 100] },
 ];
 
-// Pool of fake maker names for variety
 const MAKER_NAMES = [
   "demo-maker-alpha", "demo-maker-bravo", "demo-maker-charlie",
   "demo-maker-delta", "demo-maker-echo", "demo-maker-foxtrot",
@@ -31,22 +32,18 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Random spread: maker quotes between -0.5% and +0.3% of reference
 function randomSpread(): number {
-  return (Math.random() * 0.8 - 0.5) / 100; // -0.005 to +0.003
+  return (Math.random() * 0.8 - 0.5) / 100;
 }
 
-interface LogEntry {
-  time: string;
-  text: string;
-  color?: string;
-}
+interface LogEntry { time: string; text: string; color?: string; }
 
-export default function AutoTaker({ onActivity }: { onActivity?: () => void }) {
+export default function AutoTaker() {
   const [active, setActive] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [cycleCount, setCycleCount] = useState(0);
+  const cycleCountRef = useRef(0);
   const intervalRef = useRef<any>(null);
   const timersRef = useRef<any[]>([]);
 
@@ -66,9 +63,21 @@ export default function AutoTaker({ onActivity }: { onActivity?: () => void }) {
     return t;
   }, []);
 
+  const stopDemo = useCallback(() => {
+    setActive(false);
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    clearTimers();
+  }, [clearTimers]);
+
   const runCycle = useCallback(async () => {
+    // Check limit
+    if (cycleCountRef.current >= MAX_CYCLES) {
+      addLog(`Reached ${MAX_CYCLES} trades limit, stopping`, "var(--warn)");
+      stopDemo();
+      return;
+    }
+
     try {
-      // === STEP 1: Random taker submits RFQ ===
       const takerAddr = randomHexAddr();
       const makerAddr = randomHexAddr();
       const makerName = pick(MAKER_NAMES);
@@ -81,185 +90,121 @@ export default function AutoTaker({ onActivity }: { onActivity?: () => void }) {
       const rfqRes = await fetch("/api/skill/suprafx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "submit_rfq",
-          agentAddress: takerAddr,
-          pair: pairConfig.pair,
-          size: String(size),
-        }),
+        body: JSON.stringify({ action: "submit_rfq", agentAddress: takerAddr, pair: pairConfig.pair, size: String(size) }),
       });
       const rfqData = await rfqRes.json();
 
-      if (rfqData.error) {
-        addLog("RFQ failed: " + rfqData.error, "var(--negative)");
-        return;
-      }
+      if (rfqData.error) { addLog("RFQ failed: " + rfqData.error, "var(--negative)"); return; }
 
       const rfqId = rfqData.rfq.id;
       const refPrice = rfqData.rfq.takerPrice || rfqData.rfq.referencePrice || 0;
       addLog(`RFQ ${rfqData.rfq.displayId} created`, "var(--accent-light)");
-      onActivity?.();
 
-      // === STEP 2: After 5s, demo maker places a quote ===
+      // Step 2: Demo maker quotes after 5s
       addTimer(async () => {
         try {
           const spread = randomSpread();
           const makerRate = refPrice * (1 + spread);
           const spreadBps = (spread * 10000).toFixed(0);
-
-          addLog(`Maker ${makerName} quoting at ${makerRate.toFixed(4)} (${Number(spreadBps) >= 0 ? "+" : ""}${spreadBps}bps)`);
+          addLog(`Maker ${makerName} quoting (${Number(spreadBps) >= 0 ? "+" : ""}${spreadBps}bps)`);
 
           const quoteRes = await fetch("/api/skill/suprafx", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "place_quote",
-              rfqId,
-              makerAddress: makerAddr,
-              rate: String(makerRate),
-            }),
+            body: JSON.stringify({ action: "place_quote", rfqId, makerAddress: makerAddr, rate: String(makerRate) }),
           });
           const quoteData = await quoteRes.json();
+          if (quoteData.error) addLog("Quote: " + quoteData.error, "var(--warn)");
+          else addLog(`Quote placed by ${makerName}`, "var(--accent-light)");
 
-          if (quoteData.error) {
-            addLog("Quote failed: " + quoteData.error, "var(--warn)");
-            // Fall back to accepting the SupraFX bot quote
-            addLog("Falling back to SupraFX Bot quote...", "var(--t3)");
-          } else {
-            addLog(`Quote placed by ${makerName}`, "var(--accent-light)");
-          }
-          onActivity?.();
-
-          // === STEP 3: After another 5s, taker accepts best quote ===
+          // Step 3: Taker accepts after another 5s
           addTimer(async () => {
             try {
-              addLog("Taker looking for best quote...");
-
               const { createClient } = await import("@supabase/supabase-js");
-              const sb = createClient(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-              );
+              const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
-              const { data: quotes } = await sb
-                .from("quotes")
-                .select("id, maker_address, rate, status")
-                .eq("rfq_id", rfqId)
-                .eq("status", "pending")
-                .order("rate", { ascending: false });
+              const { data: quotes } = await sb.from("quotes").select("id, maker_address, rate, status")
+                .eq("rfq_id", rfqId).eq("status", "pending").order("rate", { ascending: false });
 
-              if (!quotes || quotes.length === 0) {
-                addLog("No pending quotes, skipping", "var(--warn)");
-                return;
-              }
+              if (!quotes || quotes.length === 0) { addLog("No quotes, skipping", "var(--warn)"); return; }
 
-              // Prefer the demo maker's quote, fall back to any
               const demoQuote = quotes.find((q: any) => q.maker_address === makerAddr);
               const bestQuote = demoQuote || quotes[0];
               const quoterName = bestQuote.maker_address === makerAddr ? makerName
                 : bestQuote.maker_address === "auto-maker-bot" ? "SupraFX Bot"
                 : bestQuote.maker_address.slice(0, 10) + "...";
 
-              addLog(`Accepting ${quoterName} at ${Number(bestQuote.rate).toFixed(4)}`);
+              addLog(`Accepting ${quoterName}`);
 
               const acceptRes = await fetch("/api/skill/suprafx", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  action: "accept_quote",
-                  quoteId: bestQuote.id,
-                  agentAddress: takerAddr,
-                }),
+                body: JSON.stringify({ action: "accept_quote", quoteId: bestQuote.id, agentAddress: takerAddr }),
               });
               const acceptData = await acceptRes.json();
 
-              if (acceptData.error) {
-                addLog("Accept failed: " + acceptData.error, "var(--negative)");
-                return;
-              }
+              if (acceptData.error) { addLog("Accept: " + acceptData.error, "var(--negative)"); return; }
 
-              addLog(`Trade ${acceptData.trade?.displayId} created`, "var(--positive)");
-              setCycleCount(c => c + 1);
-              onActivity?.();
+              // Increment counter
+              cycleCountRef.current += 1;
+              setCycleCount(cycleCountRef.current);
+              addLog(`Trade ${acceptData.trade?.displayId} (${cycleCountRef.current}/${MAX_CYCLES})`, "var(--positive)");
 
-              // === STEP 4: After 3s, taker sends (fake TX) ===
               const tradeId = acceptData.trade?.id;
               if (!tradeId) return;
 
+              // Step 4: Taker sends after 3s
               addTimer(async () => {
                 try {
                   addLog("Taker sending...");
-                  const fakeTxHash = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-                    .map(b => b.toString(16).padStart(2, "0")).join("");
+                  const fakeTx = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
 
-                  const confirmRes = await fetch("/api/confirm-tx", {
+                  const confirmData = await fetch("/api/confirm-tx", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ tradeId, txHash: fakeTxHash, side: "taker" }),
-                  });
-                  const confirmData = await confirmRes.json();
+                    body: JSON.stringify({ tradeId, txHash: fakeTx, side: "taker" }),
+                  }).then(r => r.json());
 
                   if (confirmData.status === "settled" || confirmData.autoSettled) {
                     addLog(`Settled in ${(confirmData.settleMs / 1000).toFixed(1)}s`, "var(--positive)");
                   } else if (confirmData.verified) {
-                    addLog("Taker verified, waiting for maker...", "var(--accent-light)");
-
-                    // === STEP 5: If maker is our demo maker (not the SupraFX bot), send maker TX too ===
+                    addLog("Taker verified", "var(--accent-light)");
+                    // Step 5: Demo maker sends after 3s
                     if (bestQuote.maker_address === makerAddr) {
                       addTimer(async () => {
                         try {
                           addLog(`${makerName} sending...`);
-                          const makerTxHash = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-                            .map(b => b.toString(16).padStart(2, "0")).join("");
-
-                          const makerConfirm = await fetch("/api/confirm-tx", {
+                          const makerTx = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
+                          const makerData = await fetch("/api/confirm-tx", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ tradeId, txHash: makerTxHash, side: "maker" }),
-                          });
-                          const makerData = await makerConfirm.json();
-
-                          if (makerData.status === "settled") {
-                            addLog(`Settled in ${(makerData.settleMs / 1000).toFixed(1)}s`, "var(--positive)");
-                          } else if (makerData.verified) {
-                            addLog("Maker verified", "var(--positive)");
-                          } else {
-                            addLog("Maker TX: " + (makerData.status || "submitted"), "var(--t2)");
-                          }
-                          onActivity?.();
-                        } catch (e: any) {
-                          addLog("Maker send error: " + e.message, "var(--negative)");
-                        }
+                            body: JSON.stringify({ tradeId, txHash: makerTx, side: "maker" }),
+                          }).then(r => r.json());
+                          if (makerData.status === "settled") addLog(`Settled in ${(makerData.settleMs / 1000).toFixed(1)}s`, "var(--positive)");
+                          else addLog("Maker: " + (makerData.status || "submitted"), "var(--t2)");
+                        } catch (e: any) { addLog("Maker error: " + e.message, "var(--negative)"); }
                       }, 3000);
                     }
-                    // If SupraFX bot is maker, it auto-settles via confirm-tx
                   } else {
-                    addLog("TX submitted: " + (confirmData.status || "pending"), "var(--t2)");
+                    addLog("TX: " + (confirmData.status || "pending"), "var(--t2)");
                   }
-                  onActivity?.();
-                } catch (e: any) {
-                  addLog("Taker send error: " + e.message, "var(--negative)");
-                }
+                } catch (e: any) { addLog("Send error: " + e.message, "var(--negative)"); }
               }, 3000);
 
-            } catch (e: any) {
-              addLog("Accept error: " + e.message, "var(--negative)");
-            }
+            } catch (e: any) { addLog("Accept error: " + e.message, "var(--negative)"); }
           }, 5000);
 
-        } catch (e: any) {
-          addLog("Quote error: " + e.message, "var(--negative)");
-        }
+        } catch (e: any) { addLog("Quote error: " + e.message, "var(--negative)"); }
       }, 5000);
 
-    } catch (e: any) {
-      addLog("Cycle error: " + e.message, "var(--negative)");
-    }
-  }, [addLog, addTimer, onActivity]);
+    } catch (e: any) { addLog("Cycle error: " + e.message, "var(--negative)"); }
+  }, [addLog, addTimer, stopDemo]);
 
   useEffect(() => {
     if (active) {
-      addLog("Demo started", "var(--positive)");
+      cycleCountRef.current = 0;
+      setCycleCount(0);
+      addLog("Demo started (max " + MAX_CYCLES + " trades)", "var(--positive)");
       runCycle();
       intervalRef.current = setInterval(runCycle, 30000);
     } else {
@@ -270,7 +215,7 @@ export default function AutoTaker({ onActivity }: { onActivity?: () => void }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       clearTimers();
     };
-  }, [active, runCycle, clearTimers]);
+  }, [active, runCycle, clearTimers, addLog]);
 
   return (
     <div className="fixed bottom-5 right-5 z-50" style={{ maxWidth: expanded ? "380px" : "auto" }}>
@@ -279,7 +224,7 @@ export default function AutoTaker({ onActivity }: { onActivity?: () => void }) {
           <div className="card-header">
             <span className="text-[12px] font-semibold" style={{ color: "var(--t1)" }}>Demo Activity</span>
             <div className="flex items-center gap-2">
-              <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{cycleCount} trades</span>
+              <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{cycleCount}/{MAX_CYCLES}</span>
               <button onClick={() => setExpanded(false)} className="text-[10px]"
                 style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>x</button>
             </div>
@@ -300,15 +245,15 @@ export default function AutoTaker({ onActivity }: { onActivity?: () => void }) {
       )}
 
       <div className="flex items-center gap-2">
-        {!expanded && (
+        {!expanded && active && (
           <button onClick={() => setExpanded(true)}
             className="px-2 py-1 rounded text-[10px] mono transition-all hover:brightness-110"
             style={{ background: "var(--surface-2)", color: "var(--t3)", border: "1px solid var(--border)" }}>
-            {cycleCount > 0 ? `${cycleCount} trades` : "log"}
+            {cycleCount}/{MAX_CYCLES}
           </button>
         )}
         <button
-          onClick={() => setActive(!active)}
+          onClick={() => { if (active) stopDemo(); else setActive(true); }}
           className="px-4 py-2 rounded-lg text-[12px] font-semibold transition-all hover:brightness-110"
           style={{
             background: active ? "var(--negative)" : "var(--positive)",

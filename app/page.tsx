@@ -9,7 +9,6 @@ import MyTrades from "@/components/MyTrades";
 
 import SubmitRFQ from "@/components/SubmitRFQ";
 import Notifications from "@/components/Notifications";
-import AutoTaker from "@/components/AutoTaker";
 import OracleTicker from "@/components/OracleTicker";
 import { supabase } from "@/lib/supabase";
 import type { Trade, RFQ, Agent, Quote } from "@/lib/types";
@@ -272,7 +271,7 @@ function Dashboard() {
         style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
         SupraFX Protocol · Sepolia ↔ Supra Testnet · Committee-Verified Settlement
       </div>
-      <AutoTaker onActivity={fetchAll} />
+      </div>
     </div>
   );
 }
