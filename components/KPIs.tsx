@@ -10,27 +10,22 @@ export default function KPIs({ trades, agents, rfqs }: { trades: Trade[]; agents
   const vol = done.reduce((s, t) => s + t.size * t.rate, 0);
 
   const items = [
-    { label: "Agents", value: String(agents.length), sub: "connected" },
-    { label: "Open RFQs", value: String(rfqs.filter(r => r.status === "open").length), sub: "in book" },
-    { label: "Settled", value: String(done.length), sub: "completed" },
-    { label: "Volume", value: "$" + fmt(vol, 0), sub: "notional" },
+    { label: "Agents", value: String(agents.length) },
+    { label: "Open RFQs", value: String(rfqs.filter(r => r.status === "open").length) },
+    { label: "Settled", value: String(done.length), color: "var(--positive)" },
+    { label: "Volume", value: "$" + fmt(vol, 0) },
   ];
 
   return (
-    <div className="mb-3 animate-in">
-      <div className="grid grid-cols-4 gap-2">
-        {items.map((item, i) => (
-          <div key={item.label} className="px-3 py-2 rounded-md" style={{ background: "var(--surface)", border: "1px solid var(--border)", animationDelay: `${i * 0.04}s` }}>
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-medium uppercase tracking-[1.5px]" style={{ color: "var(--t3)" }}>{item.label}</span>
-              <span className="text-[9px]" style={{ color: "var(--t3)" }}>{item.sub}</span>
-            </div>
-            <div className="mono text-[16px] font-bold tracking-tight leading-none mt-1" style={{ color: "var(--t0)" }}>
-              {item.value}
-            </div>
+    <div className="flex animate-in mb-2" style={{ borderBottom: "1px solid var(--border)" }}>
+      {items.map((item, i) => (
+        <div key={item.label} className="flex-1 px-3 py-2" style={{ borderRight: i < items.length - 1 ? "1px solid var(--border)" : "none" }}>
+          <div className="text-[8px] font-semibold uppercase" style={{ color: "var(--t3)", letterSpacing: "1.5px" }}>{item.label}</div>
+          <div className="mono text-[16px] font-bold leading-tight mt-0.5" style={{ color: item.color || "var(--t0)" }}>
+            {item.value}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }

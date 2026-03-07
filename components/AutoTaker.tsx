@@ -254,14 +254,14 @@ export default function AutoTaker() {
       <div className="flex items-center gap-2">
         {!expanded && active && (
           <button onClick={() => setExpanded(true)}
-            className="px-2 py-1 rounded text-[10px] mono transition-all hover:brightness-110"
+            className="px-2 py-1 text-[10px] mono transition-all hover:brightness-110"
             style={{ background: "var(--surface-2)", color: "var(--t3)", border: "1px solid var(--border)" }}>
             {cycleCount}/{MAX_CYCLES}
           </button>
         )}
         <button
           onClick={() => { if (active) stopDemo(); else setActive(true); }}
-          className="px-4 py-2 rounded-lg text-[12px] font-semibold transition-all hover:brightness-110"
+          className="px-4 py-2 text-[12px] font-semibold transition-all hover:brightness-110"
           style={{
             background: active ? "var(--negative)" : "var(--positive)",
             color: "#fff",

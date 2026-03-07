@@ -5,10 +5,10 @@ import Header from "@/components/Header";
 import ProfilePanel from "@/components/ProfilePanel";
 import KPIs from "@/components/KPIs";
 import OrderbookTable from "@/components/OrderbookTable";
+import MyTrades from "@/components/MyTrades";
 
 import SubmitRFQ from "@/components/SubmitRFQ";
 import Notifications from "@/components/Notifications";
-import OracleTicker from "@/components/OracleTicker";
 import { supabase } from "@/lib/supabase";
 import type { Trade, RFQ, Agent, Quote } from "@/lib/types";
 
@@ -223,36 +223,28 @@ function Dashboard() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchAll]);
-  useEffect(() => { const iv = setInterval(fetchAll, 5000); return () => clearInterval(iv); }, [fetchAll]);
+  useEffect(() => { const iv = setInterval(fetchAll, 2000); return () => clearInterval(iv); }, [fetchAll]);
 
   // === COUNCIL DEADLINE ENFORCEMENT ===
   // Periodically ask the council to check for expired deadlines (server-side)
-  const deadlineCheckInFlight = useRef(false);
-  const processedDeadlines = useRef<Set<string>>(new Set());
   const lastDeadlineCheck = useRef(0);
   useEffect(() => {
-    if (!trades?.length || deadlineCheckInFlight.current) return;
+    if (!trades?.length) return;
     const now = Date.now();
-    // Only check every 30 seconds to avoid duplicate processing
-    if (now - lastDeadlineCheck.current < 30000) return;
-    // Check if any trade has an expired deadline that we haven't already processed
-    const expiredTrades = trades.filter(t =>
-      !processedDeadlines.current.has(t.id) && (
-        (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline).getTime() < now) ||
-        (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline).getTime() < now)
-      )
+    // Only check every 5 seconds to avoid hammering the server
+    if (now - lastDeadlineCheck.current < 5000) return;
+    // Check if any trade has an expired deadline
+    const hasExpired = trades.some(t =>
+      (t.status === 'open' && t.taker_deadline && new Date(t.taker_deadline).getTime() < now) ||
+      (t.status === 'taker_verified' && t.maker_deadline && new Date(t.maker_deadline).getTime() < now)
     );
-    if (expiredTrades.length > 0) {
-      deadlineCheckInFlight.current = true;
+    if (hasExpired) {
       lastDeadlineCheck.current = now;
-      // Mark as processed immediately to prevent duplicate calls
-      expiredTrades.forEach(t => processedDeadlines.current.add(t.id));
       console.log('[SupraFX] Expired deadlines detected, calling council-process');
       fetch('/api/council-process').then(r => r.json()).then(d => {
         console.log('[SupraFX] Council process result:', JSON.stringify(d));
         if (d.processed?.length > 0) fetchAll();
-      }).catch(e => console.error('[SupraFX] Council process error:', e))
-        .finally(() => { deadlineCheckInFlight.current = false; });
+      }).catch(e => console.error('[SupraFX] Council process error:', e));
     }
   }, [trades, fetchAll]);
 
@@ -265,18 +257,15 @@ function Dashboard() {
       <Notifications trades={trades} quotes={quotes} />
       {/* Listen for vault tab open requests */}
       <VaultTabListener onOpen={() => { setProfileTab("vault"); setProfileOpen(true); }} />
-      <div className="max-w-[1400px] mx-auto px-4 py-3">
+      <div className="max-w-[1240px] mx-auto px-5 py-5">
         <KPIs trades={trades} agents={agents} rfqs={rfqs} />
-        <div className="mb-2">
-          <OracleTicker />
-        </div>
-        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} onlyInFlight />
         <SubmitRFQ onSubmitted={fetchAll} />
-        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} hideInFlight />
+        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} />
+        <MyTrades rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} />
       </div>
-      <div className="text-center py-4 mono text-[9px] uppercase tracking-[2px] border-t"
+      <div className="text-center py-6 mono text-[11px] uppercase tracking-[2px] border-t mt-10"
         style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
-        SupraFX Protocol | Sepolia - Supra Testnet | Committee-Verified Settlement
+        SupraFX Protocol · Sepolia ↔ Supra Testnet · Committee-Verified Settlement
       </div>
     </div>
   );
@@ -294,7 +283,7 @@ export default function Page() {
 }
 
 function Inner() {
-  const { supraAddress, isVerified, isDemo, profileLoading } = useWallet();
+  const { supraAddress, isVerified, isDemo } = useWallet();
 
   const miniHeader = (
     <header className="h-12 flex items-center px-5 border-b glass-strong" style={{ borderColor: "var(--border)" }}>
@@ -306,7 +295,6 @@ function Inner() {
   );
 
   if (!supraAddress) return <div>{miniHeader}<Login /></div>;
-  if (profileLoading) return <div>{miniHeader}</div>;
   if (!isVerified && !isDemo) return <div>{miniHeader}<VerificationGate /></div>;
   return <Dashboard />;
 }

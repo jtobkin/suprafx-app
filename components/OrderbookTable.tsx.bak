@@ -1,9 +1,8 @@
 "use client";
 // BUILD_VERSION: ui-restructure-v2
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useWallet } from "./WalletProvider";
 import { RFQ, Trade, Quote, Agent } from "@/lib/types";
-import { MakerVaultDetail } from "@/components/MakerVaultBadge";
 import { supabase } from "@/lib/supabase";
 import { generateTxId } from "@/lib/tx-id";
 
@@ -816,11 +815,9 @@ interface Props {
   agents?: Agent[];
   onAcceptQuote?: () => void;
   onUpdate?: () => void;
-  hideInFlight?: boolean;
-  onlyInFlight?: boolean;
 }
 
-export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate, hideInFlight, onlyInFlight }: Props) {
+export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate }: Props) {
   const { supraAddress, signAction } = useWallet();
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
   const [trackedRfqId, setTrackedRfqId] = useState<string | null>(null); // FIX: was missing
@@ -852,42 +849,14 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   }
 
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
-  const [showRfqs, setShowRfqs] = useState(true);
+  const [showRfqs, setShowRfqs] = useState(true); // FIX: was missing - Open RFQs visible by default
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedCompleted, setExpandedCompleted] = useState<string | null>(null);
-  const prevCompletedIds = useRef<Set<string>>(new Set());
-  const initializedCompleted = useRef(false);
-
-  // Auto-expand Completed Trades when a new trade settles/times out
-  const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
-  const activeTrades = (trades || []).filter(t => !terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-  useEffect(() => {
-    const currentIds = new Set(completedTrades.map(t => t.id));
-
-    if (!initializedCompleted.current) {
-      // First render — just record current state, don't auto-expand
-      prevCompletedIds.current = currentIds;
-      initializedCompleted.current = true;
-      return;
-    }
-
-    // Check if any NEW trade appeared in completed that wasn't there before
-    const newCompletions = completedTrades.filter(t => !prevCompletedIds.current.has(t.id));
-    if (newCompletions.length > 0) {
-      setShowCompleted(true);
-      setExpandedCompleted(newCompletions[0].id);
-    }
-
-    prevCompletedIds.current = currentIds;
-  }, [completedTrades]);
   const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
   const [completedFilter, setCompletedFilter] = useState<"all" | "mine">("all");
   const [accepting, setAccepting] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
-  const [inspectingVault, setInspectingVault] = useState<string | null>(null);
   const [quotingRfq, setQuotingRfq] = useState<string | null>(null);
   const [quotePrice, setQuotePrice] = useState("");
   const [quotingLoading, setQuotingLoading] = useState(false);
@@ -907,6 +876,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   }, [supraAddress]);
 
   const openRfqs = rfqs.filter(r => r.status === "open").sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
+  const activeTrades = (trades || []).filter(t => !terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   useEffect(() => {
     const settledIds = completedTrades.filter(t => t.status === "settled").map(t => t.id);
@@ -995,20 +967,33 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
     setWithdrawing(null);
   };
 
-  const filteredOpenRfqs = openRfqs.filter(r => r.taker_address === supraAddress);
-  const filteredActiveTrades = activeTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress);
-  const filteredCompletedTrades = completedTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress);
+  const filteredOpenRfqs = activeFilter === "mine" ? openRfqs.filter(r => r.taker_address === supraAddress) : openRfqs;
+  const filteredActiveTrades = activeFilter === "mine" ? activeTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress) : activeTrades;
+  const filteredCompletedTrades = completedFilter === "mine" ? completedTrades.filter(t => t.taker_address === supraAddress || t.maker_address === supraAddress) : completedTrades;
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
 
-      {/* SECTION 1: IN-FLIGHT TRADES (only visible when you have active trades) */}
-      {!hideInFlight && filteredActiveTrades.length > 0 && (
-      <div className="card mb-2 animate-in" style={{ order: 1 }}>
+      {/* SECTION 1: IN-FLIGHT TRADES */}
+      <div className="card mb-4 animate-in" style={{ order: 1 }}>
         <div className="card-header">
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
-          <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>{filteredActiveTrades.length} active</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              {(["all", "mine"] as const).map(f => (
+                <button key={f} onClick={() => setActiveFilter(f)}
+                  className="px-2 py-0.5 rounded text-[11px] font-medium transition-all"
+                  style={{ background: activeFilter === f ? "var(--accent)" : "transparent", color: activeFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (activeFilter === f ? "var(--accent)" : "var(--border)") }}>
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
+            <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>{activeTrades.length} active</span>
+          </div>
         </div>
+        {filteredActiveTrades.length === 0 ? (
+          <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No in-flight trades</div>
+        ) : (
           <div>
             <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
               {["TX ID", "Pair", "Size", "Rate", "Route", "Taker", "Maker", "Status"].map(h => (
@@ -1018,10 +1003,12 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
             </div>
             {filteredActiveTrades.map(t => {
               const pairClean = displayPair(t.pair);
+              const isTradeExpanded = expandedTrade === t.id;
               const txIdDisplay = (() => { const rfqForTrade = rfqs.find(r => r.id === t.rfq_id); return rfqForTrade ? generateTxId(rfqForTrade.display_id, rfqForTrade.taker_address) : t.display_id; })();
               return (
                 <div key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <div className="flex items-center gap-4 px-4 py-3 transition-colors">
+                  <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors"
+                    onClick={() => setExpandedTrade(isTradeExpanded ? null : t.id)}>
                     <span className="mono text-[12px] w-24 shrink-0" style={{ color: "var(--t3)" }}>{txIdDisplay}</span>
                     <span className="text-[13px] font-semibold w-28 shrink-0">{pairClean}</span>
                     <span className="mono text-[13px] w-24 shrink-0">{t.size}</span>
@@ -1034,31 +1021,33 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                         : <AddrWithRep addr={t.maker_address} chain={t.dest_chain} agents={agents} isMine={t.maker_address === supraAddress} />}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
-                      {t.status === "taker_verified" && t.maker_deadline && <InlineTimer deadline={t.maker_deadline} />}
-                      {(t.status === "open" || t.status === "matched") && t.taker_deadline && !t.maker_deadline && <InlineTimer deadline={t.taker_deadline} />}
+                      {!isTradeExpanded && t.status === "taker_verified" && t.maker_deadline && <InlineTimer deadline={t.maker_deadline} />}
+                      {!isTradeExpanded && (t.status === "open" || t.status === "matched") && t.taker_deadline && !t.maker_deadline && <InlineTimer deadline={t.taker_deadline} />}
                       <span className={`tag tag-${t.status === "open" ? "open_trade" : t.status}`}>{t.status.replace(/_/g, " ")}</span>
+                      <span className="text-[10px]" style={{ color: "var(--t3)" }}>{isTradeExpanded ? "^" : "v"}</span>
                     </div>
                   </div>
-                  <ActiveTrade trade={t} onUpdate={onUpdate || (() => {})} rfq={rfqs.find(r => r.id === t.rfq_id)}
-                    tradeQuotes={quotes.filter(q => q.rfq_id === t.rfq_id)} agents={agents} supraAddr={supraAddress || undefined} />
+                  {isTradeExpanded && (
+                    <ActiveTrade trade={t} onUpdate={onUpdate || (() => {})} rfq={rfqs.find(r => r.id === t.rfq_id)}
+                      tradeQuotes={quotes.filter(q => q.rfq_id === t.rfq_id)} agents={agents} supraAddr={supraAddress || undefined} />
+                  )}
                 </div>
               );
             })}
           </div>
+        )}
       </div>
-      )}
 
       {/* SECTION 2: OPEN RFQs (visible by default, collapsible) */}
-      {!onlyInFlight && (
-      <div className="card mb-2 animate-in" style={{ order: 2 }}>
+      <div className="card mb-4 animate-in" style={{ order: 2 }}>
         <div className="card-header cursor-pointer" onClick={() => setShowRfqs(!showRfqs)}>
-          <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>My Opened RFQs</span>
+          <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
           <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
             {openRfqs.length} RFQ{openRfqs.length !== 1 ? "s" : ""} {showRfqs ? "^" : "v"}
           </span>
         </div>
         {showRfqs && (openRfqs.length === 0 ? (
-          <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No open RFQs from you</div>
+          <div className="py-6 text-center text-[13px]" style={{ color: "var(--t3)" }}>No open RFQs</div>
         ) : (
           <div>
             <div className="flex items-center gap-4 px-4 py-1.5" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
@@ -1125,16 +1114,9 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                             return (
                               <div key={q.id} className="px-8 py-2.5 flex items-center gap-4 hover:bg-white/[0.02] transition-colors"
                                 style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                                <div className="w-40">
-                                  <AddrWithRep addr={q.maker_address} chain={r.dest_chain} agents={agents} isMine={q.maker_address === supraAddress} />
-                                  <button onClick={(e) => { e.stopPropagation(); setInspectingVault(inspectingVault === q.maker_address ? null : q.maker_address); }}
-                                    className="text-[9px] hover:underline block mt-0.5"
-                                    style={{ color: inspectingVault === q.maker_address ? "var(--accent)" : "var(--t3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                                    {inspectingVault === q.maker_address ? "Hide deposit" : "Security deposit"}
-                                  </button>
-                                </div>
+                                <div className="w-40"><AddrWithRep addr={q.maker_address} chain={r.dest_chain} agents={agents} isMine={q.maker_address === supraAddress} /></div>
                                 <span className="mono text-[13px] font-semibold w-36" style={{ color: "var(--t1)" }}>{fmtRate(q.rate)} {quoteClean}</span>
-                                <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const u = toUsd(r.size * q.rate, r.pair.split("/")[1] || ""); return u || "--"; })()}</span>
+                                <span className="mono text-[11px] w-28 shrink-0" style={{ color: "var(--t3)" }}>{(() => { const u = toUsd(r.size * q.rate, r.pair.split("/")[1] || ""); return u || "—"; })()}</span>
                                 <span className="mono text-[13px] w-32" style={{ color: "var(--positive)" }}>
                                   {receive >= 1000 ? receive.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : receive.toFixed(4)} {quoteClean}
                                 </span>
@@ -1161,22 +1143,6 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
                               </div>
                             );
                           })}
-                          {/* Vault inspection sub-panel */}
-                          {inspectingVault && rfqQuotes.some(q => q.maker_address === inspectingVault) && (
-                            <div className="animate-slide-down px-8 py-3" style={{ background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="mono text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Security Deposit</span>
-                                  <span className="mono text-[11px]" style={{ color: "var(--t2)" }}>
-                                    {inspectingVault === "auto-maker-bot" ? "SupraFX Bot" : shortAddr(inspectingVault)}
-                                  </span>
-                                </div>
-                                <button onClick={() => setInspectingVault(null)} className="text-[10px] hover:underline"
-                                  style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>close</button>
-                              </div>
-                              <MakerVaultDetail address={inspectingVault} />
-                            </div>
-                          )}
                         </div>
                       )}
 
@@ -1260,16 +1226,26 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
           </div>
         ))}
       </div>
-      )}
 
       {/* SECTION 3: COMPLETED TRADES */}
-      {!onlyInFlight && completedTrades.length > 0 && (
-        <div className="card mb-2 animate-in" style={{ order: 3 }}>
+      {completedTrades.length > 0 && (
+        <div className="card mb-4 animate-in" style={{ order: 3 }}>
           <div className="card-header cursor-pointer" onClick={() => setShowCompleted(!showCompleted)}>
             <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>
-            <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
-              {filteredCompletedTrades.length} execution{filteredCompletedTrades.length !== 1 ? "s" : ""} {showCompleted ? "^" : "v"}
-            </span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                {(["all", "mine"] as const).map(f => (
+                  <button key={f} onClick={(e) => { e.stopPropagation(); setCompletedFilter(f); }}
+                    className="px-2 py-0.5 rounded text-[11px] font-medium transition-all"
+                    style={{ background: completedFilter === f ? "var(--accent)" : "transparent", color: completedFilter === f ? "#fff" : "var(--t3)", border: "1px solid " + (completedFilter === f ? "var(--accent)" : "var(--border)") }}>
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <span className="mono text-[12px]" style={{ color: "var(--t3)" }}>
+                {completedTrades.length} execution{completedTrades.length !== 1 ? "s" : ""} {showCompleted ? "^" : "v"}
+              </span>
+            </div>
           </div>
 
           {showCompleted && (

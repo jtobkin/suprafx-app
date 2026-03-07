@@ -176,7 +176,7 @@ function AuditTrail({ tradeId }: { tradeId: string }) {
         Event Chain {loaded ? `(${events.length} events)` : "(click to load)"}
       </button>
       {open && (
-        <div className="mt-2 rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+        <div className="mt-2 overflow-hidden" style={{ border: "1px solid var(--border)" }}>
           {!loaded ? (
             <div className="px-3 py-2 text-[12px]" style={{ color: "var(--t3)" }}>Loading...</div>
           ) : events.length === 0 ? (
@@ -460,7 +460,7 @@ function InFlightTrade({ trade, onUpdate, agents }: { trade: Trade; onUpdate: ()
       )}
 
       {(trade.status === "taker_timed_out" || trade.status === "maker_defaulted" || trade.status === "failed") && (
-        <div className="rounded-lg px-4 py-3 space-y-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+        <div className="px-4 py-3 space-y-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ background: "var(--negative)" }} />
             <span className="text-[14px] font-bold" style={{ color: "var(--negative)" }}>
@@ -828,7 +828,7 @@ function OrderbookDashboard() {
                       {takerTrades.length > 0 && (
                         <div>
                           <span className="mono text-[9px] uppercase tracking-wider block mb-1" style={{ color: "var(--t3)" }}>Recent Trades ({takerTrades.length})</span>
-                          <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)", maxHeight: 120, overflowY: "auto" }}>
+                          <div className="overflow-hidden" style={{ border: "1px solid var(--border)", maxHeight: 120, overflowY: "auto" }}>
                             {takerTrades.slice(0, 8).map((t, i) => (
                               <div key={t.id} className="flex items-center gap-3 px-2 py-1 text-[10px] mono"
                                 style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
@@ -975,7 +975,7 @@ function OrderbookDashboard() {
                     </div>
                   )}
                   {(terminalTrade.status === "taker_timed_out" || terminalTrade.status === "maker_defaulted" || terminalTrade.status === "failed") && (
-                    <div className="rounded-lg px-4 py-3 space-y-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                    <div className="px-4 py-3 space-y-2" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full" style={{ background: "var(--negative)" }} />
                         <span className="text-[14px] font-bold" style={{ color: "var(--negative)" }}>
@@ -1031,7 +1031,7 @@ function OrderbookDashboard() {
     <div>
       <Header onProfileClick={() => { setProfileTab("profile"); setProfileOpen(true); }} activePage="orderbook" />
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} initialTab={profileTab} />
-      <div className="max-w-[1440px] mx-auto px-5 py-5">
+      <div className="max-w-[1400px] mx-auto px-4 py-3">
 
         {/* TOP STRIP */}
         <div className="mb-4">

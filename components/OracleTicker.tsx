@@ -139,13 +139,13 @@ export default function OracleTicker() {
               const d = prices[token];
               const flash = flashes[token];
               const isCharted = chartFeeds.includes(token);
-              const flashBg = flash === "up" ? "rgba(34,197,94,0.15)" : flash === "down" ? "rgba(239,68,68,0.15)" : "var(--surface-2)";
-              const flashBorder = flash === "up" ? "rgba(34,197,94,0.3)" : flash === "down" ? "rgba(239,68,68,0.3)" : "var(--border)";
+              const flashBg = flash === "up" ? "rgba(0,200,83,0.08)" : flash === "down" ? "rgba(255,23,68,0.08)" : "var(--surface-2)";
+              const flashBorder = flash === "up" ? "rgba(0,200,83,0.2)" : flash === "down" ? "rgba(255,23,68,0.2)" : "var(--border)";
               return (
                 <button key={`${token}-${idx}`} onClick={() => toggleChart(token)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded shrink-0 transition-all duration-300 hover:brightness-110"
-                  style={{ background: flashBg, border: `1px solid ${flashBorder}`, cursor: "pointer" }}>
-                  <span className="mono text-[11px] font-semibold" style={{ color: "var(--t1)" }}>{token}</span>
+                  className="flex items-center gap-2 px-3 py-1 shrink-0 transition-all duration-300 hover:brightness-110"
+                  style={{ background: flashBg, borderRight: `1px solid ${flashBorder}`, cursor: "pointer", height: 28 }}>
+                  <span className="mono text-[10px] font-bold" style={{ color: "var(--t1)", letterSpacing: "0.5px" }}>{token}</span>
                   {d ? (
                     <>
                       <span className="mono text-[12px] font-semibold tabular-nums" style={{ color: flash === "up" ? "var(--positive)" : flash === "down" ? "var(--negative)" : "var(--t0)" }}>
@@ -158,7 +158,7 @@ export default function OracleTicker() {
                   ) : (
                     <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>--</span>
                   )}
-                  {isCharted && <span className="w-1 h-1 rounded-full" style={{ background: "var(--accent)" }} />}
+                  {isCharted && <span className="w-1 h-1" style={{ background: "var(--accent)" }} />}
                 </button>
               );
             })}

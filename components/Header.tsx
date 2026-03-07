@@ -1,21 +1,8 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
 
 export default function Header({ onProfileClick, activePage = "rfq" }: { onProfileClick: () => void; activePage?: string }) {
   const { supraShort, isDemo, isVerified } = useWallet();
-  const [scrolling, setScrolling] = useState(false);
-  const scrollTimer = useRef<any>(null);
-
-  useEffect(() => {
-    const onScroll = () => {
-      setScrolling(true);
-      if (scrollTimer.current) clearTimeout(scrollTimer.current);
-      scrollTimer.current = setTimeout(() => setScrolling(false), 150);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   const navItems = [
     { key: "rfq", label: "My RFQs", href: "/" },
@@ -24,52 +11,44 @@ export default function Header({ onProfileClick, activePage = "rfq" }: { onProfi
   ];
 
   return (
-    <header className="h-12 flex items-center justify-between px-5 sticky top-0 z-40 glass-strong">
-      {/* Left: logo */}
-      <div className="flex items-center gap-2.5" style={{ width: "180px" }}>
-        <div className="relative" style={{ transform: scrolling ? "scale(1.2)" : "scale(1)", transition: "transform 0.25s ease" }}>
-          <div className="w-2.5 h-2.5 rounded-sm rotate-45" style={{ background: "var(--accent)" }} />
-          <div className="absolute inset-0 w-2.5 h-2.5 rounded-sm rotate-45 animate-pulse-dot" style={{ background: "var(--accent)", opacity: 0.4 }} />
-        </div>
-        <a href="/" style={{ textDecoration: "none", transform: scrolling ? "scale(1.2)" : "scale(1)", transition: "transform 0.25s ease", transformOrigin: "left center", display: "inline-block" }}>
-          <span className="mono text-[14px] font-bold tracking-tight" style={{ color: "var(--t0)" }}>SupraFX</span>
-          <span className="mono text-[9px] block" style={{ color: "var(--t3)", marginTop: "-2px" }}>{(process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || "dev").slice(0, 7)}</span>
+    <header className="flex items-center justify-between px-4 sticky top-0 z-40 glass-strong"
+      style={{ height: 38, borderBottom: "1px solid var(--border)" }}>
+      <div className="flex items-center gap-3" style={{ width: 180 }}>
+        <div className="w-2 h-2" style={{ background: "var(--accent)" }} />
+        <a href="/" style={{ textDecoration: "none" }}>
+          <span className="mono text-[13px] font-bold" style={{ color: "var(--t0)", letterSpacing: "2px" }}>SUPRAFX</span>
         </a>
-        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full"
-          style={{ background: isDemo ? "var(--warn-dim)" : "var(--positive-dim)" }}>
-          <div className="w-1 h-1 rounded-full animate-pulse-dot"
-            style={{ background: isDemo ? "var(--warn)" : "var(--positive)" }} />
-          <span className="mono text-[10px] font-semibold uppercase tracking-wider"
-            style={{ color: isDemo ? "var(--warn)" : "var(--positive)" }}>
-            {isDemo ? "Demo" : "Testnet"}
-          </span>
-        </div>
+        <span className="mono text-[8px] font-semibold uppercase" style={{
+          color: isDemo ? "var(--warn)" : "var(--positive)",
+          letterSpacing: "1px",
+        }}>
+          {isDemo ? "DEMO" : "TESTNET"}
+        </span>
       </div>
 
-      {/* Center: navigation */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-6">
+      <div className="absolute left-1/2 -translate-x-1/2 flex items-center h-full">
         {navItems.map(item => (
           <a key={item.key} href={item.href}
-            className="px-3 py-1.5 rounded text-[12px] font-medium transition-colors"
+            className="flex items-center h-full px-4 text-[11px] font-semibold uppercase transition-colors"
             style={{
               color: activePage === item.key ? "var(--t0)" : "var(--t3)",
-              background: activePage === item.key ? "var(--surface-2)" : "transparent",
+              borderBottom: activePage === item.key ? "2px solid var(--accent)" : "2px solid transparent",
               textDecoration: "none",
+              letterSpacing: "0.5px",
             }}>
             {item.label}
           </a>
         ))}
       </div>
 
-      {/* Right: profile */}
       <button onClick={onProfileClick} data-profile-trigger
-        className="flex items-center gap-2 px-3 py-1.5 rounded-md transition-all hover:brightness-110"
-        style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+        className="flex items-center gap-2 px-3 transition-all hover:brightness-110"
+        style={{ background: "var(--surface-2)", border: "1px solid var(--border)", height: 26 }}>
         <div className="flex items-center gap-1">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--positive)" }} />
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: isVerified ? "var(--positive)" : "var(--warn)" }} />
+          <div className="w-1 h-1" style={{ background: "var(--positive)" }} />
+          <div className="w-1 h-1" style={{ background: isVerified ? "var(--positive)" : "var(--warn)" }} />
         </div>
-        <span className="mono text-[12px] font-medium" style={{ color: "var(--t1)" }}>{supraShort}</span>
+        <span className="mono text-[10px] font-medium" style={{ color: "var(--t2)" }}>{supraShort}</span>
       </button>
     </header>
   );

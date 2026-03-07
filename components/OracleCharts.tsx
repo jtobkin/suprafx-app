@@ -68,7 +68,7 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
   const maxPrice = data.length > 0 ? Math.max(...data.map(d => d.high)) * 1.0005 : 0;
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ background: "linear-gradient(180deg, var(--surface) 0%, rgba(10,10,14,0.95) 100%)", border: "1px solid var(--border)" }}>
+    <div className="overflow-hidden" style={{ background: "linear-gradient(180deg, var(--surface) 0%, rgba(10,10,14,0.95) 100%)", border: "1px solid var(--border)" }}>
       {/* Header — single compact row */}
       <div className="px-3 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -87,7 +87,7 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
         <div className="flex items-center gap-1">
           {TIMEFRAMES.map(tf => (
             <button key={tf} onClick={() => setTimeframe(tf)}
-              className="px-1.5 py-0.5 rounded text-[8px] mono font-bold uppercase transition-all"
+              className="px-1.5 py-0.5 text-[8px] mono font-bold uppercase transition-all"
               style={{
                 background: timeframe === tf ? accentColor : "transparent",
                 color: timeframe === tf ? "#fff" : "var(--t3)",
@@ -97,7 +97,7 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
               {tf}
             </button>
           ))}
-          <button onClick={onRemove} className="ml-1 text-[10px] px-1 rounded hover:brightness-150"
+          <button onClick={onRemove} className="ml-1 text-[10px] px-1 hover:brightness-150"
             style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>x</button>
         </div>
       </div>

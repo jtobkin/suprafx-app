@@ -241,7 +241,7 @@ export default function Notifications({
         <div className="flex justify-end" style={{ pointerEvents: "auto" }}>
           <button
             onClick={dismissAll}
-            className="text-[11px] mono px-2 py-0.5 rounded"
+            className="text-[11px] mono px-2 py-0.5"
             style={{ color: "var(--t3)", background: "var(--surface-3)", border: "none", cursor: "pointer" }}>
             dismiss all
           </button>
@@ -252,7 +252,7 @@ export default function Notifications({
         return (
           <div
             key={n.id}
-            className="rounded-lg p-3 border shadow-lg animate-in fade-in slide-in-from-right"
+            className="p-3 border shadow-lg animate-in fade-in slide-in-from-right"
             style={{
               background: s.bg,
               borderColor: s.border,
