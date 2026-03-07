@@ -263,10 +263,10 @@ function Dashboard() {
       {/* Listen for vault tab open requests */}
       <VaultTabListener onOpen={() => { setProfileTab("vault"); setProfileOpen(true); }} />
       <div className="max-w-[1240px] mx-auto px-5 py-5">
+        <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <div className="mb-4">
           <OracleTicker />
         </div>
-        <KPIs trades={trades} agents={agents} rfqs={rfqs} />
         <SubmitRFQ onSubmitted={fetchAll} />
         <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} />
       </div>
