@@ -729,8 +729,22 @@ function OrderbookDashboard() {
           <span className="text-[11px] w-32 shrink-0" style={{ color: "var(--t3)" }}>
             {r.source_chain === r.dest_chain ? "Same-chain" : r.source_chain.replace("-testnet", "") + " > " + r.dest_chain.replace("-testnet", "")}
           </span>
-          <div className="w-24 shrink-0">
-            <span className="mono text-[11px]" style={{ color: isMine ? "var(--accent)" : "var(--t2)" }}>{isMine ? "You" : shortAddr(r.taker_address)}</span>
+          <div className="w-28 shrink-0">
+            {(() => {
+              const takerAgent = agents.find(a => a.wallet_address === r.taker_address);
+              const rep = takerAgent ? Number(takerAgent.rep_total || 0).toFixed(1) : null;
+              return (
+                <div>
+                  <span className="mono text-[11px]" style={{ color: isMine ? "var(--accent)" : "var(--t2)" }}>{isMine ? "You" : shortAddr(r.taker_address)}</span>
+                  {rep !== null && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="mono text-[9px]" style={{ color: Number(rep) >= 4 ? "var(--positive)" : Number(rep) >= 2 ? "var(--warn)" : "var(--negative)" }}>{"*"} {rep}</span>
+                      {takerAgent && <span className="mono text-[9px]" style={{ color: "var(--t3)" }}>{takerAgent.trades_completed || 0} trades</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <span className="mono text-[10px] w-12 shrink-0" style={{ color: "var(--t3)" }}>{timeAgo(r.created_at)}</span>
           <div className="flex items-center gap-2 shrink-0">
