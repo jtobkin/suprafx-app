@@ -1,74 +1,140 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import OracleCharts from "./OracleCharts";
+import FeedCustomizer from "./FeedCustomizer";
+import { getOraclePair, DEFAULT_TICKER_FEEDS } from "@/lib/oracle-feeds";
+import { supabase } from "@/lib/supabase";
 
 const MAX_CHARTS = 4;
+
+// Fetch price for a single token
+async function fetchTokenPrice(token: string): Promise<{ price: number; change: number } | null> {
+  const oraclePair = getOraclePair(token);
+  if (!oraclePair) return null;
+  try {
+    const res = await fetch(`/api/oracle?pair=${encodeURIComponent(token + "/USDT")}`, { cache: "no-store" });
+    if (!res.ok) {
+      // Try direct kline latest
+      const klineRes = await fetch(`/api/oracle/history?token=${encodeURIComponent(token)}&timeframe=Live`);
+      const klineData = await klineRes.json();
+      if (klineData.candles?.length > 0) {
+        const last = klineData.candles[klineData.candles.length - 1];
+        const first = klineData.candles[0];
+        const change = first.open > 0 ? ((last.close - first.open) / first.open) * 100 : 0;
+        return { price: last.close, change };
+      }
+      return null;
+    }
+    const d = await res.json();
+    if (d.base?.price) return { price: d.base.price, change: d.base.change24h || 0 };
+    if (d.quote?.price) return { price: d.quote.price, change: d.quote.change24h || 0 };
+    return null;
+  } catch { return null; }
+}
 
 export default function OracleTicker() {
   const [prices, setPrices] = useState<Record<string, { price: number; change: number }>>({});
   const [flashes, setFlashes] = useState<Record<string, "up" | "down" | null>>({});
-  const [activeCharts, setActiveCharts] = useState<string[]>([]);
+  const [selectedFeeds, setSelectedFeeds] = useState<string[]>(DEFAULT_TICKER_FEEDS);
+  const [chartFeeds, setChartFeeds] = useState<string[]>([]);
+  const [showCustomizer, setShowCustomizer] = useState(false);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const prevPrices = useRef<Record<string, number>>({});
+  const walletAddr = useRef<string | null>(null);
 
-  const fetchPrices = useCallback(() => {
-    const pairs = ["ETH/SUPRA", "fxUSDC/SUPRA", "fxAAVE/SUPRA", "fxLINK/SUPRA"];
-    Promise.all(pairs.map(p => fetch(`/api/oracle?pair=${encodeURIComponent(p)}`).then(r => r.json()).catch(() => null)))
-      .then(results => {
-        const m: Record<string, { price: number; change: number }> = {};
-        for (const d of results) {
-          if (!d) continue;
-          if (d.base?.token && d.base?.price) m[d.base.token.replace("fx", "")] = { price: d.base.price, change: d.base.change24h || 0 };
-          if (d.quote?.token && d.quote?.price) m[d.quote.token.replace("fx", "")] = { price: d.quote.price, change: d.quote.change24h || 0 };
-        }
-        if (!m["USDC"]) m["USDC"] = { price: 1, change: 0 };
-        if (!m["USDT"]) m["USDT"] = { price: 1, change: 0 };
+  // Load preferences from Supabase
+  useEffect(() => {
+    const addr = typeof window !== "undefined" ? sessionStorage.getItem("suprafx_addr") : null;
+    walletAddr.current = addr;
+    if (!addr) { setPrefsLoaded(true); return; }
 
-        const newFlashes: Record<string, "up" | "down" | null> = {};
-        for (const [token, data] of Object.entries(m)) {
-          const prev = prevPrices.current[token];
-          if (prev !== undefined && prev !== data.price) {
-            newFlashes[token] = data.price > prev ? "up" : "down";
-          }
-          prevPrices.current[token] = data.price;
+    supabase.from("oracle_preferences").select("ticker_feeds, chart_feeds").eq("wallet_address", addr).single()
+      .then(({ data }) => {
+        if (data) {
+          if (Array.isArray(data.ticker_feeds) && data.ticker_feeds.length > 0) setSelectedFeeds(data.ticker_feeds);
+          if (Array.isArray(data.chart_feeds)) setChartFeeds(data.chart_feeds);
         }
-
-        setPrices(m);
-        if (Object.keys(newFlashes).length > 0) {
-          setFlashes(newFlashes);
-          setTimeout(() => setFlashes({}), 1200);
-        }
-      });
+        setPrefsLoaded(true);
+      })
+      .catch(() => setPrefsLoaded(true));
   }, []);
 
-  useEffect(() => { fetchPrices(); }, [fetchPrices]);
-  useEffect(() => { const iv = setInterval(fetchPrices, 5000); return () => clearInterval(iv); }, [fetchPrices]);
+  // Save preferences to Supabase
+  const savePrefs = useCallback((feeds: string[], charts: string[]) => {
+    const addr = walletAddr.current;
+    if (!addr) return;
+    supabase.from("oracle_preferences").upsert({
+      wallet_address: addr,
+      ticker_feeds: feeds,
+      chart_feeds: charts,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "wallet_address" }).then(() => {});
+  }, []);
+
+  const updateFeeds = useCallback((feeds: string[]) => {
+    setSelectedFeeds(feeds);
+    savePrefs(feeds, chartFeeds);
+  }, [chartFeeds, savePrefs]);
+
+  const updateCharts = useCallback((charts: string[]) => {
+    setChartFeeds(charts);
+    savePrefs(selectedFeeds, charts);
+  }, [selectedFeeds, savePrefs]);
+
+  // Fetch prices for all selected feeds
+  const fetchPrices = useCallback(async () => {
+    const results = await Promise.all(
+      selectedFeeds.map(async (token) => {
+        const data = await fetchTokenPrice(token);
+        return { token, data };
+      })
+    );
+
+    const m: Record<string, { price: number; change: number }> = {};
+    for (const { token, data } of results) {
+      if (data) m[token] = data;
+    }
+
+    // Flash detection
+    const newFlashes: Record<string, "up" | "down" | null> = {};
+    for (const [token, data] of Object.entries(m)) {
+      const prev = prevPrices.current[token];
+      if (prev !== undefined && prev !== data.price) {
+        newFlashes[token] = data.price > prev ? "up" : "down";
+      }
+      prevPrices.current[token] = data.price;
+    }
+
+    setPrices(m);
+    if (Object.keys(newFlashes).length > 0) {
+      setFlashes(newFlashes);
+      setTimeout(() => setFlashes({}), 1200);
+    }
+  }, [selectedFeeds]);
+
+  useEffect(() => { if (prefsLoaded) fetchPrices(); }, [fetchPrices, prefsLoaded]);
+  useEffect(() => { if (!prefsLoaded) return; const iv = setInterval(fetchPrices, 5000); return () => clearInterval(iv); }, [fetchPrices, prefsLoaded]);
 
   const toggleChart = (token: string) => {
-    setActiveCharts(prev => {
-      if (prev.includes(token)) return prev.filter(t => t !== token);
-      if (prev.length >= MAX_CHARTS) return prev; // max 4
-      return [...prev, token];
-    });
+    if (chartFeeds.includes(token)) {
+      updateCharts(chartFeeds.filter(t => t !== token));
+    } else if (chartFeeds.length < MAX_CHARTS) {
+      updateCharts([...chartFeeds, token]);
+    }
   };
 
   const removeChart = (token: string) => {
-    setActiveCharts(prev => prev.filter(t => t !== token));
-  };
-
-  // Map display names back to oracle-compatible names
-  // The ticker shows "AAVE" but the oracle API expects "AAVE" for history
-  const tokenToOracleKey = (token: string): string => {
-    // These are the display names from the ticker
-    return token;
+    updateCharts(chartFeeds.filter(t => t !== token));
   };
 
   return (
     <div>
       {/* Ticker strip */}
       <div className="flex items-center gap-3 overflow-x-auto mb-1">
-        {Object.entries(prices).map(([token, d]) => {
+        {selectedFeeds.map(token => {
+          const d = prices[token];
           const flash = flashes[token];
-          const isCharted = activeCharts.includes(token);
+          const isCharted = chartFeeds.includes(token);
           const flashBg = flash === "up" ? "rgba(34,197,94,0.15)" : flash === "down" ? "rgba(239,68,68,0.15)" : isCharted ? "rgba(37,99,235,0.1)" : "var(--surface-2)";
           const flashBorder = flash === "up" ? "rgba(34,197,94,0.3)" : flash === "down" ? "rgba(239,68,68,0.3)" : isCharted ? "rgba(37,99,235,0.4)" : "var(--border)";
           return (
@@ -76,29 +142,50 @@ export default function OracleTicker() {
               className="flex items-center gap-2 px-3 py-1.5 rounded shrink-0 transition-all duration-300 hover:brightness-110"
               style={{ background: flashBg, border: `1px solid ${flashBorder}`, cursor: "pointer" }}>
               <span className="mono text-[11px] font-semibold" style={{ color: isCharted ? "var(--accent)" : "var(--t1)" }}>{token}</span>
-              <span className="mono text-[12px] font-semibold tabular-nums" style={{ color: flash === "up" ? "var(--positive)" : flash === "down" ? "var(--negative)" : "var(--t0)" }}>
-                ${d.price >= 1 ? d.price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : d.price.toFixed(6)}
-              </span>
-              <span className="mono text-[10px]" style={{ color: d.change >= 0 ? "var(--positive)" : "var(--negative)" }}>
-                {d.change >= 0 ? "+" : ""}{d.change.toFixed(2)}%
-              </span>
+              {d ? (
+                <>
+                  <span className="mono text-[12px] font-semibold tabular-nums" style={{ color: flash === "up" ? "var(--positive)" : flash === "down" ? "var(--negative)" : "var(--t0)" }}>
+                    ${d.price >= 1 ? d.price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : d.price.toFixed(6)}
+                  </span>
+                  <span className="mono text-[10px]" style={{ color: d.change >= 0 ? "var(--positive)" : "var(--negative)" }}>
+                    {d.change >= 0 ? "+" : ""}{d.change.toFixed(2)}%
+                  </span>
+                </>
+              ) : (
+                <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>--</span>
+              )}
               {isCharted && <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />}
             </button>
           );
         })}
-        {activeCharts.length > 0 && (
-          <button onClick={() => setActiveCharts([])} className="text-[9px] mono px-2 py-1 rounded shrink-0 hover:underline"
+
+        {/* Customize button */}
+        <button onClick={() => setShowCustomizer(true)}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded shrink-0 transition-all hover:brightness-110"
+          style={{ background: "transparent", color: "var(--accent)", border: "1px dashed var(--accent)", cursor: "pointer", fontSize: 10 }}>
+          <span className="text-[12px]">+</span> Customize
+        </button>
+
+        {chartFeeds.length > 0 && (
+          <button onClick={() => updateCharts([])} className="text-[9px] mono px-2 py-1 rounded shrink-0 hover:underline"
             style={{ color: "var(--t3)", background: "none", border: "1px solid var(--border)", cursor: "pointer" }}>
             Clear charts
           </button>
         )}
-        {activeCharts.length === 0 && Object.keys(prices).length > 0 && (
-          <span className="text-[9px] shrink-0" style={{ color: "var(--t3)" }}>Click to chart (max {MAX_CHARTS})</span>
-        )}
       </div>
 
       {/* Charts section */}
-      <OracleCharts activeCharts={activeCharts} onRemoveChart={removeChart} />
+      <OracleCharts activeCharts={chartFeeds} onRemoveChart={removeChart} />
+
+      {/* Customizer modal */}
+      <FeedCustomizer
+        open={showCustomizer}
+        onClose={() => setShowCustomizer(false)}
+        selectedFeeds={selectedFeeds}
+        chartFeeds={chartFeeds}
+        onUpdateFeeds={updateFeeds}
+        onUpdateCharts={updateCharts}
+      />
     </div>
   );
 }

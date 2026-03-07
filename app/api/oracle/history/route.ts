@@ -5,12 +5,19 @@ import { NextRequest, NextResponse } from 'next/server';
 const SUPRA_API_KEY = process.env.SUPRA_ORACLE_API_KEY || '9c7f2e4a6b1d8f03a5e9c27d4b6f8a1c3d5e7f902b4a6c8d1e3f5a7b9c0d2e4f';
 const BASE_URL = 'https://prod-kline-rest.supra.com';
 
+import { getOraclePair } from '@/lib/oracle-feeds';
+
+// Fallback map for tokens not in catalog
 const TOKEN_TO_ORACLE: Record<string, string> = {
   ETH: 'eth_usdt', SUPRA: 'supra_usdt',
   fxAAVE: 'aave_usdt', fxLINK: 'link_usdt', fxUSDC: 'usdc_usdt', fxUSDT: 'usdt_usd',
   AAVE: 'aave_usdt', LINK: 'link_usdt', USDC: 'usdc_usdt', USDT: 'usdt_usd',
   BTC: 'btc_usdt',
 };
+
+function resolveOraclePair(token: string): string | null {
+  return getOraclePair(token) || TOKEN_TO_ORACLE[token] || null;
+}
 
 // Interval presets in seconds
 const INTERVALS: Record<string, { seconds: number; points: number }> = {
@@ -31,7 +38,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'token query param required, e.g. ETH' }, { status: 400 });
   }
 
-  const oraclePair = TOKEN_TO_ORACLE[token];
+  const oraclePair = resolveOraclePair(token);
   if (!oraclePair) {
     return NextResponse.json({ error: `No oracle feed for token: ${token}` }, { status: 400 });
   }
