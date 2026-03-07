@@ -305,7 +305,7 @@ function Dashboard() {
           const terminalStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
           const myActiveTrades = supraAddress ? trades.filter(t => !terminalStatuses.includes(t.status) && (t.taker_address === supraAddress || t.maker_address === supraAddress)) : [];
           const myOpenRfqs = supraAddress ? rfqs.filter(r => r.status === "open" && r.taker_address === supraAddress) : [];
-          const topPriority = myActiveTrades.length > 0 ? "inflight" : myOpenRfqs.length > 0 ? "openrfqs" : "none";
+          const topPriority = myActiveTrades.length > 0 ? "inflight" : myOpenRfqs.length > 0 ? "openrfqs" : "newrfq";
           return (
             <>
               {/* 1. In-Flight Trades (highest urgency — deadline ticking) */}
@@ -318,7 +318,13 @@ function Dashboard() {
         })()}
 
         {/* 3. New RFQ (default focus when nothing active) */}
-        <SubmitRFQ onSubmitted={fetchAll} />
+        {(() => {
+          const termStatuses = ["settled", "failed", "taker_timed_out", "maker_defaulted", "cancelled"];
+          const hasActive = supraAddress ? trades.some(t => !termStatuses.includes(t.status) && (t.taker_address === supraAddress || t.maker_address === supraAddress)) : false;
+          const hasOpenRfqs = supraAddress ? rfqs.some(r => r.status === "open" && r.taker_address === supraAddress) : false;
+          const isDefaultFocus = !hasActive && !hasOpenRfqs;
+          return <SubmitRFQ onSubmitted={fetchAll} glowPriority={isDefaultFocus ? "default" : undefined} />;
+        })()}
 
         {/* 4. Completed Trades (lowest priority — historical) */}
         <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} hideInFlight onlyCompletedTrades />

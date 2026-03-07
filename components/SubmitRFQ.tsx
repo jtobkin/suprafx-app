@@ -119,7 +119,7 @@ function ChainTokenSelector({
  );
 }
 
-export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void }) {
+export default function SubmitRFQ({ onSubmitted, glowPriority }: { onSubmitted?: () => void; glowPriority?: "default" }) {
  const { supraAddress, signAction } = useWallet();
  const { showLoading, hideLoading } = useLoading();
  const [sellChain, setSellChain] = useState("sepolia");
@@ -230,7 +230,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
  };
 
  return (
-  <div className="mb-5 animate-in relative" style={{ background: "var(--surface)", border: "1px solid rgba(37,99,235,0.4)", borderRadius: "var(--radius)", zIndex: 30, boxShadow: "0 0 20px rgba(37,99,235,0.15), 0 0 40px rgba(37,99,235,0.05)" }}>
+  <div className={`mb-5 animate-in relative${glowPriority === "default" ? " glow-priority-default" : ""}`} style={{ background: "var(--surface)", border: "1px solid var(--border)", zIndex: 30 }}>
    <div className="card-header">
     <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>New RFQ</span>
     <div className="flex items-center gap-3">

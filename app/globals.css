@@ -105,28 +105,42 @@ code, .mono { font-family: 'IBM Plex Mono', 'Menlo', monospace; }
 /* Priority glow — only one section glows at a time */
 @keyframes glowUrgent {
   0%, 100% {
-    box-shadow: 0 0 0 1px rgba(255,171,0,0.08), 0 0 12px rgba(255,171,0,0.04), 0 0 0 0 transparent;
+    box-shadow: 0 0 0 1px rgba(255,171,0,0.10), 0 0 8px rgba(255,171,0,0.04);
   }
   50% {
-    box-shadow: 0 0 0 1px rgba(255,171,0,0.2), 0 0 24px rgba(255,171,0,0.08), 0 0 48px rgba(255,171,0,0.03);
+    box-shadow: 0 0 0 1px rgba(255,171,0,0.30), 0 0 30px rgba(255,171,0,0.10), 0 0 60px rgba(255,171,0,0.04);
   }
 }
 
 @keyframes glowActive {
   0%, 100% {
-    box-shadow: 0 0 0 1px rgba(37,99,235,0.06), 0 0 8px rgba(37,99,235,0.03), 0 0 0 0 transparent;
+    box-shadow: 0 0 0 1px rgba(255,171,0,0.10), 0 0 8px rgba(255,171,0,0.04);
   }
   50% {
-    box-shadow: 0 0 0 1px rgba(37,99,235,0.15), 0 0 20px rgba(37,99,235,0.06), 0 0 40px rgba(37,99,235,0.02);
+    box-shadow: 0 0 0 1px rgba(255,171,0,0.30), 0 0 30px rgba(255,171,0,0.10), 0 0 60px rgba(255,171,0,0.04);
+  }
+}
+
+@keyframes glowDefault {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(37,99,235,0.10), 0 0 8px rgba(37,99,235,0.04);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(37,99,235,0.30), 0 0 30px rgba(37,99,235,0.10), 0 0 60px rgba(37,99,235,0.04);
   }
 }
 
 .glow-priority-urgent {
-  animation: glowUrgent 2s ease-in-out infinite;
-  border-color: rgba(255,171,0,0.12) !important;
+  animation: glowUrgent 1.5s ease-in-out infinite;
+  border-color: rgba(255,171,0,0.15) !important;
 }
 
 .glow-priority-active {
-  animation: glowActive 4s ease-in-out infinite;
-  border-color: rgba(37,99,235,0.10) !important;
+  animation: glowActive 1.5s ease-in-out infinite;
+  border-color: rgba(255,171,0,0.15) !important;
+}
+
+.glow-priority-default {
+  animation: glowDefault 1.5s ease-in-out infinite;
+  border-color: rgba(37,99,235,0.15) !important;
 }
