@@ -1,8 +1,71 @@
 "use client";
+import { useState, useEffect, useRef } from "react";
 import { useWallet } from "./WalletProvider";
+
+function SupraFXLogo({ scale = 1, scrollProgress = 0 }: { scale?: number; scrollProgress?: number }) {
+  // Bars animate outward as user scrolls — staggered widths shift
+  const barBaseWidths = [16, 11, 6];
+  const barMaxWidths = [22, 16, 10];
+  const barColors = ["var(--accent)", "var(--accent-light)", "var(--warn)"];
+
+  return (
+    <div className="flex items-center gap-2" style={{ transform: `scale(${scale})`, transformOrigin: "left center", transition: "transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)" }}>
+      <div className="flex flex-col" style={{ gap: 2 }}>
+        {barBaseWidths.map((base, i) => {
+          const max = barMaxWidths[i];
+          const width = base + (max - base) * scrollProgress;
+          const delay = i * 0.05;
+          return (
+            <div key={i} style={{
+              height: 3,
+              width,
+              background: barColors[i],
+              transition: `width 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`,
+            }} />
+          );
+        })}
+      </div>
+      <a href="/" style={{ textDecoration: "none", display: "flex", alignItems: "baseline", gap: 0 }}>
+        <span className="text-[13px] font-bold uppercase" style={{
+          color: "var(--t0)",
+          letterSpacing: "3px",
+          fontFamily: "'IBM Plex Sans', sans-serif",
+        }}>SUPRA</span>
+        <span className="text-[13px] font-bold uppercase" style={{
+          color: "var(--accent-light)",
+          letterSpacing: "3px",
+          fontFamily: "'IBM Plex Sans', sans-serif",
+        }}>FX</span>
+      </a>
+    </div>
+  );
+}
+
+export { SupraFXLogo };
 
 export default function Header({ onProfileClick, activePage = "rfq" }: { onProfileClick: () => void; activePage?: string }) {
   const { supraShort, isDemo, isVerified } = useWallet();
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        // 0 at top, 1 at 300px scroll
+        const progress = Math.min(1, window.scrollY / 300);
+        setScrollProgress(progress);
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  // Logo scales from 1.0 to 1.15 as you scroll
+  const logoScale = 1 + scrollProgress * 0.15;
 
   const navItems = [
     { key: "rfq", label: "My RFQs", href: "/" },
@@ -13,11 +76,8 @@ export default function Header({ onProfileClick, activePage = "rfq" }: { onProfi
   return (
     <header className="flex items-center justify-between px-4 sticky top-0 z-40 glass-strong"
       style={{ height: 38, borderBottom: "1px solid var(--border)" }}>
-      <div className="flex items-center gap-3" style={{ width: 180 }}>
-        <div className="w-2 h-2" style={{ background: "var(--accent)" }} />
-        <a href="/" style={{ textDecoration: "none" }}>
-          <span className="mono text-[13px] font-bold" style={{ color: "var(--t0)", letterSpacing: "2px" }}>SUPRAFX</span>
-        </a>
+      <div className="flex items-center gap-3" style={{ width: 200 }}>
+        <SupraFXLogo scale={logoScale} scrollProgress={scrollProgress} />
         <span className="mono text-[8px] font-semibold uppercase" style={{
           color: isDemo ? "var(--warn)" : "var(--positive)",
           letterSpacing: "1px",
