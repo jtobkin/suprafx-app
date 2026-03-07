@@ -1149,6 +1149,7 @@ function OrderbookDashboard() {
               )}
             </div>
           </div>
+          </div>
           {/* End of Open RFQs card */}
 
           {/* RIGHT: My Quotes — page-level sticky sidebar */}
@@ -1272,7 +1273,6 @@ function OrderbookDashboard() {
 
           </div>
         </div>
-      </div>
 
       <div className="text-center py-6 mono text-[11px] uppercase tracking-[2px] border-t mt-10" style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
         SupraFX Protocol · Sepolia ↔ Supra Testnet · Committee-Verified Settlement
