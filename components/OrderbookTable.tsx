@@ -892,22 +892,14 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
   const activeTrades = (trades || []).filter(t => !terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const completedTrades = (trades || []).filter(t => terminalStatuses.includes(t.status)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-  // Dismiss loading overlay when a new active trade or new open RFQ appears
+  // Dismiss loading overlay when a new active trade appears
   const prevActiveCount = useRef(activeTrades.length);
-  const prevOpenRfqCount = useRef(myOpenRfqs.length);
   useEffect(() => {
     if (activeTrades.length > prevActiveCount.current) {
       hideLoading();
     }
     prevActiveCount.current = activeTrades.length;
   }, [activeTrades.length, hideLoading]);
-
-  useEffect(() => {
-    if (myOpenRfqs.length > prevOpenRfqCount.current) {
-      hideLoading();
-    }
-    prevOpenRfqCount.current = myOpenRfqs.length;
-  }, [myOpenRfqs.length, hideLoading]);
 
   useEffect(() => {
     const currentIds = new Set(completedTrades.map(t => t.id));
@@ -954,6 +946,15 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
 
   const openRfqs = rfqs.filter(r => r.status === "open").sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const myOpenRfqs = supraAddress ? openRfqs.filter(r => r.taker_address === supraAddress) : [];
+
+  // Dismiss loading overlay when a new open RFQ appears (after submit)
+  const prevOpenRfqCount = useRef(myOpenRfqs.length);
+  useEffect(() => {
+    if (myOpenRfqs.length > prevOpenRfqCount.current) {
+      hideLoading();
+    }
+    prevOpenRfqCount.current = myOpenRfqs.length;
+  }, [myOpenRfqs.length, hideLoading]);
 
   useEffect(() => {
     const settledIds = completedTrades.filter(t => t.status === "settled").map(t => t.id);
