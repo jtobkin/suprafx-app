@@ -1098,8 +1098,11 @@ function OrderbookDashboard() {
           </div>
         </div>
 
-        {/* Open RFQs card — contains the split panel */}
-        <div className="card mb-4">
+        {/* Open RFQs + My Quotes — page-level two-column layout */}
+        <div className="flex gap-0 mb-4" style={{ alignItems: "flex-start" }}>
+
+          {/* LEFT: Open RFQs card */}
+          <div className="card" style={{ flex: 1, minWidth: 0, overflow: "visible" }}>
           {/* Card header */}
           <div className="card-header">
             <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Open RFQs</span>
@@ -1114,11 +1117,11 @@ function OrderbookDashboard() {
             </div>
           </div>
 
-          {/* Split panel inside the card */}
-          <div ref={containerRef} className="flex gap-0" style={{ alignItems: "stretch", minHeight: "300px" }}>
+          {/* RFQ list (formerly the left side of the split) */}
+          <div ref={containerRef}>
 
             {/* LEFT: RFQ list */}
-            <div style={{ width: `${splitPercent}%`, minWidth: 0, overflow: "auto" }}>
+            <div style={{ minWidth: 0, overflow: "auto" }}>
               {filteredRfqs.length === 0 ? (
                 <div className="py-8 text-center text-[13px]" style={{ color: "var(--t3)" }}>{openRfqs.length === 0 ? "No open RFQs" : "No RFQs match your filters"}</div>
               ) : viewMode === "list" ? (
@@ -1145,18 +1148,11 @@ function OrderbookDashboard() {
                 </div>
               )}
             </div>
+          </div>
+          {/* End of Open RFQs card */}
 
-            {/* Drag handle */}
-            <div onMouseDown={onMouseDown} className="shrink-0 flex items-center justify-center group" style={{ width: "12px", cursor: "col-resize", position: "relative", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
-              <div className="w-[2px] h-full rounded-full transition-colors group-hover:w-[3px]" style={{ background: "var(--border)" }} />
-              <div className="absolute w-5 h-10 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
-                <span className="mono text-[8px]" style={{ color: "var(--t3)" }}>||</span>
-              </div>
-            </div>
-
-            {/* RIGHT: My Quotes — sticky so it follows scroll */}
-            <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, alignSelf: "flex-start", position: "sticky", top: 46, maxHeight: "calc(100vh - 54px)", overflow: "auto" }}>
+          {/* RIGHT: My Quotes — page-level sticky sidebar */}
+          <div className="card" style={{ width: 300, minWidth: 280, flexShrink: 0, position: "sticky", top: 46, maxHeight: "calc(100vh - 54px)", overflow: "auto", marginLeft: -1 }}>
               <div className="px-3 py-2 flex items-center justify-between" style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
                 <div className="flex items-center gap-1">
                   {(["live", "past"] as const).map(v => (
