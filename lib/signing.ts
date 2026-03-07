@@ -9,22 +9,96 @@
  * 4. Verification: check action sig against session pubKey, then check
  *    session authorization sig against the Supra address.
  * 
- * The session authorization (signed by real private key) is the anchor.
- * Without it, session key signatures mean nothing.
- * With it, they trace back to the real Supra account.
+ * Session persists in sessionStorage (as exported JWK) so it survives
+ * page navigation without requiring another StarKey popup.
  */
 
-// Session state (in-memory only)
+// Session state (in-memory cache — hydrated from sessionStorage on first use)
 let sessionKeyPair: CryptoKeyPair | null = null;
 let sessionPublicKeyHex: string = "";
 let sessionAddress: string = "";
 let sessionNonce: string = "";
 let sessionCreatedAt: number = 0;
 let sessionExpiresAt: number = 0;
-let sessionAuthorization: string = ""; // StarKey signature over the authorization message
-let sessionAuthMessage: string = "";    // The message StarKey signed
+let sessionAuthorization: string = "";
+let sessionAuthMessage: string = "";
+let sessionHydrated: boolean = false;
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const STORAGE_KEY = "suprafx_session";
+
+/**
+ * Save session to sessionStorage (key pair as JWK).
+ */
+async function persistSession(): Promise<void> {
+  if (typeof window === "undefined" || !sessionKeyPair) return;
+  try {
+    const privJwk = await crypto.subtle.exportKey("jwk", sessionKeyPair.privateKey);
+    const pubJwk = await crypto.subtle.exportKey("jwk", sessionKeyPair.publicKey);
+    const data = {
+      privJwk, pubJwk,
+      publicKeyHex: sessionPublicKeyHex,
+      address: sessionAddress,
+      nonce: sessionNonce,
+      createdAt: sessionCreatedAt,
+      expiresAt: sessionExpiresAt,
+      authorization: sessionAuthorization,
+      authMessage: sessionAuthMessage,
+    };
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn("[SupraFX] Failed to persist session:", e);
+  }
+}
+
+/**
+ * Restore session from sessionStorage.
+ */
+async function hydrateSession(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (sessionHydrated) return !!sessionKeyPair;
+  sessionHydrated = true;
+
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+
+    // Check expiry
+    if (Date.now() > data.expiresAt) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      return false;
+    }
+
+    // Re-import the key pair from JWK
+    const privateKey = await crypto.subtle.importKey(
+      "jwk", data.privJwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      true, ["sign"]
+    );
+    const publicKey = await crypto.subtle.importKey(
+      "jwk", data.pubJwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      true, ["verify"]
+    );
+
+    sessionKeyPair = { privateKey, publicKey };
+    sessionPublicKeyHex = data.publicKeyHex;
+    sessionAddress = data.address;
+    sessionNonce = data.nonce;
+    sessionCreatedAt = data.createdAt;
+    sessionExpiresAt = data.expiresAt;
+    sessionAuthorization = data.authorization;
+    sessionAuthMessage = data.authMessage;
+
+    console.log("[SupraFX] Session restored from storage. Expires:", new Date(sessionExpiresAt).toLocaleString());
+    return true;
+  } catch (e) {
+    console.warn("[SupraFX] Failed to hydrate session:", e);
+    sessionStorage.removeItem(STORAGE_KEY);
+    return false;
+  }
+}
 
 /**
  * Generate a new session key pair and return the authorization message
@@ -40,7 +114,7 @@ export async function prepareSession(supraAddress: string): Promise<{
   // Generate ECDSA P-256 key pair
   sessionKeyPair = await crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
-    true, // extractable so we can export the public key
+    true, // extractable so we can export the public key + persist to storage
     ["sign", "verify"]
   );
 
@@ -81,15 +155,27 @@ export async function prepareSession(supraAddress: string): Promise<{
 export function finalizeSession(starkeySignature: string): void {
   sessionAuthorization = starkeySignature;
   console.log("[SupraFX] Session finalized. Public key:", sessionPublicKeyHex.slice(0, 16) + "...");
+  // Persist to sessionStorage so it survives navigation
+  persistSession();
 }
 
 /**
- * Check if session is valid.
+ * Check if session is valid. Hydrates from storage if needed.
  */
 export function isSessionValid(): boolean {
-  if (!sessionKeyPair || !sessionAddress || !sessionAuthorization) return false;
-  if (Date.now() > sessionExpiresAt) return false;
-  return true;
+  // Synchronous check of in-memory state
+  if (sessionKeyPair && sessionAddress && sessionAuthorization && Date.now() <= sessionExpiresAt) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Async version that hydrates from storage first.
+ */
+export async function ensureSession(): Promise<boolean> {
+  if (isSessionValid()) return true;
+  return await hydrateSession();
 }
 
 /**
@@ -128,6 +214,10 @@ export function clearSession(): void {
   sessionExpiresAt = 0;
   sessionAuthorization = "";
   sessionAuthMessage = "";
+  sessionHydrated = false;
+  if (typeof window !== "undefined") {
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
+  }
 }
 
 /**
@@ -188,6 +278,10 @@ export async function sessionSign(payload: any): Promise<{
   signature: string;
   payloadHash: string;
 }> {
+  // Try hydrating from storage if not in memory
+  if (!sessionKeyPair || !isSessionValid()) {
+    await hydrateSession();
+  }
   if (!sessionKeyPair || !isSessionValid()) {
     throw new Error("No valid signing session");
   }
@@ -228,6 +322,11 @@ export async function signAction(
   sessionNonce: string;
   sessionCreatedAt: number;
 }> {
+  // Ensure session is hydrated before signing
+  if (!isSessionValid()) {
+    await hydrateSession();
+  }
+
   const payload = constructPayload(action, signer, data);
   const { signature, payloadHash } = await sessionSign(payload);
   return {

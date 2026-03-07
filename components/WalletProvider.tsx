@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
-import { prepareSession, finalizeSession, clearSession, signAction, isSessionValid, getSessionInfo } from "@/lib/signing";
+import { prepareSession, finalizeSession, clearSession, signAction, isSessionValid, ensureSession, getSessionInfo } from "@/lib/signing";
 
 export interface LinkedAddress {
   chain: string;
@@ -131,6 +131,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try { return sessionStorage.getItem("suprafx_demo") === "1"; } catch { return false; }
   });
   const [sessionValid, setSessionValid] = useState(false);
+
+  // Hydrate session from sessionStorage on mount (no StarKey popup)
+  useEffect(() => {
+    ensureSession().then(valid => { if (valid) setSessionValid(true); });
+  }, []);
+
   // True when we have a saved address but profile hasn't loaded yet (prevents auth gate flash)
   const [profileLoading, setProfileLoading] = useState(() => {
     try {
@@ -148,8 +154,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Chain of trust: StarKey signature → session authorization → session key signatures
   const handleSignAction = useCallback(async (action: string, data: Record<string, any>) => {
     if (!supraAddress) throw new Error("No wallet connected");
-    if (!isSessionValid()) {
-      // Re-init session if expired — requires StarKey popup
+    // Try to restore session from sessionStorage first (no popup)
+    const hasSession = await ensureSession();
+    if (!hasSession) {
+      // Only if no stored session, request StarKey popup
       await initSessionWithStarKey(supraAddress);
     }
     return await signAction(action, supraAddress, data);
