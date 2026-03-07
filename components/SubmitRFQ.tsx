@@ -235,6 +235,7 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
         </div>
       </div>
       <div className="px-4 py-4" style={{ position: "relative", zIndex: 10 }}>
+        <OraclePrice pair={pair} />
         {/* Single row: Selling | Amount | arrow | Buying | Price | Receive | Submit */}
         <div className="flex items-start gap-3 flex-wrap justify-center">
           {/* Selling */}
@@ -330,7 +331,6 @@ export default function SubmitRFQ({ onSubmitted }: { onSubmitted?: () => void })
           </div>
         )}
       </div>
-      <OraclePrice pair={pair} />
     </div>
   );
 }
