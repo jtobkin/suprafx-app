@@ -14,6 +14,13 @@ const DEMO_PAIRS = [
   { pair: "ETH/USDT", sizes: [0.1, 0.5, 1, 2] },
   { pair: "AAVE/USDC", sizes: [1, 5, 10, 20] },
   { pair: "LINK/USDC", sizes: [10, 25, 50, 100] },
+  { pair: "iUSDC/SUPRA", sizes: [100, 500, 1000, 5000] },
+  { pair: "iUSDT/SUPRA", sizes: [100, 500, 1000, 5000] },
+  { pair: "iETH/SUPRA", sizes: [0.5, 1, 2, 5] },
+  { pair: "iBTC/SUPRA", sizes: [0.01, 0.05, 0.1, 0.5] },
+  { pair: "iETH/iUSDC", sizes: [0.1, 0.5, 1, 2] },
+  { pair: "iBTC/iUSDC", sizes: [0.01, 0.05, 0.1] },
+  { pair: "iUSDC/iUSDT", sizes: [100, 500, 1000] },
 ];
 
 const MAKER_NAMES = [

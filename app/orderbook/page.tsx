@@ -34,7 +34,7 @@ function chainName(c: string) {
   if (c === "supra-testnet") return "Supra Testnet";
   return c;
 }
-const ASSETS = ["ETH", "SUPRA", "AAVE", "LINK", "USDC", "USDT"];
+const ASSETS = ["ETH", "SUPRA", "AAVE", "LINK", "USDC", "USDT", "iUSDC", "iUSDT", "iETH", "iBTC"];
 const CHAINS = ["All", "Cross-chain", "Same-chain", "Sepolia", "Supra"];
 const STEPS = ["matched", "taker_sent", "taker_verified", "maker_sent", "maker_verified", "settled"];
 const LABELS = ["Matched", "Taker Sending", "Taker Verified", "Maker Sending", "Maker Verified", "Settled"];
@@ -561,8 +561,8 @@ function OrderbookDashboard() {
           <span className="text-[13px] font-semibold w-24 shrink-0" style={{ color: "var(--t0)" }}>{displayPair(r.pair)}</span>
           <span className="mono text-[12px] w-20 shrink-0" style={{ color: "var(--t2)" }}>{r.size} {baseClean}</span>
           <div className="w-32 shrink-0">
-            <span className="mono text-[12px] font-semibold" style={{ color: "var(--t1)" }}>{fmtRate(r.reference_price)}</span>
-            <span className="text-[10px] ml-1" style={{ color: "var(--t3)" }}>{quoteClean}</span>
+            <span className="mono text-[12px] font-semibold" style={{ color: r.reference_price > 0 ? "var(--t1)" : "var(--t3)" }}>{r.reference_price > 0 ? fmtRate(r.reference_price) : "N/A"}</span>
+            {r.reference_price > 0 && <span className="text-[10px] ml-1" style={{ color: "var(--t3)" }}>{quoteClean}</span>}
             {notionalUsd && <div className="mono text-[10px]" style={{ color: "var(--t3)" }}>{notionalUsd}</div>}
           </div>
           <span className="text-[11px] w-32 shrink-0" style={{ color: "var(--t3)" }}>
@@ -656,7 +656,7 @@ function OrderbookDashboard() {
                 {quotingRfq === r.id ? (
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="mono text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--t3)" }}>Your Rate</span>
-                    <input type="number" step="any" min="0" placeholder={fmtRate(r.reference_price)} value={quotePrice} onChange={e => setQuotePrice(e.target.value)}
+                    <input type="number" step="any" min="0" placeholder={r.reference_price > 0 ? fmtRate(r.reference_price) : "Enter rate"} value={quotePrice} onChange={e => setQuotePrice(e.target.value)}
                       className="px-3 py-1.5 rounded mono text-[13px] outline-none" style={{ background: "var(--bg)", color: "var(--t0)", border: "1px solid var(--border)", width: 150 }} autoFocus />
                     <span className="mono text-[10px]" style={{ color: "var(--t3)" }}>{quoteClean}/{baseClean}</span>
                     <button onClick={() => placeQuote(r.id)} disabled={quotingLoading || !quotePrice} className="px-3 py-1.5 rounded text-[12px] font-semibold disabled:opacity-30"
@@ -665,7 +665,7 @@ function OrderbookDashboard() {
                       style={{ color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>cancel</button>
                   </div>
                 ) : (
-                  <button onClick={() => { setQuotingRfq(r.id); setQuotePrice(fmtRate(r.reference_price)); }}
+                  <button onClick={() => { setQuotingRfq(r.id); setQuotePrice(r.reference_price > 0 ? fmtRate(r.reference_price) : ""); }}
                     className="px-4 py-1.5 rounded text-[12px] font-semibold hover:brightness-110" style={{ background: "var(--accent)", color: "#fff", border: "none" }}>Place Quote</button>
                 )}
               </div>

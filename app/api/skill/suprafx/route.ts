@@ -15,6 +15,7 @@ function normalizePair(pair: string): string {
     AAVE: 'fxAAVE', LINK: 'fxLINK', USDC: 'fxUSDC', USDT: 'fxUSDT',
     fxAAVE: 'fxAAVE', fxLINK: 'fxLINK', fxUSDC: 'fxUSDC', fxUSDT: 'fxUSDT',
     ETH: 'ETH', SUPRA: 'SUPRA',
+    iUSDC: 'iUSDC', iUSDT: 'iUSDT', iETH: 'iETH', iBTC: 'iBTC',
   };
   const [base, quote] = pair.split('/');
   const nb = map[base] || base;
@@ -108,6 +109,37 @@ const PAIRS: Record<string, { source: string; dest: string }> = {
   'ETH/fxLINK': { source: 'sepolia', dest: 'sepolia' },
   'ETH/fxUSDC': { source: 'sepolia', dest: 'sepolia' },
   'ETH/fxUSDT': { source: 'sepolia', dest: 'sepolia' },
+  // Supra iAssets <-> SUPRA (same-chain)
+  'iUSDC/SUPRA': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iUSDT/SUPRA': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iETH/SUPRA': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iBTC/SUPRA': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'SUPRA/iUSDC': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'SUPRA/iUSDT': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'SUPRA/iETH': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'SUPRA/iBTC': { source: 'supra-testnet', dest: 'supra-testnet' },
+  // iAsset <-> iAsset (Supra same-chain)
+  'iUSDC/iUSDT': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iUSDT/iUSDC': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iETH/iUSDC': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iETH/iUSDT': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iBTC/iUSDC': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iBTC/iUSDT': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iBTC/iETH': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iUSDC/iETH': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iUSDT/iETH': { source: 'supra-testnet', dest: 'supra-testnet' },
+  'iETH/iBTC': { source: 'supra-testnet', dest: 'supra-testnet' },
+  // iAssets cross-chain <-> Sepolia ERC-20
+  'iUSDC/fxUSDC': { source: 'supra-testnet', dest: 'sepolia' },
+  'iUSDT/fxUSDT': { source: 'supra-testnet', dest: 'sepolia' },
+  'iETH/ETH': { source: 'supra-testnet', dest: 'sepolia' },
+  'fxUSDC/iUSDC': { source: 'sepolia', dest: 'supra-testnet' },
+  'fxUSDT/iUSDT': { source: 'sepolia', dest: 'supra-testnet' },
+  'ETH/iETH': { source: 'sepolia', dest: 'supra-testnet' },
+  'iBTC/ETH': { source: 'supra-testnet', dest: 'sepolia' },
+  'ETH/iBTC': { source: 'sepolia', dest: 'supra-testnet' },
+  'iBTC/fxUSDC': { source: 'supra-testnet', dest: 'sepolia' },
+  'fxUSDC/iBTC': { source: 'sepolia', dest: 'supra-testnet' },
 };
 // All bot settlements capped at 0.001 SUPRA (100000 octas)
 const SETTLEMENT_CAP_OCTAS = 100000;
@@ -174,20 +206,22 @@ export async function POST(req: NextRequest) {
 
 function handleGetPairs() {
   return NextResponse.json({
-    pairs: Object.entries(REF_PRICES).map(([pair, price]) => {
+    pairs: Object.entries(PAIRS).map(([pair, chains]) => {
       const base = pair.split('/')[0];
+      const price = REF_PRICES[pair] ?? null;
       let cap = `${SETTLEMENT_CAP_ETH} ETH`;
       if (base === 'SUPRA') cap = `${SETTLEMENT_CAP_SUPRA} SUPRA`;
       else if (base.startsWith('fx')) cap = `0.01 ${base}`;
+      else if (base.startsWith('i')) cap = `0.01 ${base}`;
       return {
         pair,
         referencePrice: price,
-        sourceChain: PAIRS[pair].source,
-        destChain: PAIRS[pair].dest,
+        sourceChain: chains.source,
+        destChain: chains.dest,
         settlementCap: cap,
       };
     }),
-    note: 'All testnet settlements are capped at small amounts regardless of notional size.',
+    note: 'All testnet settlements are capped at small amounts regardless of notional size. Pairs with referencePrice: null have no oracle feed — makers quote freely.',
   });
 }
 
@@ -207,7 +241,7 @@ async function handleSubmitRFQ(body: any) {
     return NextResponse.json({ error: 'size required' }, { status: 400 });
   }
 
-  const refPrice = REF_PRICES[normalizedPair];
+  const refPrice = REF_PRICES[normalizedPair] ?? 0;
   const { source, dest } = PAIRS[normalizedPair];
   const userPrice = quotedPrice ? parseFloat(quotedPrice) : refPrice;
 
@@ -268,9 +302,11 @@ async function handleSubmitRFQ(body: any) {
   });
 
   // Bot auto-quotes at 0.3% below reference — same signing process as humans
+  // Skip if no reference price available (e.g. iAssets without oracle)
   const makerAddress = 'auto-maker-bot';
   const botRate = userPrice * (1 - SPREAD_BPS / 10000);
 
+  if (userPrice > 0) {
   await db.from('agents').upsert({
     wallet_address: makerAddress,
     role: 'maker',
@@ -331,6 +367,7 @@ async function handleSubmitRFQ(body: any) {
       await db.from('quotes').update({ council_cosignature: councilResult.aggregateHash }).eq('id', botQuote.id);
     }
   }
+  } // end if (userPrice > 0) — skip bot quote for pairs without reference price
 
   return NextResponse.json({
     success: true,
@@ -876,10 +913,15 @@ export async function GET() {
       'ETH/fxAAVE', 'ETH/fxLINK', 'ETH/fxUSDC', 'ETH/fxUSDT',
       'fxAAVE/fxLINK', 'fxAAVE/fxUSDC', 'fxAAVE/fxUSDT',
       'fxLINK/fxUSDC', 'fxLINK/fxUSDT',
+      'iUSDC/SUPRA', 'iUSDT/SUPRA', 'iETH/SUPRA', 'iBTC/SUPRA',
+      'SUPRA/iUSDC', 'SUPRA/iUSDT', 'SUPRA/iETH', 'SUPRA/iBTC',
+      'iUSDC/iUSDT', 'iETH/iUSDC', 'iETH/iUSDT', 'iBTC/iUSDC', 'iBTC/iUSDT', 'iBTC/iETH',
+      'iUSDC/fxUSDC', 'iUSDT/fxUSDT', 'iETH/ETH', 'iBTC/ETH', 'iBTC/fxUSDC',
+      'fxUSDC/iUSDC', 'fxUSDT/iUSDT', 'ETH/iETH', 'ETH/iBTC', 'fxUSDC/iBTC',
     ],
     chains: {
       sepolia: { tokens: ['ETH', 'fxAAVE', 'fxLINK', 'fxUSDC', 'fxUSDT'], explorer: 'https://sepolia.etherscan.io' },
-      'supra-testnet': { tokens: ['SUPRA'], explorer: 'https://testnet.suprascan.io' },
+      'supra-testnet': { tokens: ['SUPRA', 'iUSDC', 'iUSDT', 'iETH', 'iBTC'], explorer: 'https://testnet.suprascan.io' },
     },
 
     // ===== SETTLEMENT FLOW =====
