@@ -816,9 +816,11 @@ interface Props {
   agents?: Agent[];
   onAcceptQuote?: () => void;
   onUpdate?: () => void;
+  hideInFlight?: boolean;
+  onlyInFlight?: boolean;
 }
 
-export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate }: Props) {
+export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [], onAcceptQuote, onUpdate, hideInFlight, onlyInFlight }: Props) {
   const { supraAddress, signAction } = useWallet();
   const [expandedRfq, setExpandedRfq] = useState<string | null>(null);
   const [trackedRfqId, setTrackedRfqId] = useState<string | null>(null); // FIX: was missing
@@ -977,7 +979,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
     <div style={{ display: "flex", flexDirection: "column" }}>
 
       {/* SECTION 1: IN-FLIGHT TRADES (only visible when you have active trades) */}
-      {filteredActiveTrades.length > 0 && (
+      {!hideInFlight && filteredActiveTrades.length > 0 && (
       <div className="card mb-4 animate-in" style={{ order: 1 }}>
         <div className="card-header">
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>In-Flight Trades</span>
@@ -1023,6 +1025,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
       )}
 
       {/* SECTION 2: OPEN RFQs (visible by default, collapsible) */}
+      {!onlyInFlight && (
       <div className="card mb-4 animate-in" style={{ order: 2 }}>
         <div className="card-header cursor-pointer" onClick={() => setShowRfqs(!showRfqs)}>
           <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>My Opened RFQs</span>
@@ -1233,9 +1236,10 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
           </div>
         ))}
       </div>
+      )}
 
       {/* SECTION 3: COMPLETED TRADES */}
-      {completedTrades.length > 0 && (
+      {!onlyInFlight && completedTrades.length > 0 && (
         <div className="card mb-4 animate-in" style={{ order: 3 }}>
           <div className="card-header cursor-pointer" onClick={() => setShowCompleted(!showCompleted)}>
             <span className="text-[14px] font-semibold" style={{ color: "var(--t1)" }}>Completed Trades</span>

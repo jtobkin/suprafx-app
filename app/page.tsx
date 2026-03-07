@@ -267,8 +267,9 @@ function Dashboard() {
         <div className="mb-4">
           <OracleTicker />
         </div>
+        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} onlyInFlight />
         <SubmitRFQ onSubmitted={fetchAll} />
-        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} />
+        <OrderbookTable rfqs={rfqs} trades={trades} quotes={quotes} agents={agents} onAcceptQuote={fetchAll} onUpdate={fetchAll} hideInFlight />
       </div>
       <div className="text-center py-6 mono text-[11px] uppercase tracking-[2px] border-t mt-10"
         style={{ color: "var(--t3)", borderColor: "var(--border)" }}>
