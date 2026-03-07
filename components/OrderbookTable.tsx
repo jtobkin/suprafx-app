@@ -498,6 +498,10 @@ function ActiveTrade({ trade, onUpdate, rfq, tradeQuotes, agents, supraAddr }: {
         sepolia: "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
         supra: "0x8622e15E71DdfBCF25721B7D82B729D235201EE3",
       },
+      "auto-maker-bot": {
+        sepolia: "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
+        supra: "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a",
+      },
     };
     const knownBot = KNOWN_BOT_ADDRESSES[counterpartySupraAddr];
     if (knownBot) {

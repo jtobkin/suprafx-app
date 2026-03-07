@@ -321,12 +321,13 @@ async function handleSubmitRFQ(body: any) {
 
   // Bot auto-quotes at 0.3% below reference — same signing process as humans
   // Skip if no reference price available (e.g. iAssets without oracle)
-  const makerAddress = 'auto-maker-bot';
+  const makerAddress = process.env.DEMO_MAKER_SUPRA_ADDRESS || 'auto-maker-bot';
   const botRate = userPrice * (1 - SPREAD_BPS / 10000);
 
   if (userPrice > 0) {
   await db.from('agents').upsert({
     wallet_address: makerAddress,
+    name: 'SupraFX Bot',
     role: 'maker',
     domain: 'suprafx-maker-bot',
     chains: ['sepolia', 'supra-testnet'],

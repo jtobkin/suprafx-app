@@ -316,6 +316,7 @@ function InFlightTrade({ trade, onUpdate, agents }: { trade: Trade; onUpdate: ()
     const KNOWN_BOTS: Record<string, string> = {
       "0x02af04c537a6aa319a6704229894fbdc54cdfcae0202c12afaa21efa0831343a": "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
       "0x8622e15E71DdfBCF25721B7D82B729D235201EE3": "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
+      "auto-maker-bot": "0x8B122E57Df40686f4ee1fB2FC04227de710a5BfE",
     };
     if (KNOWN_BOTS[counterparty] && isEvmChain) { setResolvedRecipient(KNOWN_BOTS[counterparty]); return; }
     if (KNOWN_BOTS[counterparty] && isSupraChain) { setResolvedRecipient(counterparty); return; }
