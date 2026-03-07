@@ -2,32 +2,23 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import OracleCharts from "./OracleCharts";
 import FeedCustomizer from "./FeedCustomizer";
-import { getOraclePair, DEFAULT_TICKER_FEEDS } from "@/lib/oracle-feeds";
+import { DEFAULT_TICKER_FEEDS } from "@/lib/oracle-feeds";
 import { supabase } from "@/lib/supabase";
 
 const MAX_CHARTS = 4;
 
-// Fetch price for a single token
+// Fetch price for a single token via the history endpoint (works for all asset types)
 async function fetchTokenPrice(token: string): Promise<{ price: number; change: number } | null> {
-  const oraclePair = getOraclePair(token);
-  if (!oraclePair) return null;
   try {
-    const res = await fetch(`/api/oracle?pair=${encodeURIComponent(token + "/USDT")}`, { cache: "no-store" });
-    if (!res.ok) {
-      // Try direct kline latest
-      const klineRes = await fetch(`/api/oracle/history?token=${encodeURIComponent(token)}&timeframe=Live`);
-      const klineData = await klineRes.json();
-      if (klineData.candles?.length > 0) {
-        const last = klineData.candles[klineData.candles.length - 1];
-        const first = klineData.candles[0];
-        const change = first.open > 0 ? ((last.close - first.open) / first.open) * 100 : 0;
-        return { price: last.close, change };
-      }
-      return null;
-    }
+    const res = await fetch(`/api/oracle/history?token=${encodeURIComponent(token)}&timeframe=1H`);
+    if (!res.ok) return null;
     const d = await res.json();
-    if (d.base?.price) return { price: d.base.price, change: d.base.change24h || 0 };
-    if (d.quote?.price) return { price: d.quote.price, change: d.quote.change24h || 0 };
+    if (d.candles?.length > 0) {
+      const last = d.candles[d.candles.length - 1];
+      const first = d.candles[0];
+      const change = first.open > 0 ? ((last.close - first.open) / first.open) * 100 : 0;
+      return { price: last.close, change };
+    }
     return null;
   } catch { return null; }
 }

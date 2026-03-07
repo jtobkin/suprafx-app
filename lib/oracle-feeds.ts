@@ -38,22 +38,21 @@ export const ORACLE_FEEDS: OracleFeed[] = [
   { token: "USDT", oraclePair: "usdt_usd", category: "Crypto" },
   { token: "DAI", oraclePair: "dai_usdt", category: "Crypto" },
 
-  // === FOREX ===
-  { token: "EUR/USD", oraclePair: "eur_usd", category: "Forex" },
-  { token: "GBP/USD", oraclePair: "gbp_usd", category: "Forex" },
-  { token: "USD/JPY", oraclePair: "usd_jpy", category: "Forex" },
-  { token: "AUD/USD", oraclePair: "aud_usd", category: "Forex" },
-  { token: "USD/CAD", oraclePair: "usd_cad", category: "Forex" },
-  { token: "USD/CHF", oraclePair: "usd_chf", category: "Forex" },
-  { token: "NZD/USD", oraclePair: "nzd_usd", category: "Forex" },
-  { token: "EUR/GBP", oraclePair: "eur_gbp", category: "Forex" },
-  { token: "EUR/JPY", oraclePair: "eur_jpy", category: "Forex" },
-  { token: "GBP/JPY", oraclePair: "gbp_jpy", category: "Forex" },
+  // === FOREX (use _usd or cross pairs) ===
+  { token: "EUR-USD", oraclePair: "eur_usd", category: "Forex" },
+  { token: "GBP-USD", oraclePair: "gbp_usd", category: "Forex" },
+  { token: "USD-JPY", oraclePair: "usd_jpy", category: "Forex" },
+  { token: "AUD-USD", oraclePair: "aud_usd", category: "Forex" },
+  { token: "USD-CAD", oraclePair: "usd_cad", category: "Forex" },
+  { token: "USD-CHF", oraclePair: "usd_chf", category: "Forex" },
+  { token: "NZD-USD", oraclePair: "nzd_usd", category: "Forex" },
+  { token: "EUR-GBP", oraclePair: "eur_gbp", category: "Forex" },
+  { token: "EUR-JPY", oraclePair: "eur_jpy", category: "Forex" },
+  { token: "GBP-JPY", oraclePair: "gbp_jpy", category: "Forex" },
 
-  // === EQUITIES ===
+  // === EQUITIES (use _usd) ===
   { token: "AAPL", oraclePair: "aapl_usd", category: "Equities" },
   { token: "MSFT", oraclePair: "msft_usd", category: "Equities" },
-  { token: "GOOGL", oraclePair: "googl_usd", category: "Equities" },
   { token: "AMZN", oraclePair: "amzn_usd", category: "Equities" },
   { token: "TSLA", oraclePair: "tsla_usd", category: "Equities" },
   { token: "NVDA", oraclePair: "nvda_usd", category: "Equities" },
@@ -64,9 +63,9 @@ export const ORACLE_FEEDS: OracleFeed[] = [
   { token: "SPY", oraclePair: "spy_usd", category: "Equities" },
   { token: "QQQ", oraclePair: "qqq_usd", category: "Equities" },
 
-  // === COMMODITIES ===
-  { token: "XAU/USD", oraclePair: "xau_usd", category: "Commodities" },
-  { token: "XAG/USD", oraclePair: "xag_usd", category: "Commodities" },
+  // === COMMODITIES (use _usd) ===
+  { token: "XAU", oraclePair: "xau_usd", category: "Commodities" },
+  { token: "XAG", oraclePair: "xag_usd", category: "Commodities" },
   { token: "WTI", oraclePair: "wti_usd", category: "Commodities" },
   { token: "BRENT", oraclePair: "brent_usd", category: "Commodities" },
   { token: "NG", oraclePair: "ng_usd", category: "Commodities" },
