@@ -903,7 +903,7 @@ export default function OrderbookTable({ rfqs, trades, quotes = [], agents = [],
     Promise.all(uniquePairs.map(p => {
       const normalized = p.replace(/fx/g, "");
       return fetch("/api/oracle?pair=" + encodeURIComponent(p)).then(r => r.json()).then(d => {
-        if (d.rate) return { pair: normalized, rate: d.rate };
+        if (d.conversionRate) return { pair: normalized, rate: d.conversionRate };
         return null;
       }).catch(() => null);
     })).then(results => {
