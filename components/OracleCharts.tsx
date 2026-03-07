@@ -95,8 +95,8 @@ function SingleChart({ token, onRemove }: { token: string; onRemove: () => void 
   }, [token, timeframe]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  // Real-time: refresh every 5 seconds
-  useEffect(() => { const iv = setInterval(fetchData, 5000); return () => clearInterval(iv); }, [fetchData]);
+  // Real-time: refresh every 2 seconds
+  useEffect(() => { const iv = setInterval(fetchData, 2000); return () => clearInterval(iv); }, [fetchData]);
 
   const chartColor = priceChange >= 0 ? "var(--positive)" : "var(--negative)";
   const minPrice = data.length > 0 ? Math.min(...data.map(d => d.low)) * 0.999 : 0;
