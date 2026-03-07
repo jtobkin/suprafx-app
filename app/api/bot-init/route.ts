@@ -42,45 +42,46 @@ export async function POST() {
     results.push("Maker agent exists");
   }
 
-  // Link EVM address for the maker bot — try both table formats
-  const linkTables = ["linked_addresses", "address_links"];
-  for (const table of linkTables) {
-    try {
-      await db.from(table).upsert({
-        supra_address: SUPRA_MAKER,
-        linked_address: EVM_BOT,
-        chain: "sepolia",
-        wallet_provider: "bot",
-        verified_at: new Date().toISOString(),
-      }, { onConflict: "supra_address,chain" });
-      results.push(`Linked EVM in ${table}`);
-    } catch (e: any) {
-      // Table may not exist, ignore
-    }
-  }
+  // Link EVM address — write to both tables matching the link-address API format
 
-  // Also try the evm_links / link format (some APIs use this)
+  // 1. address_links (legacy table: supra_address, evm_address, evm_verified_at)
   try {
-    await db.from("evm_links").upsert({
+    await db.from("address_links").upsert({
       supra_address: SUPRA_MAKER,
       evm_address: EVM_BOT,
       evm_verified_at: new Date().toISOString(),
-      evm_signature: "bot-auto-link",
     }, { onConflict: "supra_address" });
-    results.push("Linked via evm_links");
-  } catch { /* table may not exist */ }
+    results.push("Linked in address_links");
+  } catch (e: any) {
+    results.push("address_links: " + (e.message || "skip"));
+  }
 
-  // Link Supra address
-  for (const table of linkTables) {
-    try {
-      await db.from(table).upsert({
-        supra_address: SUPRA_MAKER,
-        linked_address: SUPRA_MAKER,
-        chain: "supra-testnet",
-        wallet_provider: "bot",
-        verified_at: new Date().toISOString(),
-      }, { onConflict: "supra_address,chain" });
-    } catch { /* ignore */ }
+  // 2. linked_addresses (new table: supra_address, linked_address, chain, wallet_provider, verified_at)
+  try {
+    await db.from("linked_addresses").upsert({
+      supra_address: SUPRA_MAKER,
+      linked_address: EVM_BOT,
+      chain: "sepolia",
+      wallet_provider: "bot",
+      verified_at: new Date().toISOString(),
+    }, { onConflict: "supra_address,chain" });
+    results.push("Linked EVM in linked_addresses");
+  } catch (e: any) {
+    results.push("linked_addresses evm: " + (e.message || "skip"));
+  }
+
+  // 3. Supra self-link in linked_addresses
+  try {
+    await db.from("linked_addresses").upsert({
+      supra_address: SUPRA_MAKER,
+      linked_address: SUPRA_MAKER,
+      chain: "supra-testnet",
+      wallet_provider: "bot",
+      verified_at: new Date().toISOString(),
+    }, { onConflict: "supra_address,chain" });
+    results.push("Linked Supra in linked_addresses");
+  } catch (e: any) {
+    results.push("linked_addresses supra: " + (e.message || "skip"));
   }
 
   // Also ensure vault exists for the bot
